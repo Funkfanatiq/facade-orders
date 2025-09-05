@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Монитор — Заказы с фрезеровкой</title>
+  <meta http-equiv="refresh" content="30">
+  <style>
+    body {
+      margin: 0;
+      padding: 40px 0;
+      background: #000;
+      color: #fff;
+      font-family: "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      font-size: 48px;
+      margin-bottom: 30px;
+    }
+    .order {
+      font-size: 64px;
+      font-weight: bold;
+      margin: 20px 0;
+      padding: 30px 60px;
+      border-radius: 16px;
+      text-align: center;
+      width: 90%;
+    }
+    .urgent {
+      background: #b30000;
+      color: #fff;
+    }
+    .warning {
+      background: #e68a00;
+      color: #fff;
+    }
+    .normal {
+      background: #333;
+      color: #ccc;
+    }
+    .logout {
+      margin-top: 40px;
+      font-size: 20px;
+      background: #555;
+      color: #fff;
+      padding: 10px 30px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+    }
+    .logout:hover {
+      background: #777;
+    }
+  </style>
+</head>
+<body>
+  <h1>Фрезеровка — Приоритет заказов</h1>
+
+  {% for o in orders %}
+    {% set days_left = (o.due_date - datetime.utcnow().date()).days %}
+    {% set cls = "urgent" if days_left <= 3 else ("warning" if days_left <= 5 else "normal") %}
+    <div class="order {{ cls }}">{{ o.order_id }}</div>
+  {% endfor %}
+
+  <form method="GET" action="{{ url_for('logout') }}">
+    <button class="logout">Выйти</button>
+  </form>
+</body>
+</html>

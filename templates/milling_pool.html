@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Фрезеровка | Пул заказов</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f2f4f6;
+      color: #333;
+    }
+    .top-bar {
+      background: #fff;
+      padding: 16px 24px;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    table {
+      width: 90%;
+      margin: 40px auto;
+      background: #fff;
+      border-collapse: collapse;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    }
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      text-align: center;
+      vertical-align: middle;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    a {
+      text-decoration: none;
+      color: #4CAF50;
+      font-size: 14px;
+    }
+    .btn-done {
+      display: block;
+      margin: 24px auto 60px;
+      padding: 10px 28px;
+      font-size: 15px;
+      font-weight: 500;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+      cursor: pointer;
+      transition: all 0.2s ease-in-out;
+    }
+    .btn-done:hover {
+      background-color: #45A049;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      transform: translateY(-1px);
+    }
+    .btn-done:active {
+      background-color: #3d8b40;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3) inset;
+      transform: scale(0.98);
+    }
+  </style>
+  <script>
+    function confirmAndSubmit() {
+      if (confirm("Отметить весь пул заказов как отфрезерованный?")) {
+        document.getElementById("done-form").submit();
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="top-bar">
+    <h2>Фрезеровка | Пул заказов</h2>
+    <div>
+      <a href="{{ url_for('milling_orders') }}" style="margin-right: 20px; color: #4CAF50;">📋 Управление заказами</a>
+      {{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div style="text-align:center; color: green;">
+        {% for msg in messages %}
+          <p>{{ msg }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% if orders %}
+    {% set total_area = orders|sum(attribute='area') %}
+    {% set sheet_area = 5.6375 %}
+    {% set sheets_needed = (total_area / sheet_area) %}
+    {% set full_sheets = sheets_needed|int %}
+    {% set partial_sheet = sheets_needed - full_sheets %}
+    {% set earliest_order = orders|min(attribute='due_date') %}
+    
+    <div style="background: {% if pool_info.is_urgent %}#ffe6e6{% else %}#e8f5e8{% endif %}; margin: 20px; padding: 15px; border-radius: 8px; text-align: center; border: {% if pool_info.is_urgent %}2px solid #ff4444{% else %}1px solid #4CAF50{% endif %};">
+      <h3 style="margin: 0 0 10px 0; color: {% if pool_info.is_urgent %}#cc0000{% else %}#2c5aa0{% endif %};">
+        {% if pool_info.is_urgent %}🚨 СРОЧНЫЙ ПУЛ ЗАКАЗОВ{% else %}📋 Оптимизированный пул заказов{% endif %}
+      </h3>
+      <p style="margin: 5px 0;"><strong>Тип фасада:</strong> {{ orders[0].facade_type }}</p>
+      <p style="margin: 5px 0;"><strong>Количество заказов:</strong> {{ orders|length }}</p>
+      <p style="margin: 5px 0;"><strong>Общая площадь:</strong> {{ "%.2f"|format(total_area) }} м²</p>
+      <p style="margin: 5px 0;"><strong>Листов МДФ:</strong> 
+        {{ full_sheets }}{% if partial_sheet > 0 %} + {{ "%.1f"|format(partial_sheet) }}{% endif %} 
+        (лист = {{ "%.2f"|format(sheet_area) }} м²)
+      </p>
+      {% if not pool_info.is_urgent %}
+        <p style="margin: 5px 0;"><strong>Эффективность:</strong> 
+          <span style="color: {% if pool_info.efficiency >= 85 %}green{% elif pool_info.efficiency >= 70 %}orange{% else %}red{% endif %};">
+            {{ "%.1f"|format(pool_info.efficiency) }}%
+          </span>
+        </p>
+        {% if pool_info.waste > 0 %}
+          <p style="margin: 5px 0;"><strong>Остатки:</strong> 
+            <span style="color: {% if pool_info.waste <= 0.5 %}green{% elif pool_info.waste <= 1.0 %}orange{% else %}red{% endif %};">
+              {{ "%.2f"|format(pool_info.waste) }} м² ({{ "%.1f"|format(pool_info.waste/sheet_area*100) }}% листа)
+            </span>
+          </p>
+        {% endif %}
+      {% endif %}
+      <p style="margin: 5px 0;"><strong>Срок сдачи:</strong> 
+        <span style="color: {% if pool_info.is_urgent %}#cc0000{% else %}inherit{% endif %};">
+          {{ earliest_order.due_date.strftime('%Y-%m-%d') }}
+        </span>
+      </p>
+    </div>
+  {% endif %}
+
+  <table>
+    <thead>
+      <tr>
+        <th>№ Заказа</th>
+        <th>Клиент</th>
+        <th>Тип фасада</th>
+        <th>Площадь (м²)</th>
+        <th>Срок сдачи</th>
+        <th>Дней до сдачи</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in orders %}
+        {% set days_left = order_urgency[o.id].days_left %}
+        {% set is_urgent = order_urgency[o.id].is_urgent %}
+        <tr style="background-color: {% if is_urgent %}#ffe6e6{% else %}#f8f9fa{% endif %};">
+          <td>{{ o.order_id }}</td>
+          <td>{{ o.client }}</td>
+          <td>{{ o.facade_type }}</td>
+          <td>{{ "%.2f"|format(o.area) }}</td>
+          <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
+          <td style="color: {% if days_left <= 3 %}#cc0000{% elif days_left <= 6 %}#ff6600{% else %}#333{% endif %}; font-weight: bold;">
+            {{ days_left }}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <form id="done-form" method="POST" action="{{ url_for('mark_pool_complete') }}">
+    <button type="button" class="btn-done" onclick="confirmAndSubmit()">
+      ✅ Отметить пул как готовый
+    </button>
+  </form>
+</body>
+</html>
+

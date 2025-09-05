@@ -1,0 +1,57 @@
+# Конфиденциальные файлы
+yandex_token.txt
+sync_info.json
+token.pickle
+credentials.json
+
+# База данных (только для локальной разработки)
+database.db
+*.db
+*.sqlite
+*.sqlite3
+/instance/
+/migrations/versions/
+
+# Загруженные файлы
+uploads/
+
+# Локальные резервные копии
+/backups/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git
+.mypy_cache
+.pytest_cache
+.hypothesis
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

@@ -13,6 +13,12 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(64), unique=True, nullable=False)
     password = db.Column(db.String(128), nullable=False)
     role     = db.Column(db.String(32), nullable=False)
+    
+    @staticmethod
+    def hash_password(password):
+        """Хеширование пароля"""
+        from werkzeug.security import generate_password_hash
+        return generate_password_hash(password)
 
 class Order(db.Model):
     id         = db.Column(db.Integer, primary_key=True)

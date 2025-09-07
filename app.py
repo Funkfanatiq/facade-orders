@@ -856,7 +856,7 @@ def admin_salary_report():
 def init_db():
     db.create_all()
     users = [
-        {"username": "admin", "password": "1234", "role": "Админ"},
+        {"username": "admin", "password": "admin123", "role": "Админ"},
         {"username": "manager", "password": "5678", "role": "Менеджер"},
         {"username": "worker", "password": "0000", "role": "Производство"},
         {"username": "cutter", "password": "7777", "role": "Фрезеровка"},

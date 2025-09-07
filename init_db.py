@@ -20,35 +20,32 @@ def init_database():
             # Создаем администратора
             admin = User(
                 username='admin',
-                password_hash=User.hash_password('admin123'),
-                role='Админ',
-                full_name='Администратор системы'
+                password=User.hash_password('admin123'),
+                role='Админ'
             )
             db.session.add(admin)
             
             # Создаем менеджера
             manager = User(
                 username='manager',
-                password_hash=User.hash_password('manager123'),
-                role='Менеджер',
-                full_name='Менеджер производства'
+                password=User.hash_password('5678'),
+                role='Менеджер'
             )
             db.session.add(manager)
             
             # Создаем пользователей для производства
             production_users = [
-                ('frez', 'Фрезеровка', 'Оператор фрезеровки'),
-                ('shlif', 'Шлифовка', 'Оператор шлифовки'),
-                ('prod', 'Производство', 'Работник производства'),
-                ('monitor', 'Монитор', 'Мониторинг заказов')
+                ('worker', '0000', 'Производство'),
+                ('cutter', '7777', 'Фрезеровка'),
+                ('polisher', '8888', 'Шлифовка'),
+                ('monitor', '9999', 'Монитор')
             ]
             
-            for username, role, full_name in production_users:
+            for username, password, role in production_users:
                 user = User(
                     username=username,
-                    password_hash=User.hash_password(f'{username}123'),
-                    role=role,
-                    full_name=full_name
+                    password=User.hash_password(password),
+                    role=role
                 )
                 db.session.add(user)
             
@@ -60,6 +57,7 @@ def init_database():
                 print("Создаем тестового сотрудника...")
                 employee = Employee(
                     name='Тестовый сотрудник',
+                    position='Оператор',
                     hourly_rate=500.0,
                     is_active=True
                 )

@@ -152,3 +152,4 @@ python init_db.py
 ---
 **🎉 Готово к развертыванию на Render.com!**
 
+

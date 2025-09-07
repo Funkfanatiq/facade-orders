@@ -359,13 +359,13 @@ def render_admin_dashboard():
         return redirect(url_for("dashboard"))
 
     orders = Order.query.order_by(Order.due_date).all()
-    return render_template("admin_dashboard.html", orders=orders, datetime=datetime)
+    return render_template("admin_dashboard.html", orders=orders, datetime=datetime, current_user=current_user)
 
 @app.route("/delete_order/<int:order_id>", methods=["DELETE"])
 @login_required
 def delete_order(order_id):
-    """Удаление заказа (только для администраторов)"""
-    if current_user.role != "Админ":
+    """Удаление заказа (для администраторов и менеджеров)"""
+    if current_user.role not in ["Админ", "Менеджер"]:
         return jsonify({"success": False, "message": "⛔ Нет доступа"}), 403
     
     try:
@@ -799,47 +799,68 @@ def admin_work_hours():
                 flash("Заполните все обязательные поля", "error")
         
         elif action == "bulk_hours":
-            # Массовое добавление часов
+            # Массовое добавление часов из новой формы
             employee_id = request.form.get("employee_id")
-            start_date_str = request.form.get("start_date")
-            end_date_str = request.form.get("end_date")
-            hours_per_day = float(request.form.get("hours_per_day", 0))
+            month = int(request.form.get("month", 1))
+            year = int(request.form.get("year", 2024))
+            period_type = request.form.get("period_type", "first")
+            notes = request.form.get("notes", "")
             
-            if employee_id and start_date_str and end_date_str and hours_per_day > 0:
+            if employee_id and month and year:
                 try:
-                    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-                    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                    # Определяем дни для периода
+                    if period_type == "first":
+                        start_day, end_day = 1, 15
+                    else:
+                        start_day, end_day = 16, 31
                     
-                    current_date = start_date
-                    while current_date <= end_date:
-                        # Проверяем, не добавлены ли уже часы на эту дату
-                        existing = WorkHours.query.filter_by(
-                            employee_id=int(employee_id),
-                            date=current_date
-                        ).first()
+                    # Получаем количество дней в месяце
+                    days_in_month = (datetime(year, month + 1, 1) - timedelta(days=1)).day
+                    end_day = min(end_day, days_in_month)
+                    
+                    added_count = 0
+                    for day in range(start_day, end_day + 1):
+                        # Получаем часы для этого дня
+                        hours_key = f"hours_{day}"
+                        hours_value = request.form.get(hours_key)
                         
-                        if not existing:
-                            work_hours = WorkHours(
+                        if hours_value and float(hours_value) > 0:
+                            date = datetime(year, month, day).date()
+                            
+                            # Проверяем, не добавлены ли уже часы на эту дату
+                            existing = WorkHours.query.filter_by(
                                 employee_id=int(employee_id),
-                                date=current_date,
-                                hours=hours_per_day,
-                                notes="Массовое добавление"
-                            )
-                            db.session.add(work_hours)
-                        
-                        current_date += timedelta(days=1)
+                                date=date
+                            ).first()
+                            
+                            if not existing:
+                                work_hours = WorkHours(
+                                    employee_id=int(employee_id),
+                                    date=date,
+                                    hours=float(hours_value),
+                                    notes=notes or f"Ввод за {day}.{month}.{year}"
+                                )
+                                db.session.add(work_hours)
+                                added_count += 1
+                            else:
+                                # Обновляем существующие часы
+                                existing.hours = float(hours_value)
+                                existing.notes = notes or f"Обновлено {day}.{month}.{year}"
+                                added_count += 1
                     
                     db.session.commit()
-                    flash("Рабочие часы добавлены массово", "success")
-                except ValueError:
-                    flash("Неверный формат даты", "error")
+                    flash(f"Рабочие часы добавлены/обновлены: {added_count} записей", "success")
+                except Exception as e:
+                    db.session.rollback()
+                    flash(f"Ошибка при добавлении часов: {str(e)}", "error")
             else:
                 flash("Заполните все обязательные поля", "error")
         
         return redirect(url_for("admin_work_hours"))
     
     employees = Employee.query.filter_by(is_active=True).all()
-    return render_template("admin_work_hours.html", employees=employees)
+    current_year = datetime.now().year
+    return render_template("admin_work_hours.html", employees=employees, current_year=current_year)
 
 @app.route("/admin/salary-report")
 @login_required

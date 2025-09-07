@@ -42,3 +42,4 @@ git push -u origin main
 
 После загрузки на GitHub следуйте инструкциям в файле:
 `FINAL_DEPLOYMENT_STEPS.md`
+

@@ -207,7 +207,7 @@
             {% set fps = o.filepaths.split(';') %}
             {% set fns = o.filenames.split(';') %}
             {% for fp, fn in fps|zip(fns) %}
-              <a href="{{ url_for('uploaded_file', filename=fp.split('/')[-1]) }}" target="_blank">📎 {{ fn }}</a><br>
+              <a href="{{ url_for('static', filename=fp) }}" target="_blank">📎 {{ fn }}</a><br>
             {% endfor %}
                     {% else %}
             —
@@ -216,9 +216,7 @@
 
         {% if current_user.role == "Менеджер" %}
         <td>
-          <form method="POST" action="{{ url_for('delete_order', order_id=o.id) }}">
-            <button class="delete-icon" type="submit">🗑️</button>
-          </form>
+          <button class="delete-icon" onclick="deleteOrder({{ o.id }})">🗑️</button>
         </td>
         {% endif %}
       </tr>
@@ -266,6 +264,31 @@
         });
       });
     });
+    
+    // Функция удаления заказа
+    function deleteOrder(orderId) {
+      if (confirm('Вы уверены, что хотите удалить этот заказ?')) {
+        fetch(`/delete_order/${orderId}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            alert(data.message);
+            location.reload();
+          } else {
+            alert('Ошибка: ' + data.message);
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('Произошла ошибка при удалении заказа');
+        });
+      }
+    }
   </script>
 </body>
 </html>

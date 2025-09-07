@@ -1,1 +1,599 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель администратора</title>
+    <style>
+        /* macOS стиль */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            background: #f5f5f7;
+            color: #1d1d1f;
+            line-height: 1.47;
+        }
+        
+        .top-bar {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 16px 24px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .top-bar h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 14px;
+            color: #6e6e73;
+        }
+        
+        .logout-btn {
+            background: #6e6e73;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .logout-btn:hover {
+            background: #515154;
+            transform: translateY(-1px);
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        
+        .tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            border-radius: 12px;
+            padding: 4px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 12px 24px;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            color: #6e6e73;
+        }
+        
+        .tab.active {
+            background: white;
+            color: #1d1d1f;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .tab:hover:not(.active) {
+            color: #1d1d1f;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .content-box {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            margin-bottom: 24px;
+        }
+        
+        .content-box h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #1d1d1f;
+        }
+        
+        .search-form {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .search-form input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #f5f5f7;
+            transition: all 0.2s ease;
+        }
+        
+        .search-form input:focus {
+            outline: none;
+            border-color: #007aff;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+        }
+        
+        .search-btn {
+            background: #007aff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .search-btn:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+        }
+        
+        .orders-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .orders-table th {
+            background: #f5f5f7;
+            padding: 16px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 14px;
+            color: #6e6e73;
+            border-bottom: 1px solid #d2d2d7;
+        }
+        
+        .orders-table td {
+            padding: 16px 12px;
+            border-bottom: 1px solid #f5f5f7;
+            font-size: 14px;
+        }
+        
+        .orders-table tr:hover {
+            background: #f5f5f7;
+        }
+        
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #d2d2d7;
+            border-radius: 24px;
+            transition: 0.3s ease;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            border-radius: 50%;
+            transition: 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        input:checked + .slider {
+            background-color: #34c759;
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+        
+        .delete-btn {
+            background: none;
+            color: #6e6e73;
+            border: none;
+            padding: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s ease;
+        }
+        
+        .delete-btn:hover {
+            color: #ff3b30;
+            transform: translateY(-1px);
+        }
+        
+        .row-green { 
+            background-color: #d4edda !important; 
+        }
+        
+        .row-warning { 
+            background-color: #fff3cd !important; 
+        }
+        
+        .row-danger { 
+            background-color: #f8d7da !important; 
+        }
+        
+        .highlight-row {
+            outline: 2px solid #007aff;
+            outline-offset: -2px;
+            border-radius: 6px;
+        }
+        
+        .message {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .file-link {
+            color: #007aff;
+            text-decoration: none;
+            font-size: 12px;
+        }
+        
+        .file-link:hover {
+            text-decoration: underline;
+        }
+        
+        .salary-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+        
+        .salary-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s ease;
+        }
+        
+        .salary-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+        }
+        
+        .salary-card h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #1d1d1f;
+        }
+        
+        .salary-card p {
+            color: #6e6e73;
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+        
+        .salary-link {
+            display: inline-block;
+            background: #007aff;
+            color: white;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .salary-link:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+        }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <h1>🏢 Панель администратора</h1>
+        <div class="user-info">
+            <span>👤 {{ current_user.username }} ({{ current_user.role }})</span>
+            <a href="{{ url_for('logout') }}" class="logout-btn">Выйти</a>
+        </div>
+    </div>
+    
+    <div class="container">
+        <!-- Вкладки -->
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('orders')">
+                📋 Управление заказами
+            </div>
+            <div class="tab" onclick="showTab('salary')">
+                💰 Расчет зарплат
+            </div>
+        </div>
+        
+        <!-- Сообщения -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="message success">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <!-- Вкладка управления заказами -->
+        <div id="orders-tab" class="tab-content active">
+            <div class="content-box">
+                <h2>📊 Все заказы</h2>
+                
+                <!-- Поиск заказов -->
+                <form class="search-form" method="GET" action="{{ url_for('dashboard') }}">
+                    <input type="text" name="order_id_query" placeholder="Поиск по № заказа" value="{{ request.args.get('order_id_query', '') }}">
+                    <input type="text" name="client_query" placeholder="Поиск по клиенту" value="{{ request.args.get('client_query', '') }}">
+                    <button type="submit" class="search-btn">🔍 Найти</button>
+                </form>
+                
+                <!-- Таблица заказов -->
+                <table class="orders-table">
+                    <thead>
+                        <tr>
+                            <th>№</th>
+                            <th>Клиент</th>
+                            <th>Тип</th>
+                            <th>Площадь</th>
+                            <th>Срок</th>
+                            <th>Фрезеровка</th>
+                            <th>Шлифовка</th>
+                            <th>Упаковка</th>
+                            <th>Отгрузка</th>
+                            <th>Оплата</th>
+                            <th>Файлы</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for o in orders %}
+                            {% set days_left = (o.due_date - datetime.utcnow().date()).days %}
+                            {% set base_class = "" %}
+                            {% if o.packaging %} 
+                                {% set base_class = "row-green" %}
+                            {% elif days_left <= 3 %} 
+                                {% set base_class = "row-danger" %}
+                            {% elif days_left <= 6 %} 
+                                {% set base_class = "row-warning" %}
+                            {% endif %}
+                            {% set highlight_class = "" %}
+                            {% if request.args.get('order_id_query') == o.order_id or request.args.get('client_query') == o.client %}
+                                {% set highlight_class = "highlight-row" %}
+                            {% endif %}
+                            <tr data-order-id="{{ o.id }}" class="{{ base_class }} {% if highlight_class %}{{ highlight_class }}{% endif %}">
+                                <td>{{ o.order_id }}</td>
+                                <td>{{ o.client }}</td>
+                                <td>{{ o.facade_type or '-' }}</td>
+                                <td>{{ "%.2f"|format(o.area) if o.area else '-' }} м²</td>
+                                <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
+                                <td>
+                                    <label class="switch">
+                                        <input type="checkbox" name="milling" {% if o.milling %}checked{% endif %}>
+                                        <span class="slider"></span>
+                                    </label>
+                                </td>
+                                <td>
+                                    <label class="switch">
+                                        <input type="checkbox" name="polishing_1" {% if o.polishing_1 %}checked{% endif %}>
+                                        <span class="slider"></span>
+                                    </label>
+                                </td>
+                                <td>
+                                    <label class="switch">
+                                        <input type="checkbox" name="packaging" {% if o.packaging %}checked{% endif %}>
+                                        <span class="slider"></span>
+                                    </label>
+                                </td>
+                                <td>
+                                    <label class="switch">
+                                        <input type="checkbox" name="shipment" {% if o.shipment %}checked{% endif %}>
+                                        <span class="slider"></span>
+                                    </label>
+                                </td>
+                                <td>
+                                    <label class="switch">
+                                        <input type="checkbox" name="paid" {% if o.paid %}checked{% endif %}>
+                                        <span class="slider"></span>
+                                    </label>
+                                </td>
+                                <td>
+                                    {% if o.filepaths %}
+                                        {% set fps = o.filepaths.split(';') %}
+                                        {% set fns = o.filenames.split(';') %}
+                                        {% for fp, fn in fps|zip(fns) %}
+                                            <a href="{{ url_for('uploaded_file', filename=fp.split('/')[-1]) }}" target="_blank" class="file-link">📎 {{ fn }}</a><br>
+                                        {% endfor %}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button onclick="deleteOrder({{ o.id }})" class="delete-btn">🗑️</button>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Вкладка расчета зарплат -->
+        <div id="salary-tab" class="tab-content">
+            <div class="content-box">
+                <h2>💰 Расчет зарплат</h2>
+                <div class="salary-section">
+                    <div class="salary-card">
+                        <h3>👥 Сотрудники</h3>
+                        <p>Управление сотрудниками, добавление новых, редактирование ставок</p>
+                        <a href="{{ url_for('admin_employees') }}" class="salary-link">Управление</a>
+                    </div>
+                    <div class="salary-card">
+                        <h3>⏰ Рабочие часы</h3>
+                        <p>Учет рабочих часов, массовое добавление, редактирование</p>
+                        <a href="{{ url_for('admin_work_hours') }}" class="salary-link">Учет часов</a>
+                    </div>
+                    <div class="salary-card">
+                        <h3>💰 Расчет зарплат</h3>
+                        <p>Расчет зарплат по периодам, управление выплатами</p>
+                        <a href="{{ url_for('admin_salary') }}" class="salary-link">Расчет</a>
+                    </div>
+                    <div class="salary-card">
+                        <h3>📊 Отчеты</h3>
+                        <p>Отчеты по зарплатам, статистика, экспорт данных</p>
+                        <a href="{{ url_for('admin_salary_report') }}" class="salary-link">Отчеты</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Переключение вкладок
+        function showTab(tabName) {
+            // Скрыть все вкладки
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Показать выбранную вкладку
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        // Обновление статуса заказов
+        document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            cb.addEventListener('change', () => {
+                const row = cb.closest('tr');
+                const orderId = row.getAttribute('data-order-id');
 
+                const milling = row.querySelector('input[name="milling"]')?.checked ? 1 : 0;
+                const polishing_1 = row.querySelector('input[name="polishing_1"]')?.checked ? 1 : 0;
+                const packaging = row.querySelector('input[name="packaging"]')?.checked ? 1 : 0;
+                const shipment = row.querySelector('input[name="shipment"]')?.checked ? 1 : 0;
+                const paid = row.querySelector('input[name="paid"]')?.checked ? 1 : 0;
+
+                fetch(`/update_status/${orderId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: new URLSearchParams({ milling, polishing_1, packaging, shipment, paid })
+                }).then(res => {
+                    if (res.ok) {
+                        console.log("✔️ Сохранено");
+                        if (cb.name === "packaging") {
+                            row.classList.remove("row-green", "row-warning", "row-danger");
+                            const dueText = row.children[4]?.textContent;
+                            const dueDate = dueText ? new Date(dueText) : null;
+                            const today = new Date();
+                            if (!cb.checked && dueDate) {
+                                const daysLeft = Math.floor((dueDate - today) / (1000 * 60 * 60 * 24));
+                                if (daysLeft <= 3) {
+                                    row.classList.add("row-danger");
+                                } else if (daysLeft <= 6) {
+                                    row.classList.add("row-warning");
+                                }
+                            } else if (cb.checked) {
+                                row.classList.add("row-green");
+                            }
+                        }
+                    } else {
+                        alert("❌ Ошибка при сохранении");
+                    }
+                });
+            });
+        });
+        
+        // Удаление заказа
+        function deleteOrder(orderId) {
+            if (confirm('Вы уверены, что хотите удалить этот заказ?')) {
+                fetch(`/delete_order/${orderId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message);
+                        location.reload();
+                    } else {
+                        alert('Ошибка: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Произошла ошибка при удалении заказа');
+                });
+            }
+        }
+    </script>
+</body>
+</html>

@@ -114,3 +114,4 @@ class User(db.Model, UserMixin):
 
 **🎉 После выполнения этих шагов ошибка SQLAlchemy должна быть исправлена!**
 
+

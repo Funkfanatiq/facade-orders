@@ -5,6 +5,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
 from datetime import datetime, timedelta
 import os
+from dotenv import load_dotenv
+
+# Загружаем переменные окружения из .env файла
+load_dotenv()
 
 app = Flask(__name__)
 app.config.from_object('config.Config')
@@ -324,7 +328,22 @@ def dashboard():
         flash("✅ Заказ добавлен!")
         return redirect(url_for("dashboard"))
 
-    orders = Order.query.order_by(Order.due_date).all()
+    # Для роли "Производство" показываем заказы после фрезеровки и шлифовки
+    if current_user.role == "Производство":
+        # Получаем заказы, которые прошли фрезеровку и шлифовку
+        orders = Order.query.filter(
+            Order.milling == True,
+            Order.polishing_1 == True,
+            Order.shipment == False
+        ).order_by(
+            # Сначала незавершенные заказы (без упаковки), затем завершенные
+            Order.packaging.asc(),
+            Order.due_date.asc()
+        ).all()
+    else:
+        # Для остальных ролей показываем все заказы
+        orders = Order.query.order_by(Order.due_date).all()
+    
     return render_template("dashboard.html", orders=orders, datetime=datetime)
 
 def render_admin_dashboard():
@@ -707,7 +726,16 @@ def admin_salary():
         return redirect(url_for("dashboard"))
     
     employees = Employee.query.filter_by(is_active=True).all()
-    return render_template("admin_salary.html", employees=employees)
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+    
+    # Вычисляем данные по рабочим часам
+    work_hours_data = calculate_work_hours_data(employees, current_year, current_month)
+    
+    return render_template("admin_salary.html", 
+                         employees=employees,
+                         work_hours_data=work_hours_data,
+                         current_year=current_year)
 
 @app.route("/admin/employees", methods=["GET", "POST"])
 @login_required
@@ -763,6 +791,54 @@ def admin_employees():
     
     employees = Employee.query.all()
     return render_template("admin_employees.html", employees=employees)
+
+def calculate_work_hours_data(employees, year=None, month=None):
+    """Вычисляет данные по рабочим часам и зарплатам для сотрудников"""
+    if year is None:
+        year = datetime.now().year
+    if month is None:
+        month = datetime.now().month
+    
+    work_hours_data = {}
+    
+    for employee in employees:
+        # Получаем все рабочие часы сотрудника за указанный месяц
+        start_date = datetime(year, month, 1).date()
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1).date() - timedelta(days=1)
+        else:
+            end_date = datetime(year, month + 1, 1).date() - timedelta(days=1)
+        
+        work_hours = WorkHours.query.filter(
+            WorkHours.employee_id == employee.id,
+            WorkHours.date >= start_date,
+            WorkHours.date <= end_date
+        ).all()
+        
+        # Разделяем на два периода
+        first_period_hours = 0.0
+        second_period_hours = 0.0
+        
+        for wh in work_hours:
+            if wh.date.day <= 15:
+                first_period_hours += wh.hours
+            else:
+                second_period_hours += wh.hours
+        
+        # Рассчитываем зарплаты
+        first_period_salary = first_period_hours * employee.hourly_rate
+        second_period_salary = second_period_hours * employee.hourly_rate
+        month_salary = first_period_salary + second_period_salary
+        
+        work_hours_data[employee.id] = {
+            'first_period_hours': first_period_hours,
+            'second_period_hours': second_period_hours,
+            'first_period_salary': first_period_salary,
+            'second_period_salary': second_period_salary,
+            'month_salary': month_salary
+        }
+    
+    return work_hours_data
 
 @app.route("/admin/work-hours", methods=["GET", "POST"])
 @login_required
@@ -860,7 +936,15 @@ def admin_work_hours():
     
     employees = Employee.query.filter_by(is_active=True).all()
     current_year = datetime.now().year
-    return render_template("admin_work_hours.html", employees=employees, current_year=current_year)
+    current_month = datetime.now().month
+    
+    # Вычисляем данные по рабочим часам
+    work_hours_data = calculate_work_hours_data(employees, current_year, current_month)
+    
+    return render_template("admin_work_hours.html", 
+                         employees=employees, 
+                         current_year=current_year,
+                         work_hours_data=work_hours_data)
 
 @app.route("/admin/salary-report")
 @login_required
@@ -871,7 +955,42 @@ def admin_salary_report():
         return redirect(url_for("dashboard"))
     
     employees = Employee.query.filter_by(is_active=True).all()
-    return render_template("admin_salary_report.html", employees=employees)
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+    
+    # Вычисляем данные по рабочим часам
+    work_hours_data = calculate_work_hours_data(employees, current_year, current_month)
+    
+    # Формируем данные для отчета
+    report_data = []
+    for employee in employees:
+        if employee.id in work_hours_data:
+            data = work_hours_data[employee.id]
+            
+            # Получаем детальные данные по дням
+            start_date = datetime(current_year, current_month, 1).date()
+            if current_month == 12:
+                end_date = datetime(current_year + 1, 1, 1).date() - timedelta(days=1)
+            else:
+                end_date = datetime(current_year, current_month + 1, 1).date() - timedelta(days=1)
+            
+            daily_hours = WorkHours.query.filter(
+                WorkHours.employee_id == employee.id,
+                WorkHours.date >= start_date,
+                WorkHours.date <= end_date
+            ).order_by(WorkHours.date).all()
+            
+            report_data.append({
+                'employee': employee,
+                'month_hours': data['first_period_hours'] + data['second_period_hours'],
+                'month_salary': data['month_salary'],
+                'daily_hours': daily_hours
+            })
+    
+    return render_template("admin_salary_report.html", 
+                         employees=employees,
+                         report_data=report_data,
+                         work_hours_data=work_hours_data)
 
 @app.cli.command("init-db")
 def init_db():

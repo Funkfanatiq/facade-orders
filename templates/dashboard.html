@@ -125,7 +125,11 @@
 </head>
 <body>
   <div class="top-bar">
+    {% if current_user.role == "Производство" %}
+    <h2>🏭 Рабочее место производства</h2>
+    {% else %}
     <h2>Панель заказов</h2>
+    {% endif %}
     <div>{{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a></div>
   </div>
 
@@ -138,6 +142,14 @@
       </div>
     {% endif %}
   {% endwith %}
+
+  {% if current_user.role == "Производство" %}
+  <div style="background: #e3f2fd; padding: 12px; margin: 20px; border-radius: 8px; border-left: 4px solid #2196f3;">
+    <p style="margin: 0; color: #1976d2; font-weight: 500;">
+      📋 Показаны заказы, прошедшие фрезеровку и шлифовку. После отметки упаковки или отгрузки заказ перемещается в конец списка.
+    </p>
+  </div>
+  {% endif %}
 
   {% if current_user.role == "Менеджер" %}
   <div class="form-box">
@@ -258,6 +270,25 @@
                 row.classList.add("row-green");
               }
             }
+            
+            // Для роли "Производство" перемещаем заказ в конец после отметки упаковки или отгрузки
+            {% if current_user.role == "Производство" %}
+            if (cb.name === "packaging" || cb.name === "shipment") {
+              if (cb.checked) {
+                // Перемещаем строку в конец таблицы
+                const table = row.closest('table');
+                const tbody = table.querySelector('tbody') || table;
+                tbody.appendChild(row);
+                
+                // Добавляем анимацию перемещения
+                row.style.transition = 'all 0.5s ease';
+                row.style.transform = 'translateX(100%)';
+                setTimeout(() => {
+                  row.style.transform = 'translateX(0)';
+                }, 100);
+              }
+            }
+            {% endif %}
           } else {
             alert("❌ Ошибка при сохранении");
           }

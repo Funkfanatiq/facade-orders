@@ -12,7 +12,9 @@ class Config:
     if database_url:
         # Исправляем старый формат postgres:// на postgresql://
         if database_url.startswith('postgres://'):
-            database_url = database_url.replace('postgres://', 'postgresql://', 1)
+            database_url = database_url.replace('postgres://', 'postgresql+psycopg://', 1)
+        elif database_url.startswith('postgresql://'):
+            database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
         SQLALCHEMY_DATABASE_URI = database_url
     else:
         # Fallback на SQLite для локальной разработки

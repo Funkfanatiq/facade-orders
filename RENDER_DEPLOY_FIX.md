@@ -15,11 +15,13 @@
 - **Build Command**: `pip install -r requirements.txt`
 - **Start Command**: `gunicorn app:app`
 - **Python Version**: 3.11.9 (в настройках Render)
+- **Config**: Использует `config.py` с `postgresql+psycopg://`
 
 #### Вариант 2 (Если psycopg3 не работает): psycopg2
 - **Build Command**: `pip install -r requirements_psycopg2.txt`
 - **Start Command**: `gunicorn app:app`
 - **Python Version**: 3.11.9 (в настройках Render)
+- **Config**: Переименуйте `config_psycopg2.py` в `config.py`
 
 ### 📊 Переменные окружения:
 - `SECRET_KEY` - любой секретный ключ

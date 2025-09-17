@@ -1,0 +1,328 @@
+{% if current_user.role != "Монитор" %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Заказы</title>
+  <style>
+    /* 🔧 Стили — полностью сохранены */
+    body {
+      margin: 0;
+      background: #f9f9f9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #333;
+    }
+    .top-bar {
+      background: #fff;
+      padding: 16px;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .form-box {
+      background: #fff;
+      margin: 20px;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    input, select, button {
+      display: block;
+      width: 100%;
+      margin: 8px 0;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background: #4CAF50;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease-in-out;
+    }
+    button:hover {
+      background: #45A049;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+    }
+    button:active {
+      transform: translateY(0);
+      box-shadow: 0 1px 4px rgba(76, 175, 80, 0.3);
+    }
+    table {
+      width: 95%;
+      margin: 20px auto;
+      background: #fff;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      text-align: center;
+      vertical-align: middle;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 46px;
+      height: 26px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #ccc;
+      border-radius: 26px;
+      transition: .3s ease-in-out;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      border-radius: 50%;
+      transition: .3s ease-in-out;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    input:checked + .slider {
+      background-color: #4CAF50;
+      box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+    }
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+    .delete-icon {
+      background: none;
+      border: none;
+      font-size: 18px;
+      color: #e33;
+      cursor: pointer;
+    }
+    .row-green { background-color: #d4edda !important; }
+    .row-warning { background-color: #fff3cd !important; }
+    .row-danger { background-color: #f8d7da !important; }
+    .highlight-row {
+      outline: 2px solid black;
+      outline-offset: -2px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    {% if current_user.role == "Производство" %}
+    <h2>🏭 Рабочее место производства</h2>
+    {% else %}
+    <h2>Панель заказов</h2>
+    {% endif %}
+    <div>{{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a></div>
+  </div>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div style="text-align:center; color: green;">
+        {% for msg in messages %}
+          <p>{{ msg }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% if current_user.role == "Производство" %}
+  <div style="background: #e3f2fd; padding: 12px; margin: 20px; border-radius: 8px; border-left: 4px solid #2196f3;">
+    <p style="margin: 0; color: #1976d2; font-weight: 500;">
+      📋 Показаны заказы, прошедшие фрезеровку и шлифовку. После отметки упаковки или отгрузки заказ перемещается в конец списка.
+    </p>
+  </div>
+  {% endif %}
+
+  {% if current_user.role == "Менеджер" %}
+  <div class="form-box">
+    <h3>Добавить заказ</h3>
+    <form method="POST" enctype="multipart/form-data">
+      <input type="text" name="order_id" placeholder="№ заказа" required>
+      <input type="text" name="client" placeholder="Клиент" required>
+      <input type="number" name="days" placeholder="Срок (в днях)" required>
+      <select name="facade_type" required>
+        <option value="">— Тип фасада —</option>
+        <option value="фрезерованный">Фрезерованный</option>
+        <option value="плоский">Плоский</option>
+        <option value="шпон">Шпон</option>
+      </select>
+      <input type="number" name="area" placeholder="Площадь (м²)" step="0.01" required>
+      <input type="file" name="files" multiple>
+      <button type="submit">Добавить</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="form-box" style="margin-top: 0;">
+    <h3>Поиск заказов</h3>
+    <form method="GET" action="{{ url_for('dashboard') }}">
+      <input type="text" name="order_id_query" placeholder="Поиск по № заказа" value="{{ request.args.get('order_id_query', '') }}">
+      <input type="text" name="client_query" placeholder="Поиск по клиенту" value="{{ request.args.get('client_query', '') }}">
+      <button type="submit">Найти</button>
+    </form>
+  </div>
+
+  <table>
+    <tr>
+      <th>№</th><th>Клиент</th><th>Срок</th>
+      <th>Фрезеровка</th><th>Шлифовка</th><th>Упаковка</th><th>Отгрузка</th><th>Оплата</th><th>Файлы</th>
+      {% if current_user.role == "Менеджер" %}<th>Удалить</th>{% endif %}
+    </tr>
+    {% for o in orders %}
+      {% set days_left = (o.due_date - datetime.utcnow().date()).days %}
+      {% set base_class = "" %}
+      {% if o.packaging %} {% set base_class = "row-green" %}
+      {% elif days_left <= 3 %} {% set base_class = "row-danger" %}
+      {% elif days_left <= 6 %} {% set base_class = "row-warning" %}
+      {% endif %}
+      {% set highlight_class = "" %}
+      {% if request.args.get('order_id_query') == o.order_id or request.args.get('client_query') == o.client %}
+        {% set highlight_class = "highlight-row" %}
+      {% endif %}
+      <tr data-order-id="{{ o.id }}" class="{{ base_class }} {% if highlight_class %}{{ highlight_class }}{% endif %}">
+        <td>{{ o.order_id }}</td>
+        <td>{{ o.client }}</td>
+        <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
+        {% if current_user.role in ["Менеджер", "Производство"] %}
+        <td><label class="switch"><input type="checkbox" name="milling" {% if o.milling %}checked{% endif %}><span class="slider"></span></label></td>
+        <td><label class="switch"><input type="checkbox" name="polishing_1" {% if o.polishing_1 %}checked{% endif %}><span class="slider"></span></label></td>
+        <td><label class="switch"><input type="checkbox" name="packaging" {% if o.packaging %}checked{% endif %}><span class="slider"></span></label></td>
+        <td><label class="switch"><input type="checkbox" name="shipment" {% if o.shipment %}checked{% endif %}><span class="slider"></span></label></td>
+        <td><label class="switch"><input type="checkbox" name="paid" {% if o.paid %}checked{% endif %}><span class="slider"></span></label></td>
+        {% else %}
+        <td>{{ "✔" if o.milling else "✖" }}</td>
+        <td>{{ "✔" if o.polishing_1 else "✖" }}</td>
+        <td>{{ "✔" if o.packaging else "✖" }}</td>
+        <td>{{ "✔" if o.shipment else "✖" }}</td>
+        <td>{{ "✔" if o.paid else "✖" }}</td>
+        {% endif %}
+        <td>
+          {% if o.filepaths %}
+            {% set fps = o.filepaths.split(';') %}
+            {% set fns = o.filenames.split(';') %}
+            {% for fp, fn in fps|zip(fns) %}
+              <a href="{{ url_for('static', filename=fp) }}" target="_blank">📎 {{ fn }}</a><br>
+            {% endfor %}
+                    {% else %}
+            —
+          {% endif %}
+        </td>
+
+        {% if current_user.role == "Менеджер" %}
+        <td>
+          <button class="delete-icon" onclick="deleteOrder({{ o.id }})">🗑️</button>
+        </td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+  </table>
+
+  <script>
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const row = cb.closest('tr');
+        const orderId = row.getAttribute('data-order-id');
+
+        const milling = row.querySelector('input[name="milling"]')?.checked ? 1 : 0;
+        const polishing_1 = row.querySelector('input[name="polishing_1"]')?.checked ? 1 : 0;
+        const packaging = row.querySelector('input[name="packaging"]')?.checked ? 1 : 0;
+        const shipment = row.querySelector('input[name="shipment"]')?.checked ? 1 : 0;
+        const paid = row.querySelector('input[name="paid"]')?.checked ? 1 : 0;
+
+        fetch(`/update_status/${orderId}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: new URLSearchParams({ milling, polishing_1, packaging, shipment, paid })
+        }).then(res => {
+          if (res.ok) {
+            console.log("✔️ Сохранено");
+            if (cb.name === "packaging") {
+              row.classList.remove("row-green", "row-warning", "row-danger");
+              const dueText = row.children[2]?.textContent;
+              const dueDate = dueText ? new Date(dueText) : null;
+              const today = new Date();
+              if (!cb.checked && dueDate) {
+                const daysLeft = Math.floor((dueDate - today) / (1000 * 60 * 60 * 24));
+                if (daysLeft <= 3) {
+                  row.classList.add("row-danger");
+                } else if (daysLeft <= 6) {
+                  row.classList.add("row-warning");
+                }
+              } else if (cb.checked) {
+                row.classList.add("row-green");
+              }
+            }
+            
+            // Для роли "Производство" перемещаем заказ в конец после отметки упаковки или отгрузки
+            {% if current_user.role == "Производство" %}
+            if (cb.name === "packaging" || cb.name === "shipment") {
+              if (cb.checked) {
+                // Перемещаем строку в конец таблицы
+                const table = row.closest('table');
+                const tbody = table.querySelector('tbody') || table;
+                tbody.appendChild(row);
+                
+                // Добавляем анимацию перемещения
+                row.style.transition = 'all 0.5s ease';
+                row.style.transform = 'translateX(100%)';
+                setTimeout(() => {
+                  row.style.transform = 'translateX(0)';
+                }, 100);
+              }
+            }
+            {% endif %}
+          } else {
+            alert("❌ Ошибка при сохранении");
+          }
+        });
+      });
+    });
+    
+    // Функция удаления заказа
+    function deleteOrder(orderId) {
+      if (confirm('Вы уверены, что хотите удалить этот заказ?')) {
+        fetch(`/delete_order/${orderId}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            alert(data.message);
+            location.reload();
+          } else {
+            alert('Ошибка: ' + data.message);
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('Произошла ошибка при удалении заказа');
+        });
+      }
+    }
+  </script>
+</body>
+</html>
+{% else %}
+<script>window.location.href = "/monitor";</script>
+{% endif %}

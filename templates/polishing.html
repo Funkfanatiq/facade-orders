@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Шлифовка | Рабочее место</title>
+  <style>
+    body {
+      margin: 0;
+      background: #f9f9f9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #333;
+    }
+    .top-bar {
+      background: #fff;
+      padding: 16px;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    table {
+      width: 95%;
+      margin: 20px auto;
+      background: #fff;
+      border-collapse: collapse;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    }
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      text-align: center;
+      vertical-align: middle;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 46px;
+      height: 26px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      border-radius: 26px;
+      transition: .3s ease-in-out;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      border-radius: 50%;
+      transition: .3s ease-in-out;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    input:checked + .slider {
+      background-color: #4CAF50;
+      box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+    }
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+    .urgent-order {
+      background-color: #ffe6e6 !important;
+      border-left: 4px solid #ff4444;
+    }
+    .warning-order {
+      background-color: #fff3cd !important;
+      border-left: 4px solid #ffc107;
+    }
+    .completed {
+      background-color: #f8f9fa !important;
+      color: #6c757d;
+      opacity: 0.7;
+    }
+    .status-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    .status-urgent { background-color: #ff4444; }
+    .status-warning { background-color: #ffc107; }
+    .status-normal { background-color: #6c757d; }
+    .status-completed { background-color: #28a745; }
+    .days-left {
+      font-weight: bold;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      letter-spacing: 0.5px;
+      min-width: 30px;
+      display: inline-block;
+      text-align: center;
+    }
+    .days-urgent { 
+      background-color: #ff4444; 
+      color: white; 
+    }
+    .days-warning { 
+      background-color: #ffc107; 
+      color: #333; 
+    }
+    .days-normal { 
+      background-color: #6c757d; 
+      color: white; 
+    }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <h2>Шлифовка | Рабочее место</h2>
+    <div>{{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a></div>
+  </div>
+
+  <table id="polishing-table">
+    <thead>
+      <tr>
+        <th>№ Заказа</th>
+        <th>Клиент</th>
+        <th>Дней до сдачи</th>
+        <th>Статус</th>
+        <th>Шлифовка</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in orders %}
+        {% if o.milling and o.facade_type != 'шпон' %}
+          {% set days_left = order_urgency[o.id].days_left %}
+          {% set is_urgent = order_urgency[o.id].is_urgent %}
+          {% set row_class = "" %}
+          {% if o.polishing_1 %}
+            {% set row_class = "completed" %}
+          {% elif is_urgent %}
+            {% set row_class = "urgent-order" %}
+          {% elif days_left <= 6 %}
+            {% set row_class = "warning-order" %}
+          {% endif %}
+          
+                     <tr data-order-id="{{ o.id }}" class="{{ row_class }}">
+             <td>{{ o.order_id }}</td>
+             <td>{{ o.client }}</td>
+             <td>
+               <span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">
+                 {{ days_left }}
+               </span>
+             </td>
+             <td>
+               {% if o.polishing_1 %}
+                 <span class="status-indicator status-completed"></span>Завершен
+               {% elif is_urgent %}
+                 <span class="status-indicator status-urgent"></span>Срочный
+               {% elif days_left <= 6 %}
+                 <span class="status-indicator status-warning"></span>Скоро срок
+               {% else %}
+                 <span class="status-indicator status-normal"></span>Ожидает
+               {% endif %}
+             </td>
+             <td>
+               <label class="switch">
+                 <input type="checkbox" name="polishing" {% if o.polishing_1 %}checked{% endif %}>
+                 <span class="slider"></span>
+               </label>
+             </td>
+           </tr>
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <script>
+    // Функция для сортировки таблицы по приоритету
+    function sortTableByPriority() {
+      const tbody = document.querySelector('#polishing-table tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      
+      rows.sort((a, b) => {
+        const aCompleted = a.classList.contains('completed');
+        const bCompleted = b.classList.contains('completed');
+        
+        // Сначала незавершенные заказы
+        if (aCompleted && !bCompleted) return 1;
+        if (!aCompleted && bCompleted) return -1;
+        
+        // Если оба завершены или оба незавершены, сортируем по срочности
+        const aDays = parseInt(a.querySelector('.days-left').textContent);
+        const bDays = parseInt(b.querySelector('.days-left').textContent);
+        
+        return aDays - bDays;
+      });
+      
+      // Переставляем строки
+      rows.forEach(row => tbody.appendChild(row));
+    }
+
+    // Обработчик изменения слайдеров шлифовки
+    document.querySelectorAll('input[name="polishing"]').forEach(checkbox => {
+      checkbox.addEventListener('change', async (e) => {
+        const row = e.target.closest('tr');
+        const orderId = row.getAttribute('data-order-id');
+        const status = e.target.checked;
+
+        try {
+          const response = await fetch('/update_polishing', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order_id: orderId, status: status })
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const result = await response.json();
+          
+          if (result.success) {
+            console.log(result.message);
+            
+            // Обновляем статусы в таблице
+            updateTableStatus(orderId, status);
+            
+            // Пересортировываем таблицу
+            sortTableByPriority();
+            
+          } else {
+            alert('Ошибка при обновлении статуса: ' + (result.message || 'Неизвестная ошибка'));
+            e.target.checked = !status; // Возвращаем исходное состояние
+          }
+        } catch (error) {
+          console.error('Ошибка:', error);
+          alert('Ошибка при обновлении статуса: ' + error.message);
+          e.target.checked = !status; // Возвращаем исходное состояние
+        }
+      });
+    });
+
+         function updateTableStatus(orderId, status) {
+       const row = document.querySelector(`#polishing-table tr[data-order-id="${orderId}"]`);
+       if (row) {
+         if (status) {
+           row.className = 'completed';
+           const statusCell = row.querySelector('td:nth-child(4)');
+           statusCell.innerHTML = '<span class="status-indicator status-completed"></span>Завершен';
+         } else {
+           // Пересчитываем класс строки
+           const daysLeft = parseInt(row.querySelector('.days-left').textContent);
+           const isUrgent = daysLeft <= 3;
+           const isWarning = daysLeft <= 6;
+           
+           if (isUrgent) {
+             row.className = 'urgent-order';
+           } else if (isWarning) {
+             row.className = 'warning-order';
+           } else {
+             row.className = '';
+           }
+           
+           const statusCell = row.querySelector('td:nth-child(4)');
+           if (isUrgent) {
+             statusCell.innerHTML = '<span class="status-indicator status-urgent"></span>Срочный';
+           } else if (isWarning) {
+             statusCell.innerHTML = '<span class="status-indicator status-warning"></span>Скоро срок';
+           } else {
+             statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Ожидает';
+           }
+         }
+       }
+     }
+
+    // Сортируем таблицу при загрузке страницы
+    document.addEventListener('DOMContentLoaded', () => {
+      sortTableByPriority();
+    });
+  </script>
+</body>
+</html>

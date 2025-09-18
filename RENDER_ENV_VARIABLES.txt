@@ -1,0 +1,10 @@
+# Переменные окружения для Render.com
+# Скопируйте эти переменные в Environment Variables на Render
+
+SECRET_KEY=my-secret-key-for-production-123
+
+DATABASE_URL=postgresql://facade_user:2BojvrPNG9p65kS6on1dgzu7i2ks1Aq6@dpg-d2vj30ur433s73c09er0-a.frankfurt-postgres.render.com/facade_orders
+
+# Дополнительные настройки (опционально)
+FLASK_ENV=production
+FLASK_DEBUG=False

@@ -1,0 +1,14 @@
+# Настройки для локальной разработки
+SECRET_KEY=my-secret-key-for-local-development-123
+
+# База данных PostgreSQL (для Render)
+# Раскомментируйте и используйте этот URL для деплоя на Render:
+# DATABASE_URL=postgresql://facade_user:2BojvrPNG9p65kS6on1dgzu7i2ks1Aq6@dpg-d2vj30ur433s73c09er0-a.frankfurt-postgres.render.com/facade_orders
+
+# Для локальной разработки будет использоваться SQLite (database.db)
+# Если хотите использовать PostgreSQL локально, раскомментируйте и настройте:
+# DATABASE_URL=postgresql://username:password@localhost:5432/facade_orders
+
+# Дополнительные настройки
+FLASK_ENV=development
+FLASK_DEBUG=True

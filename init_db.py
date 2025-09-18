@@ -1,74 +1,83 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Скрипт для инициализации базы данных на Render.com
+Надежный скрипт инициализации базы данных
 """
 
-from app import app, db
-from models import User, Order, Employee, WorkHours, SalaryPeriod
+import os
+import sys
+
+# Добавляем текущую директорию в путь
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def init_database():
-    """Инициализация базы данных с начальными данными"""
-    with app.app_context():
-        # Создаем все таблицы
-        db.create_all()
+    """Инициализация базы данных"""
+    try:
+        print("🚀 Начинаем инициализацию...")
         
-        # Проверяем, есть ли уже пользователи
-        if User.query.count() == 0:
-            print("Создаем начальных пользователей...")
-            
-            # Создаем администратора
-            admin = User(
-                username='admin',
-                password=User.hash_password('admin123'),
-                role='Админ'
-            )
-            db.session.add(admin)
-            
-            # Создаем менеджера
-            manager = User(
-                username='manager',
-                password=User.hash_password('5678'),
-                role='Менеджер'
-            )
-            db.session.add(manager)
-            
-            # Создаем пользователей для производства
-            production_users = [
-                ('worker', '0000', 'Производство'),
-                ('cutter', '7777', 'Фрезеровка'),
-                ('polisher', '8888', 'Шлифовка'),
-                ('monitor', '9999', 'Монитор')
-            ]
-            
-            for username, password, role in production_users:
-                user = User(
-                    username=username,
-                    password=User.hash_password(password),
-                    role=role
-                )
-                db.session.add(user)
-            
-            db.session.commit()
-            print("✅ Пользователи созданы успешно!")
-            
-            # Создаем тестового сотрудника
-            if Employee.query.count() == 0:
-                print("Создаем тестового сотрудника...")
-                employee = Employee(
-                    name='Тестовый сотрудник',
-                    position='Оператор',
-                    hourly_rate=500.0,
-                    is_active=True
-                )
-                db.session.add(employee)
-                db.session.commit()
-                print("✅ Тестовый сотрудник создан!")
-        else:
-            print("Пользователи уже существуют, пропускаем создание.")
+        from flask import Flask
+        from config import Config
+        from models import db, User
         
-        print("✅ База данных инициализирована успешно!")
+        print("✅ Импорты успешны")
+        
+        app = Flask(__name__)
+        app.config.from_object(Config)
+        
+        print(f"📊 DATABASE_URL: {app.config.get('SQLALCHEMY_DATABASE_URI', 'НЕ НАЙДЕН')}")
+        
+        db.init_app(app)
+        
+        with app.app_context():
+            print("🚀 Создание таблиц...")
+            db.create_all()
+            print("✅ Таблицы созданы")
+            
+            # Проверяем количество пользователей
+            try:
+                user_count = User.query.count()
+                print(f"👥 Пользователей в базе: {user_count}")
+                
+                if user_count == 0:
+                    print("👤 Создание пользователей...")
+                    
+                    # Создаем менеджера
+                    manager = User(
+                        username='manager',
+                        password=User.hash_password('5678'),
+                        role='Менеджер'
+                    )
+                    db.session.add(manager)
+                    
+                    # Создаем админа
+                    admin = User(
+                        username='admin',
+                        password=User.hash_password('admin123'),
+                        role='Админ'
+                    )
+                    db.session.add(admin)
+                    
+                    db.session.commit()
+                    print("✅ Пользователи созданы")
+                else:
+                    print("✅ Пользователи уже существуют")
+                    
+            except Exception as e:
+                print(f"⚠️ Ошибка при проверке пользователей: {e}")
+                # Продолжаем выполнение
+            
+            print("🎉 Инициализация завершена!")
+            return True
+            
+    except Exception as e:
+        print(f"❌ Критическая ошибка: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 if __name__ == "__main__":
-    init_database()
-
+    success = init_database()
+    if not success:
+        print("💥 Инициализация не удалась!")
+        sys.exit(1)
+    else:
+        print("🎉 Инициализация успешна!")

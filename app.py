@@ -33,6 +33,71 @@ login_manager.login_view = "login"
 
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
+# Инициализация базы данных при запуске
+def init_database():
+    """Инициализация базы данных"""
+    with app.app_context():
+        try:
+            print("🚀 Инициализация базы данных...")
+            
+            # Создаем все таблицы
+            db.create_all()
+            print("✅ Таблицы созданы")
+            
+            # Проверяем количество пользователей
+            user_count = User.query.count()
+            print(f"👥 Пользователей в базе: {user_count}")
+            
+            if user_count == 0:
+                print("👤 Создание пользователей...")
+                
+                # Создаем менеджера
+                manager = User(
+                    username='manager',
+                    password=User.hash_password('5678'),
+                    role='Менеджер'
+                )
+                db.session.add(manager)
+                
+                # Создаем админа
+                admin = User(
+                    username='admin',
+                    password=User.hash_password('admin123'),
+                    role='Админ'
+                )
+                db.session.add(admin)
+                
+                # Создаем других пользователей
+                users_data = [
+                    ('worker', '0000', 'Производство'),
+                    ('cutter', '7777', 'Фрезеровка'),
+                    ('polisher', '8888', 'Шлифовка'),
+                    ('monitor', '9999', 'Монитор')
+                ]
+                
+                for username, password, role in users_data:
+                    user = User(
+                        username=username,
+                        password=User.hash_password(password),
+                        role=role
+                    )
+                    db.session.add(user)
+                
+                db.session.commit()
+                print("✅ Пользователи созданы")
+            else:
+                print("✅ Пользователи уже существуют")
+            
+            print("🎉 Инициализация завершена!")
+            
+        except Exception as e:
+            print(f"❌ Ошибка инициализации: {e}")
+            import traceback
+            traceback.print_exc()
+
+# Запускаем инициализацию
+init_database()
+
 def allowed_file(filename):
     """Проверяет, разрешен ли тип файла для загрузки"""
     return '.' in filename and \

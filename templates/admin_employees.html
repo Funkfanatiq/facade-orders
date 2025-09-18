@@ -305,7 +305,7 @@
         <div class="content-card">
             <h3>Добавить нового сотрудника</h3>
             <form method="POST" action="/admin/employees">
-                <input type="hidden" name="action" value="add">
+                <input type="hidden" name="action" value="add_employee">
                 <div class="form-group">
                     <label for="name">ФИО сотрудника</label>
                     <input type="text" id="name" name="name" required placeholder="Иванов Иван Иванович">
@@ -346,7 +346,7 @@
                             <td>{{ employee.position }}</td>
                             <td>
                                 <form class="inline-form" method="POST" action="/admin/employees">
-                                    <input type="hidden" name="action" value="update">
+                                    <input type="hidden" name="action" value="update_employee">
                                     <input type="hidden" name="employee_id" value="{{ employee.id }}">
                                     <input type="number" name="hourly_rate" value="{{ employee.hourly_rate }}" 
                                            step="0.01" min="0">

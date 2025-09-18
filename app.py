@@ -13,6 +13,11 @@ SHEET_AREA = 2.75 * 2.05  # Площадь листа в м² (5.6375)
 MAX_FILE_SIZE = 16 * 1024 * 1024  # Максимальный размер файла (16MB)
 EXPIRED_DAYS = 180  # Дней для удаления старых заказов
 
+# Константы для управления хранилищем
+STORAGE_LIMIT_MB = 980  # Лимит хранилища в МБ
+ORDER_SIZE_MB = 10  # Средний размер заказа в МБ
+CLEANUP_BATCH_SIZE = 10  # Количество заказов для удаления за раз
+
 # Разрешенные типы файлов для загрузки
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'gif', 'txt', 'doc', 'docx', 'xls', 'xlsx', 'dwg', 'dxf'}
 
@@ -113,6 +118,79 @@ def secure_filename_custom(filename):
         name, ext = os.path.splitext(filename)
         filename = name[:95] + ext
     return filename
+
+def get_storage_usage_mb():
+    """Получает текущее использование хранилища в МБ"""
+    try:
+        upload_folder = app.config["UPLOAD_FOLDER"]
+        total_size = 0
+        
+        for dirpath, dirnames, filenames in os.walk(upload_folder):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                if os.path.exists(filepath):
+                    total_size += os.path.getsize(filepath)
+        
+        return total_size / (1024 * 1024)  # Конвертируем в МБ
+    except Exception as e:
+        print(f"Ошибка при подсчете размера хранилища: {e}")
+        return 0
+
+def cleanup_old_orders():
+    """Очищает старые заказы со статусом 'отправлено' при достижении лимита хранилища"""
+    try:
+        current_usage = get_storage_usage_mb()
+        print(f"📊 Текущее использование хранилища: {current_usage:.2f} МБ")
+        
+        if current_usage >= STORAGE_LIMIT_MB:
+            print(f"⚠️ Достигнут лимит хранилища ({STORAGE_LIMIT_MB} МБ). Начинаем очистку...")
+            
+            # Находим заказы со статусом "отправлено" (shipment = True)
+            old_orders = Order.query.filter_by(shipment=True).order_by(Order.due_date.asc()).limit(CLEANUP_BATCH_SIZE).all()
+            
+            if old_orders:
+                deleted_count = 0
+                for order in old_orders:
+                    # Удаляем файлы заказа
+                    if order.filepaths:
+                        file_paths = order.filepaths.split(';')
+                        for file_path in file_paths:
+                            if file_path.strip():
+                                full_path = os.path.join(app.config["UPLOAD_FOLDER"], file_path.strip())
+                                if os.path.exists(full_path):
+                                    try:
+                                        os.remove(full_path)
+                                        print(f"🗑️ Удален файл: {file_path}")
+                                    except Exception as e:
+                                        print(f"Ошибка при удалении файла {file_path}: {e}")
+                    
+                    # Удаляем запись заказа из базы данных
+                    db.session.delete(order)
+                    deleted_count += 1
+                
+                db.session.commit()
+                
+                new_usage = get_storage_usage_mb()
+                freed_space = current_usage - new_usage
+                
+                print(f"✅ Очистка завершена!")
+                print(f"🗑️ Удалено заказов: {deleted_count}")
+                print(f"💾 Освобождено места: {freed_space:.2f} МБ")
+                print(f"📊 Новое использование: {new_usage:.2f} МБ")
+                
+                return deleted_count
+            else:
+                print("ℹ️ Нет заказов со статусом 'отправлено' для удаления")
+                return 0
+        else:
+            print(f"✅ Хранилище в норме: {current_usage:.2f} МБ / {STORAGE_LIMIT_MB} МБ")
+            return 0
+            
+    except Exception as e:
+        print(f"❌ Ошибка при очистке хранилища: {e}")
+        import traceback
+        traceback.print_exc()
+        return 0
 
 @app.template_filter("zip")
 def zip_filter(a, b):
@@ -448,6 +526,10 @@ def dashboard():
 
         db.session.add(order)
         db.session.commit()
+        
+        # Проверяем и очищаем хранилище при необходимости
+        cleanup_old_orders()
+        
         flash("✅ Заказ добавлен!")
         return redirect(url_for("dashboard"))
 
@@ -467,7 +549,15 @@ def dashboard():
         # Для остальных ролей показываем все заказы
         orders = Order.query.order_by(Order.due_date).all()
     
-    return render_template("dashboard.html", orders=orders, datetime=datetime)
+    # Получаем информацию о хранилище
+    storage_usage = get_storage_usage_mb()
+    storage_info = {
+        'current_mb': round(storage_usage, 2),
+        'limit_mb': STORAGE_LIMIT_MB,
+        'percentage': round((storage_usage / STORAGE_LIMIT_MB) * 100, 1)
+    }
+    
+    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info)
 
 def render_admin_dashboard():
     """Рендеринг панели администратора"""
@@ -518,7 +608,16 @@ def render_admin_dashboard():
         return redirect(url_for("dashboard"))
 
     orders = Order.query.order_by(Order.due_date).all()
-    return render_template("admin_dashboard.html", orders=orders, datetime=datetime, current_user=current_user)
+    
+    # Получаем информацию о хранилище
+    storage_usage = get_storage_usage_mb()
+    storage_info = {
+        'current_mb': round(storage_usage, 2),
+        'limit_mb': STORAGE_LIMIT_MB,
+        'percentage': round((storage_usage / STORAGE_LIMIT_MB) * 100, 1)
+    }
+    
+    return render_template("admin_dashboard.html", orders=orders, datetime=datetime, current_user=current_user, storage_info=storage_info)
 
 @app.route("/delete_order/<int:order_id>", methods=["DELETE"])
 @login_required
@@ -913,8 +1012,6 @@ def admin_employees():
         
         elif action == "update_employee":
             employee_id = request.form.get("employee_id")
-            name = request.form.get("name")
-            position = request.form.get("position")
             try:
                 hourly_rate = float(request.form.get("hourly_rate", 0))
                 if hourly_rate < 0:
@@ -925,11 +1022,9 @@ def admin_employees():
             
             employee = Employee.query.get(employee_id)
             if employee:
-                employee.name = name
-                employee.position = position
                 employee.hourly_rate = hourly_rate
                 db.session.commit()
-                flash(f"Сотрудник {name} обновлен", "success")
+                flash(f"Часовая ставка сотрудника {employee.name} обновлена", "success")
         
         elif action == "deactivate":
             employee_id = request.form.get("employee_id")
@@ -1152,6 +1247,23 @@ def admin_salary_report():
                          employees=employees,
                          report_data=report_data,
                          work_hours_data=work_hours_data)
+
+@app.route("/admin/cleanup_storage", methods=["POST"])
+@login_required
+def cleanup_storage():
+    """Ручная очистка хранилища (только для администраторов)"""
+    if current_user.role != "Админ":
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    
+    deleted_count = cleanup_old_orders()
+    
+    if deleted_count > 0:
+        flash(f"✅ Очистка завершена! Удалено заказов: {deleted_count}")
+    else:
+        flash("ℹ️ Нет заказов для удаления или хранилище в норме")
+    
+    return redirect(url_for("dashboard"))
 
 @app.cli.command("init-db")
 def init_db():

@@ -13,7 +13,7 @@ from flask_migrate import Migrate
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import Config
-from models import db, User, Order, Employee, Task, SalaryPeriod
+from models import db, User, Order, Employee, SalaryPeriod
 
 def init_database():
     """Инициализация базы данных"""
@@ -36,14 +36,48 @@ def init_database():
                 print("Создание администратора...")
                 admin_user = User(
                     username='admin',
-                    password_hash='pbkdf2:sha256:600000$admin123$hash',  # Пароль: admin123
-                    is_admin=True
+                    password=User.hash_password('admin123'),
+                    role='Админ'
                 )
                 db.session.add(admin_user)
-                db.session.commit()
                 print("✅ Администратор создан: admin / admin123")
             else:
                 print("✅ Администратор уже существует")
+            
+            # Проверяем, есть ли менеджер
+            manager_user = User.query.filter_by(username='manager').first()
+            if not manager_user:
+                print("Создание менеджера...")
+                manager_user = User(
+                    username='manager',
+                    password=User.hash_password('5678'),
+                    role='Менеджер'
+                )
+                db.session.add(manager_user)
+                print("✅ Менеджер создан: manager / 5678")
+            else:
+                print("✅ Менеджер уже существует")
+            
+            # Создаем других пользователей
+            users_to_create = [
+                ('worker', '0000', 'Производство'),
+                ('cutter', '7777', 'Фрезеровка'),
+                ('polisher', '8888', 'Шлифовка'),
+                ('monitor', '9999', 'Монитор')
+            ]
+            
+            for username, password, role in users_to_create:
+                existing_user = User.query.filter_by(username=username).first()
+                if not existing_user:
+                    user = User(
+                        username=username,
+                        password=User.hash_password(password),
+                        role=role
+                    )
+                    db.session.add(user)
+                    print(f"✅ Пользователь создан: {username} / {password}")
+            
+            db.session.commit()
             
             # Проверяем подключение
             result = db.session.execute(db.text("SELECT 1"))

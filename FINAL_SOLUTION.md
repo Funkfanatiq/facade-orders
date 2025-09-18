@@ -61,4 +61,10 @@ could not translate host name "dpg-d2vj30ur433s73c09er0-a" to address: Name or s
 - ✅ psycopg2-binary установится без ошибок
 - ✅ База данных PostgreSQL подключится
 - ✅ Таблицы создадутся автоматически
-- ✅ Администратор создастся: admin / admin123
+- ✅ Пользователи создадутся:
+  - **Администратор**: admin / admin123
+  - **Менеджер**: manager / 5678
+  - **Производство**: worker / 0000
+  - **Фрезеровка**: cutter / 7777
+  - **Шлифовка**: polisher / 8888
+  - **Монитор**: monitor / 9999

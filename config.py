@@ -1,4 +1,4 @@
-# config.py
+ну# config.py
 
 import os
 

@@ -79,3 +79,34 @@ class SalaryPeriod(db.Model):
     
     # Уникальный индекс для предотвращения дублирования периодов
     __table_args__ = (db.UniqueConstraint('employee_id', 'year', 'month', 'period_type', name='unique_salary_period'),)
+
+class Email(db.Model):
+    """Модель для хранения писем"""
+    id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.String(255), unique=True, nullable=True)  # ID письма от почтового сервера
+    subject = db.Column(db.String(255), nullable=False)
+    sender = db.Column(db.String(255), nullable=False)
+    recipient = db.Column(db.String(255), nullable=False)
+    body = db.Column(db.Text, nullable=True)
+    html_body = db.Column(db.Text, nullable=True)
+    is_read = db.Column(db.Boolean, default=False)
+    is_sent = db.Column(db.Boolean, default=False)  # True для исходящих, False для входящих
+    reply_to_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=True)  # ID письма, на которое отвечаем
+    created_at = db.Column(db.DateTime, default=db.func.now())
+    sent_at = db.Column(db.DateTime, nullable=True)
+    
+    # Связь для ответов
+    reply_to = db.relationship('Email', remote_side=[id], backref='replies')
+
+class EmailAttachment(db.Model):
+    """Модель для вложений в письма"""
+    id = db.Column(db.Integer, primary_key=True)
+    email_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    filepath = db.Column(db.String(500), nullable=False)
+    file_size = db.Column(db.Integer, nullable=True)
+    content_type = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, default=db.func.now())
+    
+    # Связь с письмом
+    email = db.relationship('Email', backref=db.backref('attachments', lazy=True))

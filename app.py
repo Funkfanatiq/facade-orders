@@ -6,6 +6,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
 from datetime import datetime, timedelta, timezone
 import os
+import imaplib
+import email
+import re
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 from dotenv import load_dotenv
 
 # Константы приложения
@@ -32,7 +39,7 @@ app.config.from_object('config.Config')
 mail = Mail(app)
 
 # Импортируем модели после инициализации Flask
-from models import db, User, Order, Employee, WorkHours, SalaryPeriod
+from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Email, EmailAttachment
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -439,6 +446,126 @@ def send_order_notification(order, notification_type):
         order=order,
         datetime=datetime
     )
+
+def fetch_incoming_emails():
+    """Получение входящих писем через IMAP"""
+    try:
+        # Подключение к IMAP серверу Mail.ru
+        mail_server = imaplib.IMAP4_SSL('imap.mail.ru', 993)
+        mail_server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+        mail_server.select('INBOX')
+        
+        # Поиск непрочитанных писем
+        status, messages = mail_server.search(None, 'UNSEEN')
+        
+        if status != 'OK':
+            return []
+        
+        email_ids = messages[0].split()
+        new_emails = []
+        
+        for email_id in email_ids[-10:]:  # Берем последние 10 писем
+            status, msg_data = mail_server.fetch(email_id, '(RFC822)')
+            
+            if status != 'OK':
+                continue
+                
+            raw_email = msg_data[0][1]
+            email_message = email.message_from_bytes(raw_email)
+            
+            # Извлекаем данные письма
+            subject = email_message.get('Subject', '')
+            sender = email_message.get('From', '')
+            recipient = app.config['MAIL_USERNAME']
+            date_str = email_message.get('Date', '')
+            
+            # Получаем тело письма
+            body = ""
+            html_body = ""
+            
+            if email_message.is_multipart():
+                for part in email_message.walk():
+                    content_type = part.get_content_type()
+                    content_disposition = str(part.get("Content-Disposition"))
+                    
+                    if content_type == "text/plain" and "attachment" not in content_disposition:
+                        body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                    elif content_type == "text/html" and "attachment" not in content_disposition:
+                        html_body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+            else:
+                body = email_message.get_payload(decode=True).decode('utf-8', errors='ignore')
+            
+            # Проверяем, есть ли уже такое письмо в базе
+            existing_email = Email.query.filter_by(
+                sender=sender,
+                subject=subject,
+                recipient=recipient
+            ).first()
+            
+            if not existing_email:
+                # Создаем новое письмо в базе данных
+                new_email = Email(
+                    message_id=email_message.get('Message-ID', ''),
+                    subject=subject,
+                    sender=sender,
+                    recipient=recipient,
+                    body=body,
+                    html_body=html_body,
+                    is_read=False,
+                    is_sent=False,
+                    created_at=datetime.now()
+                )
+                
+                db.session.add(new_email)
+                new_emails.append(new_email)
+        
+        db.session.commit()
+        mail_server.close()
+        mail_server.logout()
+        
+        return new_emails
+        
+    except Exception as e:
+        print(f"❌ Ошибка получения писем: {e}")
+        return []
+
+def send_email_with_storage(to_email, subject, body, html_body=None, reply_to_id=None):
+    """Отправка письма с сохранением в базе данных"""
+    try:
+        # Создаем письмо
+        msg = Message(
+            subject=subject,
+            recipients=[to_email],
+            body=body,
+            html=html_body,
+            sender=app.config['MAIL_DEFAULT_SENDER']
+        )
+        
+        # Отправляем письмо
+        mail.send(msg)
+        
+        # Сохраняем в базе данных
+        sent_email = Email(
+            subject=subject,
+            sender=app.config['MAIL_DEFAULT_SENDER'],
+            recipient=to_email,
+            body=body,
+            html_body=html_body,
+            is_read=True,
+            is_sent=True,
+            reply_to_id=reply_to_id,
+            sent_at=datetime.now()
+        )
+        
+        db.session.add(sent_email)
+        db.session.commit()
+        
+        print(f"✅ Письмо отправлено на {to_email}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Ошибка отправки письма: {e}")
+        return False
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -1330,26 +1457,136 @@ def cleanup_storage():
 @app.route("/mail")
 @login_required
 def mail_agent():
-    """Почтовый агент для менеджера в стиле macOS"""
+    """Полноценный почтовый агент для менеджера в стиле macOS"""
     if current_user.role != "Менеджер":
         flash("Доступ запрещен", "error")
         return redirect(url_for("dashboard"))
     
-    # Получаем заказы, готовые к отправке
-    ready_orders = Order.query.filter(
-        Order.milling == True,
-        Order.polishing_1 == True,
-        Order.packaging == True,
-        Order.shipment == False
-    ).order_by(Order.due_date.asc()).all()
+    # Получаем тип просмотра (inbox, sent, compose)
+    view_type = request.args.get('view', 'inbox')
     
-    # Получаем отправленные заказы
-    shipped_orders = Order.query.filter_by(shipment=True).order_by(Order.due_date.desc()).limit(20).all()
+    # Получаем входящие письма
+    inbox_emails = Email.query.filter_by(is_sent=False).order_by(Email.created_at.desc()).limit(50).all()
+    
+    # Получаем исходящие письма
+    sent_emails = Email.query.filter_by(is_sent=True).order_by(Email.sent_at.desc()).limit(50).all()
+    
+    # Статистика
+    unread_count = Email.query.filter_by(is_sent=False, is_read=False).count()
+    total_inbox = Email.query.filter_by(is_sent=False).count()
+    total_sent = Email.query.filter_by(is_sent=True).count()
     
     return render_template("mail_agent.html", 
-                         ready_orders=ready_orders,
-                         shipped_orders=shipped_orders,
+                         view_type=view_type,
+                         inbox_emails=inbox_emails,
+                         sent_emails=sent_emails,
+                         unread_count=unread_count,
+                         total_inbox=total_inbox,
+                         total_sent=total_sent,
                          datetime=datetime)
+
+@app.route("/mail/fetch")
+@login_required
+def fetch_emails():
+    """Получение новых писем"""
+    if current_user.role != "Менеджер":
+        return jsonify({"success": False, "message": "Доступ запрещен"}), 403
+    
+    try:
+        new_emails = fetch_incoming_emails()
+        return jsonify({
+            "success": True, 
+            "message": f"Получено {len(new_emails)} новых писем",
+            "count": len(new_emails)
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Ошибка: {str(e)}"}), 500
+
+@app.route("/mail/read/<int:email_id>")
+@login_required
+def read_email(email_id):
+    """Просмотр письма"""
+    if current_user.role != "Менеджер":
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("mail_agent"))
+    
+    email_obj = Email.query.get_or_404(email_id)
+    
+    # Отмечаем как прочитанное
+    if not email_obj.is_read:
+        email_obj.is_read = True
+        db.session.commit()
+    
+    return render_template("email_view.html", email=email_obj, datetime=datetime)
+
+@app.route("/mail/reply/<int:email_id>", methods=["GET", "POST"])
+@login_required
+def reply_email(email_id):
+    """Ответ на письмо"""
+    if current_user.role != "Менеджер":
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("mail_agent"))
+    
+    original_email = Email.query.get_or_404(email_id)
+    
+    if request.method == "POST":
+        subject = request.form.get("subject")
+        body = request.form.get("body")
+        
+        if not all([subject, body]):
+            flash("Заполните все поля", "error")
+            return redirect(url_for("reply_email", email_id=email_id))
+        
+        # Отправляем ответ
+        if send_email_with_storage(
+            to_email=original_email.sender,
+            subject=subject,
+            body=body,
+            reply_to_id=email_id
+        ):
+            flash("✅ Ответ отправлен", "success")
+        else:
+            flash("❌ Ошибка отправки ответа", "error")
+        
+        return redirect(url_for("mail_agent"))
+    
+    # Формируем тему ответа
+    reply_subject = f"Re: {original_email.subject}" if not original_email.subject.startswith("Re:") else original_email.subject
+    
+    return render_template("email_reply.html", 
+                         original_email=original_email,
+                         reply_subject=reply_subject,
+                         datetime=datetime)
+
+@app.route("/mail/compose", methods=["GET", "POST"])
+@login_required
+def compose_email():
+    """Создание нового письма"""
+    if current_user.role != "Менеджер":
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("mail_agent"))
+    
+    if request.method == "POST":
+        to_email = request.form.get("to_email")
+        subject = request.form.get("subject")
+        body = request.form.get("body")
+        
+        if not all([to_email, subject, body]):
+            flash("Заполните все поля", "error")
+            return redirect(url_for("compose_email"))
+        
+        # Отправляем письмо
+        if send_email_with_storage(
+            to_email=to_email,
+            subject=subject,
+            body=body
+        ):
+            flash("✅ Письмо отправлено", "success")
+            return redirect(url_for("mail_agent", view="sent"))
+        else:
+            flash("❌ Ошибка отправки письма", "error")
+    
+    return render_template("email_compose.html", datetime=datetime)
 
 @app.route("/mail/send_notification/<int:order_id>", methods=["POST"])
 @login_required

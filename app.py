@@ -1,6 +1,7 @@
 from flask import Flask, render_template, redirect, url_for, request, flash, session, jsonify, send_from_directory 
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
 from datetime import datetime, timedelta, timezone
@@ -26,6 +27,9 @@ load_dotenv()
 
 app = Flask(__name__)
 app.config.from_object('config.Config')
+
+# Инициализация почты
+mail = Mail(app)
 
 # Импортируем модели после инициализации Flask
 from models import db, User, Order, Employee, WorkHours, SalaryPeriod
@@ -398,6 +402,43 @@ def calculate_efficiency(combination, sheet_area):
             return (full_sheets + partial_sheet_usage) / (full_sheets + 1)
         else:
             return partial_sheet_usage
+
+def send_email_notification(to_email, subject, template, **kwargs):
+    """Отправка email уведомления"""
+    try:
+        msg = Message(
+            subject=subject,
+            recipients=[to_email],
+            html=render_template(template, **kwargs)
+        )
+        mail.send(msg)
+        print(f"✅ Email отправлен на {to_email}")
+        return True
+    except Exception as e:
+        print(f"❌ Ошибка отправки email: {e}")
+        return False
+
+def send_order_notification(order, notification_type):
+    """Отправка уведомления о заказе"""
+    if not order.client or '@' not in order.client:
+        return False
+    
+    if notification_type == "ready":
+        subject = f"Заказ {order.order_id} готов к отправке"
+        template = "email/order_ready.html"
+    elif notification_type == "shipped":
+        subject = f"Заказ {order.order_id} отправлен"
+        template = "email/order_shipped.html"
+    else:
+        return False
+    
+    return send_email_notification(
+        to_email=order.client,
+        subject=subject,
+        template=template,
+        order=order,
+        datetime=datetime
+    )
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -1105,97 +1146,97 @@ def admin_work_hours():
     try:
         if request.method == "POST":
             action = request.form.get("action")
-        
-        if action == "add_hours":
-            employee_id = request.form.get("employee_id")
-            date_str = request.form.get("date")
-            try:
-                hours = float(request.form.get("hours", 0))
-                if hours < 0:
-                    raise ValueError("Количество часов не может быть отрицательным")
-            except (ValueError, TypeError):
-                flash("Неверное количество часов", "error")
-                return redirect(url_for("admin_work_hours"))
-            notes = request.form.get("notes", "")
             
-            if employee_id and date_str and hours > 0:
+            if action == "add_hours":
+                employee_id = request.form.get("employee_id")
+                date_str = request.form.get("date")
                 try:
-                    date = datetime.strptime(date_str, "%Y-%m-%d").date()
-                    employee_id_int = int(employee_id)
-                    if employee_id_int <= 0:
-                        raise ValueError("Неверный ID сотрудника")
-                    work_hours = WorkHours(
-                        employee_id=employee_id_int,
-                        date=date,
-                        hours=hours,
-                        notes=notes
-                    )
-                    db.session.add(work_hours)
-                    db.session.commit()
-                    flash("Рабочие часы добавлены", "success")
-                except ValueError:
-                    flash("Неверный формат даты", "error")
-            else:
-                flash("Заполните все обязательные поля", "error")
-        
-        elif action == "bulk_hours":
-            # Массовое добавление часов из новой формы
-            employee_id = request.form.get("employee_id")
-            month = int(request.form.get("month", 1))
-            year = int(request.form.get("year", 2024))
-            period_type = request.form.get("period_type", "first")
-            notes = request.form.get("notes", "")
+                    hours = float(request.form.get("hours", 0))
+                    if hours < 0:
+                        raise ValueError("Количество часов не может быть отрицательным")
+                except (ValueError, TypeError):
+                    flash("Неверное количество часов", "error")
+                    return redirect(url_for("admin_work_hours"))
+                notes = request.form.get("notes", "")
+                
+                if employee_id and date_str and hours > 0:
+                    try:
+                        date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                        employee_id_int = int(employee_id)
+                        if employee_id_int <= 0:
+                            raise ValueError("Неверный ID сотрудника")
+                        work_hours = WorkHours(
+                            employee_id=employee_id_int,
+                            date=date,
+                            hours=hours,
+                            notes=notes
+                        )
+                        db.session.add(work_hours)
+                        db.session.commit()
+                        flash("Рабочие часы добавлены", "success")
+                    except ValueError:
+                        flash("Неверный формат даты", "error")
+                else:
+                    flash("Заполните все обязательные поля", "error")
             
-            if employee_id and month and year:
-                try:
-                    # Определяем дни для периода
-                    if period_type == "first":
-                        start_day, end_day = 1, 15
-                    else:
-                        start_day, end_day = 16, 31
-                    
-                    # Получаем количество дней в месяце
-                    days_in_month = (datetime(year, month + 1, 1) - timedelta(days=1)).day
-                    end_day = min(end_day, days_in_month)
-                    
-                    added_count = 0
-                    for day in range(start_day, end_day + 1):
-                        # Получаем часы для этого дня
-                        hours_key = f"hours_{day}"
-                        hours_value = request.form.get(hours_key)
+            elif action == "bulk_hours":
+                # Массовое добавление часов из новой формы
+                employee_id = request.form.get("employee_id")
+                month = int(request.form.get("month", 1))
+                year = int(request.form.get("year", 2024))
+                period_type = request.form.get("period_type", "first")
+                notes = request.form.get("notes", "")
+                
+                if employee_id and month and year:
+                    try:
+                        # Определяем дни для периода
+                        if period_type == "first":
+                            start_day, end_day = 1, 15
+                        else:
+                            start_day, end_day = 16, 31
                         
-                        if hours_value and float(hours_value) > 0:
-                            date = datetime(year, month, day).date()
+                        # Получаем количество дней в месяце
+                        days_in_month = (datetime(year, month + 1, 1) - timedelta(days=1)).day
+                        end_day = min(end_day, days_in_month)
+                        
+                        added_count = 0
+                        for day in range(start_day, end_day + 1):
+                            # Получаем часы для этого дня
+                            hours_key = f"hours_{day}"
+                            hours_value = request.form.get(hours_key)
                             
-                            # Проверяем, не добавлены ли уже часы на эту дату
-                            existing = WorkHours.query.filter_by(
-                                employee_id=int(employee_id),
-                                date=date
-                            ).first()
-                            
-                            if not existing:
-                                work_hours = WorkHours(
+                            if hours_value and float(hours_value) > 0:
+                                date = datetime(year, month, day).date()
+                                
+                                # Проверяем, не добавлены ли уже часы на эту дату
+                                existing = WorkHours.query.filter_by(
                                     employee_id=int(employee_id),
-                                    date=date,
-                                    hours=float(hours_value),
-                                    notes=notes or f"Ввод за {day}.{month}.{year}"
-                                )
-                                db.session.add(work_hours)
-                                added_count += 1
-                            else:
-                                # Обновляем существующие часы
-                                existing.hours = float(hours_value)
-                                existing.notes = notes or f"Обновлено {day}.{month}.{year}"
-                                added_count += 1
-                    
-                    db.session.commit()
-                    flash(f"Рабочие часы добавлены/обновлены: {added_count} записей", "success")
-                except Exception as e:
-                    db.session.rollback()
-                    flash(f"Ошибка при добавлении часов: {str(e)}", "error")
-            else:
-                flash("Заполните все обязательные поля", "error")
-        
+                                    date=date
+                                ).first()
+                                
+                                if not existing:
+                                    work_hours = WorkHours(
+                                        employee_id=int(employee_id),
+                                        date=date,
+                                        hours=float(hours_value),
+                                        notes=notes or f"Ввод за {day}.{month}.{year}"
+                                    )
+                                    db.session.add(work_hours)
+                                    added_count += 1
+                                else:
+                                    # Обновляем существующие часы
+                                    existing.hours = float(hours_value)
+                                    existing.notes = notes or f"Обновлено {day}.{month}.{year}"
+                                    added_count += 1
+                        
+                        db.session.commit()
+                        flash(f"Рабочие часы добавлены/обновлены: {added_count} записей", "success")
+                    except Exception as e:
+                        db.session.rollback()
+                        flash(f"Ошибка при добавлении часов: {str(e)}", "error")
+                else:
+                    flash("Заполните все обязательные поля", "error")
+            
             return redirect(url_for("admin_work_hours"))
         
         employees = Employee.query.filter_by(is_active=True).all()
@@ -1285,6 +1326,95 @@ def cleanup_storage():
         flash("ℹ️ Нет заказов для удаления или хранилище в норме")
     
     return redirect(url_for("dashboard"))
+
+@app.route("/mail")
+@login_required
+def mail_agent():
+    """Почтовый агент для менеджера в стиле macOS"""
+    if current_user.role != "Менеджер":
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    
+    # Получаем заказы, готовые к отправке
+    ready_orders = Order.query.filter(
+        Order.milling == True,
+        Order.polishing_1 == True,
+        Order.packaging == True,
+        Order.shipment == False
+    ).order_by(Order.due_date.asc()).all()
+    
+    # Получаем отправленные заказы
+    shipped_orders = Order.query.filter_by(shipment=True).order_by(Order.due_date.desc()).limit(20).all()
+    
+    return render_template("mail_agent.html", 
+                         ready_orders=ready_orders,
+                         shipped_orders=shipped_orders,
+                         datetime=datetime)
+
+@app.route("/mail/send_notification/<int:order_id>", methods=["POST"])
+@login_required
+def send_order_notification_route(order_id):
+    """Отправить уведомление клиенту о готовности заказа"""
+    if current_user.role != "Менеджер":
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    
+    order = Order.query.get_or_404(order_id)
+    
+    if send_order_notification(order, "ready"):
+        flash(f"✅ Уведомление отправлено клиенту {order.client}", "success")
+    else:
+        flash("❌ Ошибка отправки уведомления", "error")
+    
+    return redirect(url_for("mail_agent"))
+
+@app.route("/mail/ship_order/<int:order_id>", methods=["POST"])
+@login_required
+def ship_order(order_id):
+    """Отметить заказ как отправленный и уведомить клиента"""
+    if current_user.role != "Менеджер":
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    
+    order = Order.query.get_or_404(order_id)
+    order.shipment = True
+    db.session.commit()
+    
+    # Отправляем уведомление клиенту
+    send_order_notification(order, "shipped")
+    
+    flash(f"✅ Заказ {order.order_id} отмечен как отправленный", "success")
+    return redirect(url_for("mail_agent"))
+
+@app.route("/mail/send_custom", methods=["POST"])
+@login_required
+def send_custom_email():
+    """Отправка произвольного email"""
+    if current_user.role != "Менеджер":
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    
+    to_email = request.form.get("to_email")
+    subject = request.form.get("subject")
+    message = request.form.get("message")
+    
+    if not all([to_email, subject, message]):
+        flash("Заполните все поля", "error")
+        return redirect(url_for("mail_agent"))
+    
+    try:
+        msg = Message(
+            subject=subject,
+            recipients=[to_email],
+            body=message,
+            sender=app.config['MAIL_DEFAULT_SENDER']
+        )
+        mail.send(msg)
+        flash(f"✅ Email отправлен на {to_email}", "success")
+    except Exception as e:
+        flash(f"❌ Ошибка отправки: {str(e)}", "error")
+    
+    return redirect(url_for("mail_agent"))
 
 @app.cli.command("init-db")
 def init_db():

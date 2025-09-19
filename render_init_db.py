@@ -62,7 +62,7 @@ def init_database():
             users_to_create = [
                 ('worker', '0000', 'Производство'),
                 ('cutter', '7777', 'Фрезеровка'),
-                ('polisher', '8888', 'Шлифовка'),
+                (' polisher', '8888', 'Шлифовка'),
                 ('monitor', '9999', 'Монитор')
             ]
             

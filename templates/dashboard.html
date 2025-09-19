@@ -127,10 +127,27 @@
   <div class="top-bar">
     {% if current_user.role == "Производство" %}
     <h2>🏭 Рабочее место производства</h2>
+    {% elif current_user.role == "Менеджер" %}
+    <h2>📋 Панель заказов</h2>
     {% else %}
     <h2>Панель заказов</h2>
     {% endif %}
-    <div>{{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a></div>
+    <div>
+      {% if current_user.role == "Менеджер" %}
+        <a href="/mail" style="background: linear-gradient(135deg, #667eea, #764ba2); 
+                               color: white; 
+                               padding: 8px 16px; 
+                               border-radius: 8px; 
+                               text-decoration: none; 
+                               font-weight: 600; 
+                               margin-right: 12px;
+                               transition: all 0.3s ease;
+                               box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);">
+          📮 Почта
+        </a>
+      {% endif %}
+      {{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a>
+    </div>
   </div>
 
   {% with messages = get_flashed_messages() %}

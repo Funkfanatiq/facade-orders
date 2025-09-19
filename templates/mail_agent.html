@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Почтовый Агент - Менеджер</title>
+    <style>
+        /* macOS-like styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #e0eafc, #cfdef3);
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 20px auto;
+            padding: 20px;
+            flex-grow: 1;
+        }
+        
+        .top-bar {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 12px;
+            padding: 15px 25px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .top-bar h1 {
+            margin: 0;
+            font-size: 26px;
+            font-weight: 700;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .top-bar .nav-link {
+            color: #007aff;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 8px 15px;
+            border-radius: 8px;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        
+        .top-bar .nav-link:hover {
+            background-color: rgba(0, 122, 255, 0.1);
+        }
+        
+        .top-bar .user-info {
+            font-size: 15px;
+            color: #555;
+        }
+        
+        .top-bar .user-info a {
+            color: #007aff;
+            text-decoration: none;
+            margin-left: 8px;
+        }
+        
+        .top-bar .user-info a:hover {
+            text-decoration: underline;
+        }
+        
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+        }
+        
+        .content-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 6px 25px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .content-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+        }
+        
+        .content-card h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 22px;
+            font-weight: 600;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .order-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .order-item {
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .order-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .order-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            color: #444;
+        }
+        
+        .order-details {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .order-files a {
+            color: #007aff;
+            text-decoration: none;
+            margin-right: 10px;
+        }
+        
+        .order-files a:hover {
+            text-decoration: underline;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 10px 18px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+            font-size: 15px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #007aff, #0056b3);
+            color: white;
+            box-shadow: 0 4px 15px rgba(0, 122, 255, 0.3);
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #0056b3, #003f7f);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(0, 122, 255, 0.4);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #28a745, #218838);
+            color: white;
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+        }
+        
+        .btn-success:hover {
+            background: linear-gradient(135deg, #218838, #1e7e34);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+        }
+        
+        .btn-info {
+            background: linear-gradient(135deg, #17a2b8, #138496);
+            color: white;
+            box-shadow: 0 4px 15px rgba(23, 162, 184, 0.3);
+        }
+        
+        .btn-info:hover {
+            background: linear-gradient(135deg, #138496, #0f6674);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(23, 162, 184, 0.4);
+        }
+        
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: 600;
+            color: white;
+        }
+        
+        .status-paid { background-color: #28a745; }
+        .status-unpaid { background-color: #dc3545; }
+        .status-shipped { background-color: #007bff; }
+        .status-pending { background-color: #ffc107; color: #333; }
+        
+        .flash-message {
+            background-color: #e9f7ef;
+            color: #28a745;
+            padding: 12px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 500;
+            border: 1px solid #28a745;
+        }
+        
+        .flash-message.error {
+            background-color: #f8d7da;
+            color: #dc3545;
+            border-color: #dc3545;
+        }
+        
+        .stats-bar {
+            display: flex;
+            justify-content: space-around;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .stat-item {
+            text-align: center;
+            font-size: 14px;
+            color: #555;
+        }
+        
+        .stat-number {
+            font-size: 24px;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-top: 5px;
+        }
+        
+        .custom-email-form {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+        }
+        
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #007aff;
+            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 20px;
+            margin-top: 30px;
+            color: #777;
+            font-size: 13px;
+        }
+        
+        @media (max-width: 768px) {
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+            .top-bar {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="top-bar">
+            <h1>📮 Почтовый Агент</h1>
+            <div class="user-info">
+                {{ current_user.username }} ({{ current_user.role }}) | 
+                <a href="{{ url_for('dashboard') }}" class="nav-link">← Назад к заказам</a>
+                <a href="{{ url_for('logout') }}" class="nav-link">Выход</a>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="stats-bar">
+            <div class="stat-item">
+                Готовы к отправке
+                <div class="stat-number">{{ ready_orders|length }}</div>
+            </div>
+            <div class="stat-item">
+                Отправлено (последние 20)
+                <div class="stat-number">{{ shipped_orders|length }}</div>
+            </div>
+        </div>
+
+        <!-- Форма отправки произвольного email -->
+        <div class="custom-email-form">
+            <h3 style="margin-top: 0; color: #2c3e50;">✉️ Отправить Email</h3>
+            <form method="POST" action="{{ url_for('send_custom_email') }}">
+                <div class="form-group">
+                    <label for="to_email">Получатель:</label>
+                    <input type="email" id="to_email" name="to_email" required placeholder="client@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="subject">Тема:</label>
+                    <input type="text" id="subject" name="subject" required placeholder="Тема письма">
+                </div>
+                <div class="form-group">
+                    <label for="message">Сообщение:</label>
+                    <textarea id="message" name="message" rows="4" required placeholder="Текст сообщения"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">📤 Отправить</button>
+            </form>
+        </div>
+
+        <div class="content-grid">
+            <div class="content-card">
+                <h2>📦 Готовые к отправке</h2>
+                <ul class="order-list">
+                    {% for order in ready_orders %}
+                        <li class="order-item">
+                            <div class="order-header">
+                                <span>Заказ №: {{ order.order_id }}</span>
+                                <span>Клиент: {{ order.client }}</span>
+                            </div>
+                            <div class="order-details">
+                                Срок: {{ order.due_date.strftime('%d.%m.%Y') }}
+                                {% set days_left = (order.due_date - datetime.now().date()).days %}
+                                {% if days_left <= 3 %}
+                                    <span style="color: #dc3545; font-weight: 600;">(Осталось {{ days_left }} дн.)</span>
+                                {% elif days_left <= 7 %}
+                                    <span style="color: #ffc107; font-weight: 600;">(Осталось {{ days_left }} дн.)</span>
+                                {% else %}
+                                    <span style="color: #28a745;">(Осталось {{ days_left }} дн.)</span>
+                                {% endif %}
+                            </div>
+                            <div class="order-files">
+                                {% if order.filepaths %}
+                                    {% for filepath in order.filepaths.split(';') %}
+                                        {% if filepath %}
+                                            <a href="{{ url_for('uploaded_file', filename=filepath.split('/')[-1]) }}" target="_blank">
+                                                {{ filepath.split('/')[-1] }}
+                                            </a>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <span>Нет файлов</span>
+                                {% endif %}
+                            </div>
+                            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                                <form action="{{ url_for('send_order_notification_route', order_id=order.id) }}" method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-info">📧 Уведомить</button>
+                                </form>
+                                <form action="{{ url_for('ship_order', order_id=order.id) }}" method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-success">✅ Отправить</button>
+                                </form>
+                            </div>
+                        </li>
+                    {% else %}
+                        <li class="order-item">Нет заказов, готовых к отправке.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <div class="content-card">
+                <h2>📋 История отправленных</h2>
+                <ul class="order-list">
+                    {% for order in shipped_orders %}
+                        <li class="order-item">
+                            <div class="order-header">
+                                <span>Заказ №: {{ order.order_id }}</span>
+                                <span>Клиент: {{ order.client }}</span>
+                            </div>
+                            <div class="order-details">
+                                Отправлен: {{ order.due_date.strftime('%d.%m.%Y') }}
+                                <span class="status-badge {% if order.paid %}status-paid{% else %}status-unpaid{% endif %}">
+                                    {{ "Оплачен" if order.paid else "Не оплачен" }}
+                                </span>
+                            </div>
+                            <div class="order-files">
+                                {% if order.filepaths %}
+                                    {% for filepath in order.filepaths.split(';') %}
+                                        {% if filepath %}
+                                            <a href="{{ url_for('uploaded_file', filename=filepath.split('/')[-1]) }}" target="_blank">
+                                                {{ filepath.split('/')[-1] }}
+                                            </a>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <span>Нет файлов</span>
+                                {% endif %}
+                            </div>
+                        </li>
+                    {% else %}
+                        <li class="order-item">Нет отправленных заказов.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    <footer class="footer">
+        &copy; 2025 Facade Orders. Все права защищены.
+    </footer>
+</body>
+</html>

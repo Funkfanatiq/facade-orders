@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Заказ отправлен</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .header h1 {
+            color: #007bff;
+            font-size: 28px;
+            margin: 0;
+        }
+        .order-info {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .order-info h3 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        .label {
+            font-weight: 600;
+            color: #495057;
+        }
+        .value {
+            color: #2c3e50;
+        }
+        .status-badge {
+            background: #007bff;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .tracking-info {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .tracking-info h4 {
+            color: #856404;
+            margin-top: 0;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e9ecef;
+            color: #6c757d;
+            font-size: 14px;
+        }
+        .contact-info {
+            background: #e3f2fd;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .contact-info h4 {
+            color: #1976d2;
+            margin-top: 0;
+        }
+        .payment-info {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .payment-info h4 {
+            color: #155724;
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚚 Заказ отправлен!</h1>
+            <p>Ваш заказ был отправлен и находится в пути</p>
+        </div>
+
+        <div class="order-info">
+            <h3>📋 Информация о заказе</h3>
+            <div class="info-row">
+                <span class="label">Номер заказа:</span>
+                <span class="value"><strong>{{ order.order_id }}</strong></span>
+            </div>
+            <div class="info-row">
+                <span class="label">Статус:</span>
+                <span class="status-badge">Отправлен</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Дата отправки:</span>
+                <span class="value">{{ datetime.now().strftime('%d.%m.%Y %H:%M') }}</span>
+            </div>
+            {% if order.facade_type %}
+            <div class="info-row">
+                <span class="label">Тип фасада:</span>
+                <span class="value">{{ order.facade_type }}</span>
+            </div>
+            {% endif %}
+            {% if order.area %}
+            <div class="info-row">
+                <span class="label">Площадь:</span>
+                <span class="value">{{ order.area }} м²</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="tracking-info">
+            <h4>📦 Отслеживание доставки</h4>
+            <p>Ваш заказ отправлен и будет доставлен в ближайшее время. Для отслеживания статуса доставки свяжитесь с нами.</p>
+        </div>
+
+        {% if not order.paid %}
+        <div class="payment-info">
+            <h4>💳 Информация об оплате</h4>
+            <p><strong>Статус оплаты:</strong> Не оплачен</p>
+            <p>Пожалуйста, произведите оплату заказа в соответствии с договором.</p>
+        </div>
+        {% else %}
+        <div class="payment-info">
+            <h4>✅ Оплата</h4>
+            <p><strong>Статус оплаты:</strong> Оплачен</p>
+            <p>Спасибо за своевременную оплату!</p>
+        </div>
+        {% endif %}
+
+        <div class="contact-info">
+            <h4>📞 Контактная информация</h4>
+            <p>Если у вас есть вопросы по заказу или доставке, свяжитесь с нами:</p>
+            <p><strong>Email:</strong> pictortest@mail.ru</p>
+            <p><strong>Телефон:</strong> +7 (XXX) XXX-XX-XX</p>
+        </div>
+
+        <div class="footer">
+            <p>Спасибо за выбор наших услуг!</p>
+            <p><em>Facade Orders - Качественные фасады для вашего дома</em></p>
+        </div>
+    </div>
+</body>
+</html>

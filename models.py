@@ -83,7 +83,7 @@ class SalaryPeriod(db.Model):
 class Email(db.Model):
     """Модель для хранения писем"""
     id = db.Column(db.Integer, primary_key=True)
-    message_id = db.Column(db.String(255), unique=True, nullable=True)  # ID письма от почтового сервера
+    message_id = db.Column(db.String(255), nullable=True)  # ID письма от почтового сервера (убрали unique)
     subject = db.Column(db.String(255), nullable=False)
     sender = db.Column(db.String(255), nullable=False)
     recipient = db.Column(db.String(255), nullable=False)
@@ -97,6 +97,9 @@ class Email(db.Model):
     
     # Связь для ответов
     reply_to = db.relationship('Email', remote_side=[id], backref='replies')
+    
+    # Уникальный индекс для предотвращения дублирования (только если message_id не пустой)
+    __table_args__ = (db.Index('idx_email_message_id', 'message_id'),)
 
 class EmailAttachment(db.Model):
     """Модель для вложений в письма"""

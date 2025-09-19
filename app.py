@@ -489,62 +489,65 @@ def fetch_incoming_emails():
         new_emails = []
         
         for email_id in email_ids[-20:]:  # Берем последние 20 писем
-            status, msg_data = mail_server.fetch(email_id, '(RFC822)')
-            
-            if status != 'OK':
-                continue
+            try:
+                status, msg_data = mail_server.fetch(email_id, '(RFC822)')
                 
-            raw_email = msg_data[0][1]
-            email_message = email.message_from_bytes(raw_email)
-            
-            # Извлекаем и декодируем данные письма
-            subject = decode_header(email_message.get('Subject', ''))
-            sender = decode_header(email_message.get('From', ''))
-            recipient = app.config['MAIL_USERNAME']
-            date_str = email_message.get('Date', '')
-            
-            # Получаем тело письма
-            body = ""
-            html_body = ""
-            
-            if email_message.is_multipart():
-                for part in email_message.walk():
-                    content_type = part.get_content_type()
-                    content_disposition = str(part.get("Content-Disposition"))
+                if status != 'OK':
+                    continue
                     
-                    if content_type == "text/plain" and "attachment" not in content_disposition:
-                        try:
-                            payload = part.get_payload(decode=True)
-                            if payload:
-                                body = payload.decode('utf-8', errors='ignore')
-                        except:
-                            body = str(part.get_payload())
-                    elif content_type == "text/html" and "attachment" not in content_disposition:
-                        try:
-                            payload = part.get_payload(decode=True)
-                            if payload:
-                                html_body = payload.decode('utf-8', errors='ignore')
-                        except:
-                            html_body = str(part.get_payload())
-            else:
-                try:
-                    payload = email_message.get_payload(decode=True)
-                    if payload:
-                        body = payload.decode('utf-8', errors='ignore')
-                except:
-                    body = str(email_message.get_payload())
-            
-            # Проверяем, есть ли уже такое письмо в базе
-            existing_email = Email.query.filter_by(
-                sender=sender,
-                subject=subject,
-                recipient=recipient
-            ).first()
-            
-            if not existing_email:
+                raw_email = msg_data[0][1]
+                email_message = email.message_from_bytes(raw_email)
+                
+                # Извлекаем и декодируем данные письма
+                subject = decode_header(email_message.get('Subject', ''))
+                sender = decode_header(email_message.get('From', ''))
+                recipient = app.config['MAIL_USERNAME']
+                message_id = email_message.get('Message-ID', '')
+                
+                # Если message_id пустой, генерируем уникальный ID
+                if not message_id:
+                    message_id = f"generated_{email_id}_{datetime.now().timestamp()}"
+                
+                # Проверяем по message_id (более надежно)
+                existing_email = Email.query.filter_by(message_id=message_id).first()
+                
+                if existing_email:
+                    continue  # Письмо уже есть, пропускаем
+                
+                # Получаем тело письма
+                body = ""
+                html_body = ""
+                
+                if email_message.is_multipart():
+                    for part in email_message.walk():
+                        content_type = part.get_content_type()
+                        content_disposition = str(part.get("Content-Disposition"))
+                        
+                        if content_type == "text/plain" and "attachment" not in content_disposition:
+                            try:
+                                payload = part.get_payload(decode=True)
+                                if payload:
+                                    body = payload.decode('utf-8', errors='ignore')
+                            except:
+                                body = str(part.get_payload())
+                        elif content_type == "text/html" and "attachment" not in content_disposition:
+                            try:
+                                payload = part.get_payload(decode=True)
+                                if payload:
+                                    html_body = payload.decode('utf-8', errors='ignore')
+                            except:
+                                html_body = str(part.get_payload())
+                else:
+                    try:
+                        payload = email_message.get_payload(decode=True)
+                        if payload:
+                            body = payload.decode('utf-8', errors='ignore')
+                    except:
+                        body = str(email_message.get_payload())
+                
                 # Создаем новое письмо в базе данных
                 new_email = Email(
-                    message_id=email_message.get('Message-ID', ''),
+                    message_id=message_id,
                     subject=subject,
                     sender=sender,
                     recipient=recipient,
@@ -557,7 +560,12 @@ def fetch_incoming_emails():
                 
                 db.session.add(new_email)
                 new_emails.append(new_email)
+                
+            except Exception as e:
+                print(f"Ошибка обработки письма {email_id}: {e}")
+                continue
         
+        # Коммитим все изменения
         db.session.commit()
         mail_server.close()
         mail_server.logout()
@@ -566,6 +574,8 @@ def fetch_incoming_emails():
         
     except Exception as e:
         print(f"❌ Ошибка получения писем: {e}")
+        # Откатываем транзакцию в случае ошибки
+        db.session.rollback()
         return []
 
 def send_email_with_storage(to_email, subject, body, html_body=None, reply_to_id=None):
@@ -1501,36 +1511,46 @@ def mail_agent():
         flash("Доступ запрещен", "error")
         return redirect(url_for("dashboard"))
     
-    # Автоматически получаем новые письма при загрузке
     try:
-        new_emails = fetch_incoming_emails()
-        if new_emails:
-            flash(f"📧 Получено {len(new_emails)} новых писем", "success")
+        # Автоматически получаем новые письма при загрузке
+        try:
+            new_emails = fetch_incoming_emails()
+            if new_emails:
+                flash(f"📧 Получено {len(new_emails)} новых писем", "success")
+        except Exception as e:
+            print(f"Ошибка автоматического получения писем: {e}")
+            # Откатываем транзакцию если была ошибка
+            db.session.rollback()
+        
+        # Получаем тип просмотра (inbox, sent, compose)
+        view_type = request.args.get('view', 'inbox')
+        
+        # Получаем входящие письма
+        inbox_emails = Email.query.filter_by(is_sent=False).order_by(Email.created_at.desc()).limit(50).all()
+        
+        # Получаем исходящие письма
+        sent_emails = Email.query.filter_by(is_sent=True).order_by(Email.sent_at.desc()).limit(50).all()
+        
+        # Статистика
+        unread_count = Email.query.filter_by(is_sent=False, is_read=False).count()
+        total_inbox = Email.query.filter_by(is_sent=False).count()
+        total_sent = Email.query.filter_by(is_sent=True).count()
+        
+        return render_template("mail_agent.html", 
+                             view_type=view_type,
+                             inbox_emails=inbox_emails,
+                             sent_emails=sent_emails,
+                             unread_count=unread_count,
+                             total_inbox=total_inbox,
+                             total_sent=total_sent,
+                             datetime=datetime)
+                             
     except Exception as e:
-        print(f"Ошибка автоматического получения писем: {e}")
-    
-    # Получаем тип просмотра (inbox, sent, compose)
-    view_type = request.args.get('view', 'inbox')
-    
-    # Получаем входящие письма
-    inbox_emails = Email.query.filter_by(is_sent=False).order_by(Email.created_at.desc()).limit(50).all()
-    
-    # Получаем исходящие письма
-    sent_emails = Email.query.filter_by(is_sent=True).order_by(Email.sent_at.desc()).limit(50).all()
-    
-    # Статистика
-    unread_count = Email.query.filter_by(is_sent=False, is_read=False).count()
-    total_inbox = Email.query.filter_by(is_sent=False).count()
-    total_sent = Email.query.filter_by(is_sent=True).count()
-    
-    return render_template("mail_agent.html", 
-                         view_type=view_type,
-                         inbox_emails=inbox_emails,
-                         sent_emails=sent_emails,
-                         unread_count=unread_count,
-                         total_inbox=total_inbox,
-                         total_sent=total_sent,
-                         datetime=datetime)
+        print(f"Ошибка в mail_agent: {e}")
+        # Откатываем транзакцию
+        db.session.rollback()
+        flash("Ошибка загрузки почты. Попробуйте обновить страницу.", "error")
+        return redirect(url_for("dashboard"))
 
 @app.route("/mail/fetch")
 @login_required
@@ -1547,7 +1567,10 @@ def fetch_emails():
             "count": len(new_emails)
         })
     except Exception as e:
-        return jsonify({"success": False, "message": f"Ошибка: {str(e)}"}), 500
+        print(f"Ошибка в fetch_emails: {e}")
+        # Откатываем транзакцию
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Ошибка получения писем"}), 500
 
 @app.route("/mail/read/<int:email_id>")
 @login_required

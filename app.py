@@ -447,6 +447,30 @@ def send_order_notification(order, notification_type):
         datetime=datetime
     )
 
+def decode_header(header_value):
+    """Декодирует заголовки email с поддержкой UTF-8"""
+    if not header_value:
+        return ""
+    
+    try:
+        from email.header import decode_header
+        decoded_parts = decode_header(header_value)
+        decoded_string = ""
+        
+        for part, encoding in decoded_parts:
+            if isinstance(part, bytes):
+                if encoding:
+                    decoded_string += part.decode(encoding)
+                else:
+                    decoded_string += part.decode('utf-8', errors='ignore')
+            else:
+                decoded_string += part
+        
+        return decoded_string
+    except Exception as e:
+        print(f"Ошибка декодирования заголовка: {e}")
+        return str(header_value)
+
 def fetch_incoming_emails():
     """Получение входящих писем через IMAP"""
     try:
@@ -455,8 +479,8 @@ def fetch_incoming_emails():
         mail_server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
         mail_server.select('INBOX')
         
-        # Поиск непрочитанных писем
-        status, messages = mail_server.search(None, 'UNSEEN')
+        # Поиск всех писем (не только непрочитанных)
+        status, messages = mail_server.search(None, 'ALL')
         
         if status != 'OK':
             return []
@@ -464,7 +488,7 @@ def fetch_incoming_emails():
         email_ids = messages[0].split()
         new_emails = []
         
-        for email_id in email_ids[-10:]:  # Берем последние 10 писем
+        for email_id in email_ids[-20:]:  # Берем последние 20 писем
             status, msg_data = mail_server.fetch(email_id, '(RFC822)')
             
             if status != 'OK':
@@ -473,9 +497,9 @@ def fetch_incoming_emails():
             raw_email = msg_data[0][1]
             email_message = email.message_from_bytes(raw_email)
             
-            # Извлекаем данные письма
-            subject = email_message.get('Subject', '')
-            sender = email_message.get('From', '')
+            # Извлекаем и декодируем данные письма
+            subject = decode_header(email_message.get('Subject', ''))
+            sender = decode_header(email_message.get('From', ''))
             recipient = app.config['MAIL_USERNAME']
             date_str = email_message.get('Date', '')
             
@@ -489,11 +513,26 @@ def fetch_incoming_emails():
                     content_disposition = str(part.get("Content-Disposition"))
                     
                     if content_type == "text/plain" and "attachment" not in content_disposition:
-                        body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                        try:
+                            payload = part.get_payload(decode=True)
+                            if payload:
+                                body = payload.decode('utf-8', errors='ignore')
+                        except:
+                            body = str(part.get_payload())
                     elif content_type == "text/html" and "attachment" not in content_disposition:
-                        html_body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                        try:
+                            payload = part.get_payload(decode=True)
+                            if payload:
+                                html_body = payload.decode('utf-8', errors='ignore')
+                        except:
+                            html_body = str(part.get_payload())
             else:
-                body = email_message.get_payload(decode=True).decode('utf-8', errors='ignore')
+                try:
+                    payload = email_message.get_payload(decode=True)
+                    if payload:
+                        body = payload.decode('utf-8', errors='ignore')
+                except:
+                    body = str(email_message.get_payload())
             
             # Проверяем, есть ли уже такое письмо в базе
             existing_email = Email.query.filter_by(
@@ -1461,6 +1500,14 @@ def mail_agent():
     if current_user.role != "Менеджер":
         flash("Доступ запрещен", "error")
         return redirect(url_for("dashboard"))
+    
+    # Автоматически получаем новые письма при загрузке
+    try:
+        new_emails = fetch_incoming_emails()
+        if new_emails:
+            flash(f"📧 Получено {len(new_emails)} новых писем", "success")
+    except Exception as e:
+        print(f"Ошибка автоматического получения писем: {e}")
     
     # Получаем тип просмотра (inbox, sent, compose)
     view_type = request.args.get('view', 'inbox')

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Упаковка | Рабочее место</title>
+  <style>
+    body { margin: 0; background: #f9f9f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #333; }
+    .top-bar { background: #fff; padding: 16px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
+    table { width: 95%; margin: 20px auto; background: #fff; border-collapse: collapse; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+    th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: center; vertical-align: middle; }
+    th { background-color: #f2f2f2; }
+    .switch { position: relative; display: inline-block; width: 46px; height: 26px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; border-radius: 26px; transition: .3s ease-in-out; }
+    .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; border-radius: 50%; transition: .3s ease-in-out; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+    input:checked + .slider { background-color: #4CAF50; box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2); }
+    input:checked + .slider:before { transform: translateX(20px); }
+    .days-left { font-weight: bold; padding: 6px 12px; border-radius: 6px; font-size: 14px; min-width: 30px; display: inline-block; text-align: center; }
+    .days-urgent { background-color: #ff4444; color: #fff; }
+    .days-warning { background-color: #ffc107; color: #333; }
+    .days-normal { background-color: #6c757d; color: #fff; }
+    .tabs { display: inline-flex; gap: 6px; margin-right: 16px; }
+    .tab { padding: 8px 14px; border: 1px solid #ddd; border-bottom: 2px solid transparent; border-radius: 8px; background: #f7f7f7; color: #333; text-decoration: none; font-size: 14px; }
+    .tab:hover { background: #f0f0f0; }
+    .tab.active { background: #fff; border-color: #4CAF50; border-bottom-color: #4CAF50; color: #2c7a2c; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <h2>Упаковка | Рабочее место</h2>
+    <div>
+      <span class="tabs">
+        <a class="tab" href="{{ url_for('polishing_station') }}">🪵 Шлифовка</a>
+        <a class="tab active" href="{{ url_for('packaging_station') }}">📦 Упаковка</a>
+      </span>
+      {{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a>
+    </div>
+  </div>
+
+  <table id="packaging-table">
+    <thead>
+      <tr>
+        <th>№ Заказа</th>
+        <th>Клиент</th>
+        <th>Дней до сдачи</th>
+        <th>Упаковка</th>
+        <th>Оплата</th>
+        <th>Отгрузка</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in orders %}
+        {% set days_left = order_urgency[o.id].days_left %}
+        <tr data-order-id="{{ o.id }}">
+          <td>{{ o.order_id }}</td>
+          <td>{{ o.client }}</td>
+          <td>
+            <span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">
+              {{ days_left }}
+            </span>
+          </td>
+          <td>
+            <label class="switch">
+              <input type="checkbox" name="packaging" {% if o.packaging %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </td>
+          <td>
+            <label class="switch">
+              <input type="checkbox" name="paid" {% if o.paid %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </td>
+          <td>
+            <label class="switch">
+              <input type="checkbox" name="shipment" {% if o.shipment %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <script>
+    function updateRow(orderId, fields) {
+      const form = new URLSearchParams(fields);
+      return fetch(`/update_status/${orderId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form
+      });
+    }
+
+    document.querySelectorAll('#packaging-table input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', async (e) => {
+        const row = e.target.closest('tr');
+        const orderId = row.getAttribute('data-order-id');
+        const packaging = row.querySelector('input[name="packaging"]').checked ? 1 : 0;
+        const paid = row.querySelector('input[name="paid"]').checked ? 1 : 0;
+        const shipmentCb = row.querySelector('input[name="shipment"]');
+        let shipment = shipmentCb.checked ? 1 : 0;
+
+        // Если пытаемся включить отгрузку без оплаты — просим подтверждение
+        if (e.target.name === 'shipment' && shipment === 1 && paid === 0) {
+          const ok = confirm('Уточнить возможность отгрузка без оплаты. Если ок, то можно отгружать, иначе отмена. Продолжить?');
+          if (!ok) {
+            shipmentCb.checked = false;
+            shipment = 0;
+          }
+        }
+
+        try {
+          const res = await updateRow(orderId, { packaging, polishing_1: 1, shipment, paid });
+          if (!res.ok) throw new Error('Ошибка сохранения');
+        } catch (err) {
+          alert('❌ ' + err.message);
+          // Откатываем переключатель
+          if (e.target.name === 'packaging') e.target.checked = !e.target.checked;
+          if (e.target.name === 'paid') e.target.checked = !e.target.checked;
+          if (e.target.name === 'shipment') e.target.checked = !e.target.checked;
+        }
+      });
+    });
+  </script>
+</body>
+</html>

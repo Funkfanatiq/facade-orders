@@ -122,12 +122,22 @@
       background-color: #6c757d; 
       color: white; 
     }
+    .tabs { display: inline-flex; gap: 6px; margin-right: 16px; }
+    .tab { padding: 8px 14px; border: 1px solid #ddd; border-bottom: 2px solid transparent; border-radius: 8px; background: #f7f7f7; color: #333; text-decoration: none; font-size: 14px; }
+    .tab:hover { background: #f0f0f0; }
+    .tab.active { background: #fff; border-color: #4CAF50; border-bottom-color: #4CAF50; color: #2c7a2c; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
   </style>
 </head>
 <body>
   <div class="top-bar">
     <h2>Шлифовка | Рабочее место</h2>
-    <div>{{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a></div>
+    <div>
+      <span class="tabs">
+        <a class="tab active" href="{{ url_for('polishing_station') }}">🪵 Шлифовка</a>
+        <a class="tab" href="{{ url_for('packaging_station') }}">📦 Упаковка</a>
+      </span>
+      {{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a>
+    </div>
   </div>
 
   <table id="polishing-table">

@@ -954,6 +954,30 @@ def polishing_station():
     
     return render_template("polishing.html", orders=orders, order_urgency=order_urgency)
 
+@app.route("/packaging")
+@login_required
+def packaging_station():
+    """Страница упаковки: показываем только заказы после шлифовки"""
+    if current_user.role not in ["Производство", "Фрезеровка", "Шлифовка"]:
+        return redirect(url_for("dashboard"))
+
+    # Заказы допущенные к упаковке: прошли шлифовку и не отгружены
+    orders = Order.query.filter(
+        Order.polishing_1 == True,
+        Order.shipment == False
+    ).order_by(Order.due_date.asc()).all()
+
+    # Информация о срочности (для подсветки сроков)
+    order_urgency = {}
+    for order in orders:
+        days_left = (order.due_date - datetime.now(timezone.utc).date()).days
+        order_urgency[order.id] = {
+            'is_urgent': is_urgent_order(order),
+            'days_left': days_left
+        }
+
+    return render_template("packaging.html", orders=orders, order_urgency=order_urgency)
+
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     """Маршрут для обслуживания загруженных файлов"""
@@ -962,27 +986,16 @@ def uploaded_file(filename):
 @app.route("/admin/salary")
 @login_required
 def admin_salary():
-    """Страница управления зарплатами"""
+    """Страница управления зарплатами - упрощенная версия"""
     if current_user.role != "Админ":
         flash("Доступ запрещен", "error")
         return redirect(url_for("dashboard"))
     
     try:
         employees = Employee.query.filter_by(is_active=True).all()
-        current_year = datetime.now().year
-        current_month = datetime.now().month
-        
-        # Вычисляем данные по рабочим часам
-        work_hours_data = calculate_work_hours_data(employees, current_year, current_month)
-        
-        return render_template("admin_salary.html", 
-                             employees=employees,
-                             work_hours_data=work_hours_data or {},
-                             current_year=current_year)
+        return render_template("admin_salary.html", employees=employees)
     except Exception as e:
         print(f"Ошибка в admin_salary: {e}")
-        import traceback
-        traceback.print_exc()
         flash("Ошибка при загрузке страницы зарплат", "error")
         return redirect(url_for("dashboard"))
 
@@ -1049,53 +1062,6 @@ def admin_employees():
     employees = Employee.query.all()
     return render_template("admin_employees.html", employees=employees)
 
-def calculate_work_hours_data(employees, year=None, month=None):
-    """Вычисляет данные по рабочим часам и зарплатам для сотрудников"""
-    if year is None:
-        year = datetime.now().year
-    if month is None:
-        month = datetime.now().month
-    
-    work_hours_data = {}
-    
-    for employee in employees:
-        # Получаем все рабочие часы сотрудника за указанный месяц
-        start_date = datetime(year, month, 1).date()
-        if month == 12:
-            end_date = datetime(year + 1, 1, 1).date() - timedelta(days=1)
-        else:
-            end_date = datetime(year, month + 1, 1).date() - timedelta(days=1)
-        
-        work_hours = WorkHours.query.filter(
-            WorkHours.employee_id == employee.id,
-            WorkHours.date >= start_date,
-            WorkHours.date <= end_date
-        ).all()
-        
-        # Разделяем на два периода
-        first_period_hours = 0.0
-        second_period_hours = 0.0
-        
-        for wh in work_hours:
-            if wh.date.day <= 15:
-                first_period_hours += wh.hours
-            else:
-                second_period_hours += wh.hours
-        
-        # Рассчитываем зарплаты
-        first_period_salary = first_period_hours * employee.hourly_rate
-        second_period_salary = second_period_hours * employee.hourly_rate
-        month_salary = first_period_salary + second_period_salary
-        
-        work_hours_data[employee.id] = {
-            'first_period_hours': first_period_hours,
-            'second_period_hours': second_period_hours,
-            'first_period_salary': first_period_salary,
-            'second_period_salary': second_period_salary,
-            'month_salary': month_salary
-        }
-    
-    return work_hours_data
 
 @app.route("/admin/work-hours", methods=["GET", "POST"])
 @login_required
@@ -1107,26 +1073,37 @@ def admin_work_hours():
     
     try:
         if request.method == "POST":
-            action = request.form.get("action")
+            employee_id = request.form.get("employee_id")
+            date_str = request.form.get("date")
+            try:
+                hours = float(request.form.get("hours", 0))
+                if hours < 0:
+                    raise ValueError("Количество часов не может быть отрицательным")
+            except (ValueError, TypeError):
+                flash("Неверное количество часов", "error")
+                return redirect(url_for("admin_work_hours"))
+            notes = request.form.get("notes", "")
             
-            if action == "add_hours":
-                employee_id = request.form.get("employee_id")
-                date_str = request.form.get("date")
+            if employee_id and date_str and hours > 0:
                 try:
-                    hours = float(request.form.get("hours", 0))
-                    if hours < 0:
-                        raise ValueError("Количество часов не может быть отрицательным")
-                except (ValueError, TypeError):
-                    flash("Неверное количество часов", "error")
-                    return redirect(url_for("admin_work_hours"))
-                notes = request.form.get("notes", "")
-                
-                if employee_id and date_str and hours > 0:
-                    try:
-                        date = datetime.strptime(date_str, "%Y-%m-%d").date()
-                        employee_id_int = int(employee_id)
-                        if employee_id_int <= 0:
-                            raise ValueError("Неверный ID сотрудника")
+                    date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                    employee_id_int = int(employee_id)
+                    if employee_id_int <= 0:
+                        raise ValueError("Неверный ID сотрудника")
+                    
+                    # Проверяем, не добавлены ли уже часы на эту дату
+                    existing = WorkHours.query.filter_by(
+                        employee_id=employee_id_int,
+                        date=date
+                    ).first()
+                    
+                    if existing:
+                        # Обновляем существующие часы
+                        existing.hours = hours
+                        existing.notes = notes
+                        flash("Рабочие часы обновлены", "success")
+                    else:
+                        # Добавляем новые часы
                         work_hours = WorkHours(
                             employee_id=employee_id_int,
                             date=date,
@@ -1134,84 +1111,18 @@ def admin_work_hours():
                             notes=notes
                         )
                         db.session.add(work_hours)
-                        db.session.commit()
                         flash("Рабочие часы добавлены", "success")
-                    except ValueError:
-                        flash("Неверный формат даты", "error")
-                else:
-                    flash("Заполните все обязательные поля", "error")
-            
-            elif action == "bulk_hours":
-                # Массовое добавление часов из новой формы
-                employee_id = request.form.get("employee_id")
-                month = int(request.form.get("month", 1))
-                year = int(request.form.get("year", 2024))
-                period_type = request.form.get("period_type", "first")
-                notes = request.form.get("notes", "")
-                
-                if employee_id and month and year:
-                    try:
-                        # Определяем дни для периода
-                        if period_type == "first":
-                            start_day, end_day = 1, 15
-                        else:
-                            start_day, end_day = 16, 31
-                        
-                        # Получаем количество дней в месяце
-                        days_in_month = (datetime(year, month + 1, 1) - timedelta(days=1)).day
-                        end_day = min(end_day, days_in_month)
-                        
-                        added_count = 0
-                        for day in range(start_day, end_day + 1):
-                            # Получаем часы для этого дня
-                            hours_key = f"hours_{day}"
-                            hours_value = request.form.get(hours_key)
-                            
-                            if hours_value and float(hours_value) > 0:
-                                date = datetime(year, month, day).date()
-                                
-                                # Проверяем, не добавлены ли уже часы на эту дату
-                                existing = WorkHours.query.filter_by(
-                                    employee_id=int(employee_id),
-                                    date=date
-                                ).first()
-                                
-                                if not existing:
-                                    work_hours = WorkHours(
-                                        employee_id=int(employee_id),
-                                        date=date,
-                                        hours=float(hours_value),
-                                        notes=notes or f"Ввод за {day}.{month}.{year}"
-                                    )
-                                    db.session.add(work_hours)
-                                    added_count += 1
-                                else:
-                                    # Обновляем существующие часы
-                                    existing.hours = float(hours_value)
-                                    existing.notes = notes or f"Обновлено {day}.{month}.{year}"
-                                    added_count += 1
-                        
-                        db.session.commit()
-                        flash(f"Рабочие часы добавлены/обновлены: {added_count} записей", "success")
-                    except Exception as e:
-                        db.session.rollback()
-                        flash(f"Ошибка при добавлении часов: {str(e)}", "error")
-                else:
-                    flash("Заполните все обязательные поля", "error")
+                    
+                    db.session.commit()
+                except ValueError:
+                    flash("Неверный формат даты", "error")
+            else:
+                flash("Заполните все обязательные поля", "error")
             
             return redirect(url_for("admin_work_hours"))
         
         employees = Employee.query.filter_by(is_active=True).all()
-        current_year = datetime.now().year
-        current_month = datetime.now().month
-        
-        # Вычисляем данные по рабочим часам
-        work_hours_data = calculate_work_hours_data(employees, current_year, current_month)
-        
-        return render_template("admin_work_hours.html", 
-                             employees=employees, 
-                             current_year=current_year,
-                             work_hours_data=work_hours_data or {})
+        return render_template("admin_work_hours.html", employees=employees)
     except Exception as e:
         print(f"Ошибка в admin_work_hours: {e}")
         import traceback
@@ -1219,58 +1130,6 @@ def admin_work_hours():
         flash("Ошибка при загрузке страницы рабочих часов", "error")
         return redirect(url_for("dashboard"))
 
-@app.route("/admin/salary-report")
-@login_required
-def admin_salary_report():
-    """Страница отчетов по зарплатам"""
-    if current_user.role != "Админ":
-        flash("Доступ запрещен", "error")
-        return redirect(url_for("dashboard"))
-    
-    try:
-        employees = Employee.query.filter_by(is_active=True).all()
-        current_year = datetime.now().year
-        current_month = datetime.now().month
-        
-        # Вычисляем данные по рабочим часам
-        work_hours_data = calculate_work_hours_data(employees, current_year, current_month)
-        
-        # Формируем данные для отчета
-        report_data = []
-        for employee in employees:
-            if employee.id in work_hours_data:
-                data = work_hours_data[employee.id]
-                
-                # Получаем детальные данные по дням
-                start_date = datetime(current_year, current_month, 1).date()
-                if current_month == 12:
-                    end_date = datetime(current_year + 1, 1, 1).date() - timedelta(days=1)
-                else:
-                    end_date = datetime(current_year, current_month + 1, 1).date() - timedelta(days=1)
-                
-                daily_hours = WorkHours.query.filter(
-                    WorkHours.employee_id == employee.id,
-                    WorkHours.date >= start_date,
-                    WorkHours.date <= end_date
-                ).order_by(WorkHours.date).all()
-                
-                report_data.append({
-                    'employee': employee,
-                    'month_hours': data['first_period_hours'] + data['second_period_hours'],
-                    'month_salary': data['month_salary'],
-                    'daily_hours': daily_hours
-                })
-    
-        return render_template("admin_salary_report.html", 
-                             employees=employees,
-                             report_data=report_data,
-                             work_hours_data=work_hours_data or {})
-    except Exception as e:
-        print(f"Ошибка в admin_salary_report: {e}")
-        import traceback
-        traceback.print_exc()
-        flash("Ошибка при загрузке отчета по зарплатам", "error")
-        return redirect(url_for("dashboard"))
 
 @app.route("/admin/cleanup_storage", methods=["POST"])
 @login_required

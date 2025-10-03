@@ -978,10 +978,26 @@ def packaging_station():
 
     return render_template("packaging.html", orders=orders, order_urgency=order_urgency)
 
+
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     """Маршрут для обслуживания загруженных файлов"""
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+@app.route("/health")
+def health():
+    """Проверка доступности приложения (для внешних пингов)"""
+    return "ok", 200
+
+@app.route("/warmup")
+def warmup():
+    """Лёгкий прогрев: обращаемся к БД и возвращаем краткий статус"""
+    try:
+        users = User.query.count()
+        orders = Order.query.count()
+        return jsonify({"status": "ok", "users": users, "orders": orders}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/admin/salary")
 @login_required

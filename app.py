@@ -5,6 +5,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
 from datetime import datetime, timedelta, timezone
 import os
+import time
 from dotenv import load_dotenv
 
 # Константы приложения
@@ -39,70 +40,75 @@ login_manager.login_view = "login"
 
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-# Инициализация базы данных при запуске
+# Инициализация базы данных при запуске (с retry для Render PostgreSQL)
 def init_database():
-    """Инициализация базы данных"""
-    with app.app_context():
+    """Инициализация базы данных. Retry при SSL/сетевых ошибках (Render)."""
+    max_attempts = 5
+    delay_seconds = 3
+    use_pg = bool(os.environ.get('DATABASE_URL'))
+
+    for attempt in range(1, max_attempts + 1):
         try:
-            print("🚀 Инициализация базы данных...")
-            
-            # Создаем все таблицы
-            db.create_all()
-            print("✅ Таблицы созданы")
-            
-            # Проверяем количество пользователей
-            user_count = User.query.count()
-            print(f"👥 Пользователей в базе: {user_count}")
-            
-            if user_count == 0:
-                print("👤 Создание пользователей...")
-                
-                # Создаем менеджера
-                manager = User(
-                    username='manager',
-                    password=User.hash_password('5678'),
-                    role='Менеджер'
-                )
-                db.session.add(manager)
-                
-                # Создаем админа
-                admin = User(
-                    username='admin',
-                    password=User.hash_password('admin123'),
-                    role='Админ'
-                )
-                db.session.add(admin)
-                
-                # Создаем других пользователей
-                users_data = [
-                    ('worker', '0000', 'Производство'),
-                    ('cutter', '7777', 'Фрезеровка'),
-                    ('polisher', '8888', 'Шлифовка'),
-                    ('monitor', '9999', 'Монитор')
-                ]
-                
-                for username, password, role in users_data:
-                    user = User(
-                        username=username,
-                        password=User.hash_password(password),
-                        role=role
+            with app.app_context():
+                print(f"🚀 Инициализация базы данных... (попытка {attempt}/{max_attempts})")
+                db.create_all()
+                print("✅ Таблицы созданы")
+
+                user_count = User.query.count()
+                print(f"👥 Пользователей в базе: {user_count}")
+
+                if user_count == 0:
+                    print("👤 Создание пользователей...")
+                    manager = User(
+                        username='manager',
+                        password=User.hash_password('5678'),
+                        role='Менеджер'
                     )
-                    db.session.add(user)
-                
-                db.session.commit()
-                print("✅ Пользователи созданы")
-            else:
-                print("✅ Пользователи уже существуют")
-            
-            print("🎉 Инициализация завершена!")
-            
+                    db.session.add(manager)
+                    admin = User(
+                        username='admin',
+                        password=User.hash_password('admin123'),
+                        role='Админ'
+                    )
+                    db.session.add(admin)
+                    for username, password, role in [
+                        ('worker', '0000', 'Производство'),
+                        ('cutter', '7777', 'Фрезеровка'),
+                        ('polisher', '8888', 'Шлифовка'),
+                        ('monitor', '9999', 'Монитор')
+                    ]:
+                        db.session.add(User(
+                            username=username,
+                            password=User.hash_password(password),
+                            role=role
+                        ))
+                    db.session.commit()
+                    print("✅ Пользователи созданы")
+                else:
+                    print("✅ Пользователи уже существуют")
+
+                print("🎉 Инициализация завершена!")
+                return
         except Exception as e:
+            err_msg = str(e).lower()
+            is_retryable = use_pg and (
+                'ssl' in err_msg or 'connection' in err_msg or 'e3q8' in err_msg or 'operational' in err_msg
+            )
             print(f"❌ Ошибка инициализации: {e}")
-            import traceback
-            traceback.print_exc()
+            if attempt < max_attempts and is_retryable:
+                print(f"⏳ Повтор через {delay_seconds} сек...")
+                time.sleep(delay_seconds)
+            else:
+                import traceback
+                traceback.print_exc()
+                return
 
 # Запускаем инициализацию
-init_database()
+try:
+    init_database()
+except Exception as e:
+    print(f"⚠️ Предупреждение: Не удалось выполнить инициализацию БД при запуске: {e}")
+    print("⚠️ Приложение продолжит работу, но функциональность может быть ограничена")
 
 def allowed_file(filename):
     """Проверяет, разрешен ли тип файла для загрузки"""
@@ -199,19 +205,60 @@ def zip_filter(a, b):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    try:
+        return User.query.get(int(user_id))
+    except Exception as e:
+        print(f"Ошибка при загрузке пользователя: {e}")
+        return None
 
 @app.before_request
 def clear_session_if_not_logged_in():
-    if not current_user.is_authenticated:
+    try:
+        if not current_user.is_authenticated:
+            session.clear()
+    except AttributeError:
+        # Если current_user еще не инициализирован
         session.clear()
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Обработчик внутренних ошибок сервера"""
+    try:
+        db.session.rollback()
+    except:
+        pass
+    print(f"Внутренняя ошибка сервера: {error}")
+    import traceback
+    traceback.print_exc()
+    try:
+        if hasattr(current_user, 'is_authenticated') and current_user.is_authenticated:
+            flash("Произошла внутренняя ошибка. Попробуйте позже.", "error")
+            return redirect(url_for("dashboard"))
+    except:
+        pass
+    flash("Произошла внутренняя ошибка. Попробуйте позже.", "error")
+    return redirect(url_for("login"))
+
+@app.errorhandler(404)
+def not_found_error(error):
+    """Обработчик ошибки 404"""
+    flash("Страница не найдена", "error")
+    try:
+        if hasattr(current_user, 'is_authenticated') and current_user.is_authenticated:
+            return redirect(url_for("dashboard"))
+    except:
+        pass
+    return redirect(url_for("login"))
 
 def is_urgent_order(order):
     """
     Определяет является ли заказ срочным.
     Срочные заказы: осталось URGENT_DAYS_THRESHOLD дней или меньше до срока сдачи.
     """
+    if not order.due_date:
+        return False
     days_left = (order.due_date - datetime.now(timezone.utc).date()).days
+    # Обрабатываем просроченные заказы (отрицательные дни) как срочные
     return days_left <= URGENT_DAYS_THRESHOLD
 
 def generate_daily_pool():
@@ -247,7 +294,7 @@ def generate_daily_pool():
     if urgent_orders:
         urgent_order = urgent_orders[0]
         # Если срочный заказ очень большой - отдельный пул
-        if urgent_order.area >= LARGE_ORDER_THRESHOLD:
+        if urgent_order.area and urgent_order.area >= LARGE_ORDER_THRESHOLD:
             return [urgent_order]
         
         # Для срочного заказа просто добавляем заказы того же типа до 4 листов
@@ -256,9 +303,10 @@ def generate_daily_pool():
         total_area = 0
         
         for order in same_type_urgent:
-            if total_area + order.area <= LARGE_ORDER_THRESHOLD:
+            order_area = order.area or 0
+            if total_area + order_area <= LARGE_ORDER_THRESHOLD:
                 pool.append(order)
-                total_area += order.area
+                total_area += order_area
             else:
                 break
         
@@ -269,7 +317,7 @@ def generate_daily_pool():
     target_facade_type = first_order.facade_type
 
     # Если первый заказ очень большой (>4 листов) - делаем отдельный пул
-    if first_order.area >= LARGE_ORDER_THRESHOLD:
+    if first_order.area and first_order.area >= LARGE_ORDER_THRESHOLD:
         return [first_order]
 
     # Получаем заказы того же типа
@@ -328,9 +376,10 @@ def pack_orders_greedy(orders, max_area, sort_by='area_desc'):
     total_area = 0
     
     for order in sorted_orders:
-        if total_area + order.area <= max_area:
+        order_area = order.area or 0
+        if total_area + order_area <= max_area:
             combination.append(order)
-            total_area += order.area
+            total_area += order_area
     
     return combination
 
@@ -352,9 +401,10 @@ def pack_orders_complementary(orders, max_area, sheet_area):
         best_waste = float('inf')
         
         for order in remaining_orders:
-            if total_area + order.area <= max_area:
+            order_area = order.area or 0
+            if total_area + order_area <= max_area:
                 # Рассчитываем остатки после добавления этого заказа
-                new_total = total_area + order.area
+                new_total = total_area + order_area
                 sheets_needed = (new_total / sheet_area)
                 full_sheets = int(sheets_needed)
                 
@@ -371,7 +421,8 @@ def pack_orders_complementary(orders, max_area, sheet_area):
         if best_fit:
             combination.append(best_fit)
             total_area += best_fit.area
-            remaining_orders.remove(best_fit)
+            # Используем список без удаленного элемента вместо remove()
+            remaining_orders = [o for o in remaining_orders if o.id != best_fit.id]
         else:
             break
     
@@ -381,10 +432,13 @@ def calculate_efficiency(combination, sheet_area):
     """
     Рассчитывает эффективность использования материала
     """
-    if not combination:
+    if not combination or sheet_area <= 0:
         return 0
     
-    total_area = sum(order.area for order in combination)
+    total_area = sum(order.area or 0 for order in combination)
+    if total_area <= 0:
+        return 0
+    
     sheets_needed = total_area / sheet_area
     full_sheets = int(sheets_needed)
     
@@ -404,24 +458,41 @@ def calculate_efficiency(combination, sheet_area):
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"]
-        user = User.query.filter_by(username=username).first()
+    try:
+        if request.method == "POST":
+            username = request.form.get("username", "").strip()
+            password = request.form.get("password", "")
+            
+            if not username or not password:
+                flash("Введите логин и пароль", "error")
+                return render_template("login.html")
+            
+            try:
+                user = User.query.filter_by(username=username).first()
+            except Exception as e:
+                print(f"Ошибка при запросе пользователя: {e}")
+                flash("Ошибка подключения к базе данных. Попробуйте позже.", "error")
+                return render_template("login.html")
 
-        if user and check_password_hash(user.password, password):
-            login_user(user)
-            if user.role == "Монитор":
-                return redirect(url_for("monitor"))
-            elif user.role == "Фрезеровка":
-                return redirect(url_for("milling_station"))
-            elif user.role == "Шлифовка":
-                return redirect(url_for("polishing_station"))
-            return redirect(url_for("dashboard"))
+            if user and check_password_hash(user.password, password):
+                login_user(user)
+                if user.role == "Монитор":
+                    return redirect(url_for("monitor"))
+                elif user.role == "Фрезеровка":
+                    return redirect(url_for("milling_station"))
+                elif user.role == "Шлифовка":
+                    return redirect(url_for("polishing_station"))
+                return redirect(url_for("dashboard"))
 
-        flash("Неверный логин или пароль")
+            flash("Неверный логин или пароль", "error")
 
-    return render_template("login.html")
+        return render_template("login.html")
+    except Exception as e:
+        print(f"Критическая ошибка в login: {e}")
+        import traceback
+        traceback.print_exc()
+        flash("Произошла ошибка. Попробуйте позже.", "error")
+        return render_template("login.html")
 
 @app.route("/logout")
 @login_required
@@ -450,7 +521,7 @@ def dashboard():
         if o.filepaths:
             for path in o.filepaths.split(";"):
                 try:
-                    os.remove(os.path.join("static", path))
+                    os.remove(os.path.join(app.config["UPLOAD_FOLDER"], path))
                 except (FileNotFoundError, OSError) as e:
                     print(f"⚠️ Не удалось удалить файл {path}: {e}")
         db.session.delete(o)
@@ -460,8 +531,12 @@ def dashboard():
         flash(f"🧹 Удалено заказов: {len(expired)}")
 
     if request.method == "POST" and current_user.role == "Менеджер":
-        order_id = request.form["order_id"]
-        client = request.form["client"]
+        order_id = request.form.get("order_id", "").strip()
+        client = request.form.get("client", "").strip()
+        
+        if not order_id or not client:
+            flash("Заполните все обязательные поля", "error")
+            return redirect(url_for("dashboard"))
         
         # Валидация входных данных
         try:
@@ -507,10 +582,16 @@ def dashboard():
                 
                 # Создаем безопасное имя файла
                 safe_filename = secure_filename_custom(f.filename)
-                filenames.append(safe_filename)
                 path = os.path.join(app.config["UPLOAD_FOLDER"], safe_filename)
-                f.save(path)
-                filepaths.append(os.path.relpath(path, start="static"))
+                try:
+                    f.save(path)
+                    # Храним относительный путь как имя файла для обслуживания через /uploads/<filename>
+                    filenames.append(safe_filename)
+                    filepaths.append(safe_filename)
+                except Exception as e:
+                    print(f"Ошибка при сохранении файла {safe_filename}: {e}")
+                    flash(f"Не удалось сохранить файл {f.filename}", "error")
+                    continue
 
         order = Order(
             order_id=order_id,
@@ -565,8 +646,12 @@ def dashboard():
 def render_admin_dashboard():
     """Рендеринг панели администратора"""
     if request.method == "POST":
-        order_id = request.form["order_id"]
-        client = request.form["client"]
+        order_id = request.form.get("order_id", "").strip()
+        client = request.form.get("client", "").strip()
+        
+        if not order_id or not client:
+            flash("Заполните все обязательные поля", "error")
+            return redirect(url_for("dashboard"))
         
         # Валидация входных данных
         try:
@@ -575,7 +660,7 @@ def render_admin_dashboard():
                 raise ValueError("Количество дней должно быть положительным")
         except (ValueError, KeyError):
             flash("Неверное количество дней", "error")
-            return redirect(url_for("edit_order", order_id=order_id))
+            return redirect(url_for("dashboard"))
         
         facade_type = request.form.get("facade_type") or None
         area = request.form.get("area")
@@ -586,7 +671,7 @@ def render_admin_dashboard():
                 raise ValueError("Площадь должна быть положительной")
         except ValueError:
             flash("Неверная площадь", "error")
-            return redirect(url_for("edit_order", order_id=order_id))
+            return redirect(url_for("dashboard"))
         
         due_date = datetime.now(timezone.utc).date() + timedelta(days=days)
 
@@ -636,7 +721,7 @@ def delete_order(order_id):
         if order.filepaths:
             for path in order.filepaths.split(";"):
                 try:
-                    os.remove(os.path.join("static", path))
+                    os.remove(os.path.join(app.config["UPLOAD_FOLDER"], path))
                 except (FileNotFoundError, OSError) as e:
                     print(f"⚠️ Не удалось удалить файл {path}: {e}")
         
@@ -727,18 +812,22 @@ def milling_station():
         }
     
     if pool:
-        total_area = sum(order.area for order in pool)
+        total_area = sum(order.area or 0 for order in pool)
         sheet_area = SHEET_AREA
-        sheets_needed = total_area / sheet_area
-        full_sheets = int(sheets_needed)
-        partial_sheet = sheets_needed - full_sheets
-        
-        if partial_sheet > 0:
-            pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
-            pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
+        if sheet_area > 0 and total_area > 0:
+            sheets_needed = total_area / sheet_area
+            full_sheets = int(sheets_needed)
+            partial_sheet = sheets_needed - full_sheets
+            
+            if partial_sheet > 0:
+                pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
+                pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
+            else:
+                pool_info['waste'] = 0
+                pool_info['efficiency'] = 100
         else:
             pool_info['waste'] = 0
-            pool_info['efficiency'] = 100
+            pool_info['efficiency'] = 0
     
     return render_template("milling.html", orders=pool, pool_info=pool_info, order_urgency=order_urgency)
 
@@ -756,7 +845,7 @@ def mark_pool_complete():
     
     # Возвращаем JSON ответ для AJAX запросов
     if request.headers.get('Content-Type') == 'application/json':
-        return {"success": True, "message": "✅ Пул заказов завершён"}
+        return jsonify({"success": True, "message": "✅ Пул заказов завершён"})
     
     flash("✅ Пул заказов завершён. Загружается следующий...")
     return redirect(url_for("milling_station"))
@@ -787,18 +876,22 @@ def milling_pool():
         }
     
     if pool:
-        total_area = sum(order.area for order in pool)
+        total_area = sum(order.area or 0 for order in pool)
         sheet_area = SHEET_AREA
-        sheets_needed = total_area / sheet_area
-        full_sheets = int(sheets_needed)
-        partial_sheet = sheets_needed - full_sheets
-        
-        if partial_sheet > 0:
-            pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
-            pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
+        if sheet_area > 0 and total_area > 0:
+            sheets_needed = total_area / sheet_area
+            full_sheets = int(sheets_needed)
+            partial_sheet = sheets_needed - full_sheets
+            
+            if partial_sheet > 0:
+                pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
+                pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
+            else:
+                pool_info['waste'] = 0
+                pool_info['efficiency'] = 100
         else:
             pool_info['waste'] = 0
-            pool_info['efficiency'] = 100
+            pool_info['efficiency'] = 0
     
     return render_template("milling_pool.html", orders=pool, pool_info=pool_info, order_urgency=order_urgency)
 
@@ -865,18 +958,22 @@ def update_milling_manual():
         }
         
         if new_pool:
-            total_area = sum(order.area for order in new_pool)
+            total_area = sum(order.area or 0 for order in new_pool)
             sheet_area = SHEET_AREA
-            sheets_needed = total_area / sheet_area
-            full_sheets = int(sheets_needed)
-            partial_sheet = sheets_needed - full_sheets
-            
-            if partial_sheet > 0:
-                pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
-                pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
+            if sheet_area > 0 and total_area > 0:
+                sheets_needed = total_area / sheet_area
+                full_sheets = int(sheets_needed)
+                partial_sheet = sheets_needed - full_sheets
+                
+                if partial_sheet > 0:
+                    pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
+                    pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
+                else:
+                    pool_info['waste'] = 0
+                    pool_info['efficiency'] = 100
             else:
                 pool_info['waste'] = 0
-                pool_info['efficiency'] = 100
+                pool_info['efficiency'] = 0
         
         return jsonify({
             'success': True,
@@ -939,9 +1036,11 @@ def polishing_station():
     # Получаем все заказы, которые отфрезерованы, но не шпон (шпон не требует шлифовки)
     orders = Order.query.filter(
         Order.milling == True,
-        Order.facade_type != "шпон",
         Order.shipment == False
     ).order_by(Order.due_date.asc()).all()
+    
+    # Фильтруем заказы, исключая шпон (обрабатываем None значения)
+    orders = [o for o in orders if o.facade_type != "шпон"]
     
     # Добавляем информацию о срочности для каждого заказа
     order_urgency = {}
@@ -982,7 +1081,19 @@ def packaging_station():
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     """Маршрут для обслуживания загруженных файлов"""
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    # Защита от path traversal атак
+    safe_filename = secure_filename_custom(filename)
+    if safe_filename != filename:
+        flash("Недопустимое имя файла", "error")
+        return redirect(url_for("dashboard"))
+    
+    # Проверяем, что файл существует и находится в правильной директории
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], safe_filename)
+    if not os.path.exists(file_path) or not os.path.abspath(file_path).startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
+        flash("Файл не найден", "error")
+        return redirect(url_for("dashboard"))
+    
+    return send_from_directory(app.config['UPLOAD_FOLDER'], safe_filename)
 
 @app.route("/health")
 def health():

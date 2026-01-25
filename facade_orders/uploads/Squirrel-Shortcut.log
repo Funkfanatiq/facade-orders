@@ -1,0 +1,7 @@
+﻿[14.07.25 20:07:37] info: Program: Starting Squirrel Updater: --createShortcut=dyad.exe
+[14.07.25 20:07:37] info: ApplyReleasesImpl: About to create shortcuts for dyad.exe, rootAppDir C:\Users\Funkfanatiq\AppData\Local\dyad
+[14.07.25 20:07:37] info: ApplyReleasesImpl: Creating shortcut for dyad.exe => C:\Users\Funkfanatiq\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Will Chen\dyad.lnk
+[14.07.25 20:07:37] info: ApplyReleasesImpl: About to save shortcut: C:\Users\Funkfanatiq\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Will Chen\dyad.lnk (target C:\Users\Funkfanatiq\AppData\Local\dyad\dyad.exe, workingDir C:\Users\Funkfanatiq\AppData\Local\dyad\app-0.12.0, args , toastActivatorCSLID 5b76fdb9-c020-580f-9fb2-e1f569598ac5)
+[14.07.25 20:07:37] info: ApplyReleasesImpl: Creating shortcut for dyad.exe => C:\Users\Funkfanatiq\Desktop\dyad.lnk
+[14.07.25 20:07:37] info: ApplyReleasesImpl: About to save shortcut: C:\Users\Funkfanatiq\Desktop\dyad.lnk (target C:\Users\Funkfanatiq\AppData\Local\dyad\dyad.exe, workingDir C:\Users\Funkfanatiq\AppData\Local\dyad\app-0.12.0, args , toastActivatorCSLID 5b76fdb9-c020-580f-9fb2-e1f569598ac5)
+[14.07.25 20:07:37] info: Program: Finished Squirrel Updater

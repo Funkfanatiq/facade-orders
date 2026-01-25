@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление сотрудниками - Админ панель</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+            color: #2c3e50;
+            line-height: 1.5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .top-bar {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.06);
+            border: 1px solid #e9ecef;
+        }
+        
+        .top-bar h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .nav-btn {
+            background: #495057;
+            color: white;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .nav-btn:hover {
+            background: #343a40;
+            transform: translateY(-1px);
+        }
+        
+        .nav-btn.secondary {
+            background: #6c757d;
+        }
+        
+        .nav-btn.secondary:hover {
+            background: #495057;
+        }
+        
+        .content-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.06);
+            border: 1px solid #e9ecef;
+        }
+        
+        .content-card h3 {
+            margin: 0 0 20px 0;
+            font-size: 20px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 14px;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #ced4da;
+            border-radius: 8px;
+            font-size: 15px;
+            background: rgba(255, 255, 255, 0.9);
+            transition: all 0.2s ease;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #495057;
+            box-shadow: 0 0 0 3px rgba(73, 80, 87, 0.1);
+        }
+        
+        button {
+            background: #495057;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            margin-right: 12px;
+            transition: all 0.2s ease;
+        }
+        
+        button:hover {
+            background: #343a40;
+            transform: translateY(-1px);
+        }
+        
+        .btn-success {
+            background: #28a745;
+        }
+        
+        .btn-success:hover {
+            background: #1e7e34;
+        }
+        
+        .btn-warning {
+            background: #fd7e14;
+        }
+        
+        .btn-warning:hover {
+            background: #e8590c;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .table th, .table td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .table th {
+            background: rgba(248, 249, 250, 0.9);
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 14px;
+        }
+        
+        .table tr:hover {
+            background: rgba(73, 80, 87, 0.05);
+        }
+        
+        .status-active {
+            color: #28a745;
+            font-weight: 600;
+        }
+        
+        .status-inactive {
+            color: #dc3545;
+            font-weight: 600;
+        }
+        
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+        
+        .flash-message {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            color: white;
+            font-weight: 500;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .flash-success {
+            background: #28a745;
+        }
+        
+        .flash-error {
+            background: #dc3545;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid #e9ecef;
+        }
+        
+        .stat-number {
+            font-size: 28px;
+            font-weight: 700;
+            color: #495057;
+            margin-bottom: 8px;
+        }
+        
+        .stat-label {
+            color: #6c757d;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .empty-state {
+            text-align: center;
+            color: #6c757d;
+            padding: 40px 20px;
+            font-size: 16px;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .inline-form {
+            display: inline;
+        }
+        
+        .inline-form input[type="number"] {
+            width: 80px;
+            margin-right: 8px;
+        }
+        
+        .inline-form button {
+            padding: 8px 12px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="top-bar">
+            <h1>Управление сотрудниками</h1>
+            <div class="nav-links">
+                <a href="/admin/salary" class="nav-btn secondary">← Назад к зарплатам</a>
+                <a href="/" class="nav-btn secondary">🏠 Главная</a>
+            </div>
+        </div>
+
+        <!-- Сообщения -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for message in messages %}
+                        <div class="flash-message flash-success">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Форма добавления сотрудника -->
+        <div class="content-card">
+            <h3>Добавить нового сотрудника</h3>
+            <form method="POST" action="/admin/employees">
+                <input type="hidden" name="action" value="add_employee">
+                <div class="form-group">
+                    <label for="name">ФИО сотрудника</label>
+                    <input type="text" id="name" name="name" required placeholder="Иванов Иван Иванович">
+                </div>
+                <div class="form-group">
+                    <label for="position">Должность</label>
+                    <input type="text" id="position" name="position" required placeholder="Фрезеровщик">
+                </div>
+                <div class="form-group">
+                    <label for="hourly_rate">Часовая ставка (₽)</label>
+                    <input type="number" id="hourly_rate" name="hourly_rate" step="0.01" min="0" required placeholder="150.00">
+                </div>
+                <button type="submit" class="btn-success">Добавить сотрудника</button>
+            </form>
+        </div>
+
+        <!-- Список сотрудников -->
+        <div class="content-card">
+            <h3>Список сотрудников</h3>
+            {% if employees %}
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>ФИО</th>
+                            <th>Должность</th>
+                            <th>Ставка (₽/час)</th>
+                            <th>Статус</th>
+                            <th>Дата добавления</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for employee in employees %}
+                        <tr>
+                            <td>{{ employee.id }}</td>
+                            <td>{{ employee.name }}</td>
+                            <td>{{ employee.position }}</td>
+                            <td>
+                                <form class="inline-form" method="POST" action="/admin/employees">
+                                    <input type="hidden" name="action" value="update_employee">
+                                    <input type="hidden" name="employee_id" value="{{ employee.id }}">
+                                    <input type="number" name="hourly_rate" value="{{ employee.hourly_rate }}" 
+                                           step="0.01" min="0">
+                                    <button type="submit" class="btn-warning">Сохранить</button>
+                                </form>
+                            </td>
+                            <td>
+                                <span class="{{ 'status-active' if employee.is_active else 'status-inactive' }}">
+                                    {{ "Активен" if employee.is_active else "Неактивен" }}
+                                </span>
+                            </td>
+                            <td>{{ employee.created_at.strftime('%d.%m.%Y %H:%M') if employee.created_at else '-' }}</td>
+                            <td>
+                                {% if employee.is_active %}
+                                <form class="inline-form" method="POST" action="/admin/employees">
+                                    <input type="hidden" name="action" value="deactivate">
+                                    <input type="hidden" name="employee_id" value="{{ employee.id }}">
+                                    <button type="submit" class="btn-danger" 
+                                            onclick="return confirm('Вы уверены, что хотите деактивировать сотрудника {{ employee.name }}?')">
+                                        Деактивировать
+                                    </button>
+                                </form>
+                                {% else %}
+                                <span style="color: #6c757d;">Деактивирован</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="empty-state">
+                    Пока нет добавленных сотрудников. Добавьте первого сотрудника используя форму выше.
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Статистика -->
+        {% if employees %}
+        <div class="content-card">
+            <h3>Статистика</h3>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">{{ employees|length }}</div>
+                    <div class="stat-label">Всего сотрудников</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">{{ employees|selectattr('is_active')|list|length }}</div>
+                    <div class="stat-label">Активных</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">{{ "%.2f"|format(employees|sum(attribute='hourly_rate')) }}</div>
+                    <div class="stat-label">Общая ставка (₽/час)</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        // Автоматическое скрытие сообщений через 5 секунд
+        setTimeout(function() {
+            const messages = document.querySelectorAll('.flash-message');
+            messages.forEach(function(message) {
+                message.style.opacity = '0';
+                message.style.transition = 'opacity 0.5s';
+                setTimeout(function() {
+                    message.remove();
+                }, 500);
+            });
+        }, 5000);
+
+        // Подтверждение деактивации
+        document.querySelectorAll('form[action="/admin/employees"]').forEach(function(form) {
+            if (form.querySelector('input[name="action"][value="deactivate"]')) {
+                form.addEventListener('submit', function(e) {
+                    const employeeName = this.querySelector('input[name="employee_id"]').closest('tr').querySelector('td:nth-child(2)').textContent;
+                    if (!confirm(`Вы уверены, что хотите деактивировать сотрудника ${employeeName}?`)) {
+                        e.preventDefault();
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

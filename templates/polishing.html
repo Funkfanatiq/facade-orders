@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Шлифовка | Рабочее место</title>
+  <title>Шлифовка/Упаковка | Рабочее место</title>
   <style>
     body {
       margin: 0;
@@ -17,6 +17,40 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+    }
+    .tabs {
+      display: flex;
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(20px);
+      border-radius: 12px;
+      padding: 4px;
+      margin: 20px auto;
+      width: 95%;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+    .tab {
+      flex: 1;
+      padding: 12px 24px;
+      text-align: center;
+      cursor: pointer;
+      border-radius: 8px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      color: #6e6e73;
+    }
+    .tab.active {
+      background: white;
+      color: #1d1d1f;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    .tab:hover:not(.active) {
+      color: #1d1d1f;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
     }
     table {
       width: 95%;
@@ -126,27 +160,97 @@
 </head>
 <body>
   <div class="top-bar">
-    <h2>Шлифовка | Рабочее место</h2>
+    <h2>Шлифовка/Упаковка | Рабочее место</h2>
     <div>{{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a></div>
   </div>
 
-  <table id="polishing-table">
-    <thead>
-      <tr>
-        <th>№ Заказа</th>
-        <th>Клиент</th>
-        <th>Дней до сдачи</th>
-        <th>Статус</th>
-        <th>Шлифовка</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for o in orders %}
-        {% if o.milling and o.facade_type != 'шпон' %}
-          {% set days_left = order_urgency[o.id].days_left %}
-          {% set is_urgent = order_urgency[o.id].is_urgent %}
+  <!-- Вкладки -->
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('polishing')">
+      Шлифовка
+    </div>
+    <div class="tab" onclick="showTab('packaging')">
+      Упаковка
+    </div>
+  </div>
+
+  <!-- Вкладка Шлифовка -->
+  <div id="polishing-tab" class="tab-content active">
+    <table id="polishing-table">
+      <thead>
+        <tr>
+          <th>№ Заказа</th>
+          <th>Клиент</th>
+          <th>Дней до сдачи</th>
+          <th>Статус</th>
+          <th>Шлифовка</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in polishing_orders %}
+          {% if o.milling and o.facade_type != 'шпон' %}
+            {% set days_left = polishing_urgency[o.id].days_left %}
+            {% set is_urgent = polishing_urgency[o.id].is_urgent %}
+            {% set row_class = "" %}
+            {% if o.polishing_1 %}
+              {% set row_class = "completed" %}
+            {% elif is_urgent %}
+              {% set row_class = "urgent-order" %}
+            {% elif days_left <= 6 %}
+              {% set row_class = "warning-order" %}
+            {% endif %}
+            
+            <tr data-order-id="{{ o.id }}" class="{{ row_class }}">
+              <td>{{ o.order_id }}</td>
+              <td>{{ o.client }}</td>
+              <td>
+                <span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">
+                  {{ days_left }}
+                </span>
+              </td>
+              <td>
+                {% if o.polishing_1 %}
+                  <span class="status-indicator status-completed"></span>Завершен
+                {% elif is_urgent %}
+                  <span class="status-indicator status-urgent"></span>Срочный
+                {% elif days_left <= 6 %}
+                  <span class="status-indicator status-warning"></span>Скоро срок
+                {% else %}
+                  <span class="status-indicator status-normal"></span>Ожидает
+                {% endif %}
+              </td>
+              <td>
+                <label class="switch">
+                  <input type="checkbox" name="polishing" {% if o.polishing_1 %}checked{% endif %}>
+                  <span class="slider"></span>
+                </label>
+              </td>
+            </tr>
+          {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Вкладка Упаковка -->
+  <div id="packaging-tab" class="tab-content">
+    <table id="packaging-table">
+      <thead>
+        <tr>
+          <th>№ Заказа</th>
+          <th>Клиент</th>
+          <th>Дней до сдачи</th>
+          <th>Статус</th>
+          <th>Упаковка</th>
+          <th>Отгрузка</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in packaging_orders %}
+          {% set days_left = packaging_urgency[o.id].days_left %}
+          {% set is_urgent = packaging_urgency[o.id].is_urgent %}
           {% set row_class = "" %}
-          {% if o.polishing_1 %}
+          {% if o.shipment %}
             {% set row_class = "completed" %}
           {% elif is_urgent %}
             {% set row_class = "urgent-order" %}
@@ -154,41 +258,66 @@
             {% set row_class = "warning-order" %}
           {% endif %}
           
-                     <tr data-order-id="{{ o.id }}" class="{{ row_class }}">
-             <td>{{ o.order_id }}</td>
-             <td>{{ o.client }}</td>
-             <td>
-               <span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">
-                 {{ days_left }}
-               </span>
-             </td>
-             <td>
-               {% if o.polishing_1 %}
-                 <span class="status-indicator status-completed"></span>Завершен
-               {% elif is_urgent %}
-                 <span class="status-indicator status-urgent"></span>Срочный
-               {% elif days_left <= 6 %}
-                 <span class="status-indicator status-warning"></span>Скоро срок
-               {% else %}
-                 <span class="status-indicator status-normal"></span>Ожидает
-               {% endif %}
-             </td>
-             <td>
-               <label class="switch">
-                 <input type="checkbox" name="polishing" {% if o.polishing_1 %}checked{% endif %}>
-                 <span class="slider"></span>
-               </label>
-             </td>
-           </tr>
-        {% endif %}
-      {% endfor %}
-    </tbody>
-  </table>
+          <tr data-order-id="{{ o.id }}" class="{{ row_class }}">
+            <td>{{ o.order_id }}</td>
+            <td>{{ o.client }}</td>
+            <td>
+              <span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">
+                {{ days_left }}
+              </span>
+            </td>
+            <td>
+              {% if o.shipment %}
+                <span class="status-indicator status-completed"></span>Отгружен
+              {% elif o.packaging %}
+                <span class="status-indicator status-normal"></span>Упакован
+              {% elif is_urgent %}
+                <span class="status-indicator status-urgent"></span>Срочный
+              {% elif days_left <= 6 %}
+                <span class="status-indicator status-warning"></span>Скоро срок
+              {% else %}
+                <span class="status-indicator status-normal"></span>Ожидает
+              {% endif %}
+            </td>
+            <td>
+              <label class="switch">
+                <input type="checkbox" name="packaging" {% if o.packaging %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+            </td>
+            <td>
+              <label class="switch">
+                <input type="checkbox" name="shipment" {% if o.shipment %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 
   <script>
-    // Функция для сортировки таблицы по приоритету
-    function sortTableByPriority() {
+    // Переключение вкладок
+    function showTab(tabName) {
+      // Скрыть все вкладки
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      
+      // Показать выбранную вкладку
+      document.getElementById(tabName + '-tab').classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    // Функция для сортировки таблицы по приоритету (шлифовка)
+    function sortPolishingTable() {
       const tbody = document.querySelector('#polishing-table tbody');
+      if (!tbody) return;
+      
       const rows = Array.from(tbody.querySelectorAll('tr'));
       
       rows.sort((a, b) => {
@@ -200,14 +329,118 @@
         if (!aCompleted && bCompleted) return -1;
         
         // Если оба завершены или оба незавершены, сортируем по срочности
-        const aDays = parseInt(a.querySelector('.days-left').textContent);
-        const bDays = parseInt(b.querySelector('.days-left').textContent);
+        const aDaysEl = a.querySelector('.days-left');
+        const bDaysEl = b.querySelector('.days-left');
+        if (!aDaysEl || !bDaysEl) return 0;
+        
+        const aDays = parseInt(aDaysEl.textContent);
+        const bDays = parseInt(bDaysEl.textContent);
         
         return aDays - bDays;
       });
       
       // Переставляем строки
       rows.forEach(row => tbody.appendChild(row));
+    }
+
+    // Функция для сортировки таблицы по приоритету (упаковка)
+    function sortPackagingTable() {
+      const tbody = document.querySelector('#packaging-table tbody');
+      if (!tbody) return;
+      
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      
+      rows.sort((a, b) => {
+        const aCompleted = a.classList.contains('completed');
+        const bCompleted = b.classList.contains('completed');
+        
+        // Сначала незавершенные заказы
+        if (aCompleted && !bCompleted) return 1;
+        if (!aCompleted && bCompleted) return -1;
+        
+        // Если оба завершены или оба незавершены, сортируем по срочности
+        const aDaysEl = a.querySelector('.days-left');
+        const bDaysEl = b.querySelector('.days-left');
+        if (!aDaysEl || !bDaysEl) return 0;
+        
+        const aDays = parseInt(aDaysEl.textContent);
+        const bDays = parseInt(bDaysEl.textContent);
+        
+        return aDays - bDays;
+      });
+      
+      // Переставляем строки
+      rows.forEach(row => tbody.appendChild(row));
+    }
+
+    // Обновление статуса в таблице (шлифовка)
+    function updatePolishingTableStatus(orderId, status) {
+      const row = document.querySelector(`#polishing-table tr[data-order-id="${orderId}"]`);
+      if (row) {
+        if (status) {
+          row.className = 'completed';
+          const statusCell = row.querySelector('td:nth-child(4)');
+          statusCell.innerHTML = '<span class="status-indicator status-completed"></span>Завершен';
+        } else {
+          // Пересчитываем класс строки
+          const daysLeft = parseInt(row.querySelector('.days-left').textContent);
+          const isUrgent = daysLeft <= 3;
+          const isWarning = daysLeft <= 6;
+          
+          if (isUrgent) {
+            row.className = 'urgent-order';
+          } else if (isWarning) {
+            row.className = 'warning-order';
+          } else {
+            row.className = '';
+          }
+          
+          const statusCell = row.querySelector('td:nth-child(4)');
+          if (isUrgent) {
+            statusCell.innerHTML = '<span class="status-indicator status-urgent"></span>Срочный';
+          } else if (isWarning) {
+            statusCell.innerHTML = '<span class="status-indicator status-warning"></span>Скоро срок';
+          } else {
+            statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Ожидает';
+          }
+        }
+      }
+    }
+
+    // Обновление статуса в таблице (упаковка)
+    function updatePackagingTableStatus(orderId, fieldName, status) {
+      const row = document.querySelector(`#packaging-table tr[data-order-id="${orderId}"]`);
+      if (!row) return;
+      
+      const statusCell = row.querySelector('td:nth-child(4)');
+      const daysLeft = parseInt(row.querySelector('.days-left').textContent);
+      const isUrgent = daysLeft <= 3;
+      const isWarning = daysLeft <= 6;
+      
+      if (fieldName === 'shipment' && status) {
+        row.className = 'completed';
+        statusCell.innerHTML = '<span class="status-indicator status-completed"></span>Отгружен';
+      } else if (fieldName === 'packaging' && status) {
+        row.className = '';
+        if (isUrgent) {
+          row.className = 'urgent-order';
+        } else if (isWarning) {
+          row.className = 'warning-order';
+        }
+        statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Упакован';
+      } else {
+        // Сбрасываем статус
+        row.className = '';
+        if (isUrgent) {
+          row.className = 'urgent-order';
+          statusCell.innerHTML = '<span class="status-indicator status-urgent"></span>Срочный';
+        } else if (isWarning) {
+          row.className = 'warning-order';
+          statusCell.innerHTML = '<span class="status-indicator status-warning"></span>Скоро срок';
+        } else {
+          statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Ожидает';
+        }
+      }
     }
 
     // Обработчик изменения слайдеров шлифовки
@@ -232,61 +465,92 @@
           
           if (result.success) {
             console.log(result.message);
-            
-            // Обновляем статусы в таблице
-            updateTableStatus(orderId, status);
-            
-            // Пересортировываем таблицу
-            sortTableByPriority();
-            
+            updatePolishingTableStatus(orderId, status);
+            sortPolishingTable();
           } else {
             alert('Ошибка при обновлении статуса: ' + (result.message || 'Неизвестная ошибка'));
-            e.target.checked = !status; // Возвращаем исходное состояние
+            e.target.checked = !status;
           }
         } catch (error) {
           console.error('Ошибка:', error);
           alert('Ошибка при обновлении статуса: ' + error.message);
-          e.target.checked = !status; // Возвращаем исходное состояние
+          e.target.checked = !status;
         }
       });
     });
 
-         function updateTableStatus(orderId, status) {
-       const row = document.querySelector(`#polishing-table tr[data-order-id="${orderId}"]`);
-       if (row) {
-         if (status) {
-           row.className = 'completed';
-           const statusCell = row.querySelector('td:nth-child(4)');
-           statusCell.innerHTML = '<span class="status-indicator status-completed"></span>Завершен';
-         } else {
-           // Пересчитываем класс строки
-           const daysLeft = parseInt(row.querySelector('.days-left').textContent);
-           const isUrgent = daysLeft <= 3;
-           const isWarning = daysLeft <= 6;
-           
-           if (isUrgent) {
-             row.className = 'urgent-order';
-           } else if (isWarning) {
-             row.className = 'warning-order';
-           } else {
-             row.className = '';
-           }
-           
-           const statusCell = row.querySelector('td:nth-child(4)');
-           if (isUrgent) {
-             statusCell.innerHTML = '<span class="status-indicator status-urgent"></span>Срочный';
-           } else if (isWarning) {
-             statusCell.innerHTML = '<span class="status-indicator status-warning"></span>Скоро срок';
-           } else {
-             statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Ожидает';
-           }
-         }
-       }
-     }
+    // Обработчик изменения слайдеров упаковки
+    document.querySelectorAll('input[name="packaging"]').forEach(checkbox => {
+      checkbox.addEventListener('change', async (e) => {
+        const row = e.target.closest('tr');
+        const orderId = row.getAttribute('data-order-id');
+        const status = e.target.checked;
 
-    // Сортируем таблицу при загрузке страницы
+        try {
+          const response = await fetch('/update_stage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              order_id: orderId, 
+              field_name: 'packaging',
+              value: status 
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const result = await response.text();
+          console.log(result);
+          updatePackagingTableStatus(orderId, 'packaging', status);
+          sortPackagingTable();
+        } catch (error) {
+          console.error('Ошибка:', error);
+          alert('Ошибка при обновлении статуса упаковки: ' + error.message);
+          e.target.checked = !status;
+        }
+      });
+    });
+
+    // Обработчик изменения слайдеров отгрузки
+    document.querySelectorAll('input[name="shipment"]').forEach(checkbox => {
+      checkbox.addEventListener('change', async (e) => {
+        const row = e.target.closest('tr');
+        const orderId = row.getAttribute('data-order-id');
+        const status = e.target.checked;
+
+        try {
+          const response = await fetch('/update_stage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              order_id: orderId, 
+              field_name: 'shipment',
+              value: status 
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const result = await response.text();
+          console.log(result);
+          updatePackagingTableStatus(orderId, 'shipment', status);
+          sortPackagingTable();
+        } catch (error) {
+          console.error('Ошибка:', error);
+          alert('Ошибка при обновлении статуса отгрузки: ' + error.message);
+          e.target.checked = !status;
+        }
+      });
+    });
+
+    // Сортируем таблицы при загрузке страницы
     document.addEventListener('DOMContentLoaded', () => {
-      sortTableByPriority();
+      sortPolishingTable();
+      sortPackagingTable();
     });
   </script>
 </body>

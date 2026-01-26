@@ -5,6 +5,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
 from datetime import datetime, timedelta, timezone
 import os
+import time
 from dotenv import load_dotenv
 
 # Константы приложения
@@ -39,13 +40,17 @@ login_manager.login_view = "login"
 
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-# Инициализация базы данных при запуске
+# Инициализация базы данных при запуске (с retry для Render PostgreSQL)
 def init_database():
-    """Инициализация базы данных"""
-    try:
-        with app.app_context():
-            try:
-                print("🚀 Инициализация базы данных...")
+    """Инициализация базы данных. Retry при SSL/сетевых ошибках (Render)."""
+    max_attempts = 5
+    delay_seconds = 3
+    use_pg = bool(os.environ.get('DATABASE_URL'))
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with app.app_context():
+                print(f"🚀 Инициализация базы данных... (попытка {attempt}/{max_attempts})")
                 
                 # Создаем все таблицы
                 db.create_all()
@@ -96,17 +101,21 @@ def init_database():
                     print("✅ Пользователи уже существуют")
                 
                 print("🎉 Инициализация завершена!")
+                return
                 
-            except Exception as e:
-                print(f"❌ Ошибка инициализации: {e}")
+        except Exception as e:
+            err_msg = str(e).lower()
+            is_retryable = use_pg and (
+                'ssl' in err_msg or 'connection' in err_msg or 'e3q8' in err_msg or 'operational' in err_msg
+            )
+            print(f"❌ Ошибка инициализации: {e}")
+            if attempt < max_attempts and is_retryable:
+                print(f"⏳ Повтор через {delay_seconds} сек...")
+                time.sleep(delay_seconds)
+            else:
                 import traceback
                 traceback.print_exc()
-                # Не пробрасываем исключение - позволяем приложению запуститься
-    except Exception as e:
-        print(f"❌ Критическая ошибка при инициализации приложения: {e}")
-        import traceback
-        traceback.print_exc()
-        # Приложение все равно запустится, но БД может быть не инициализирована
+                return
 
 # Запускаем инициализацию
 try:
@@ -1008,48 +1017,42 @@ def polishing_station():
     if current_user.role not in ["Производство", "Фрезеровка", "Шлифовка"]:
         return redirect(url_for("dashboard"))
 
-    # Получаем все заказы, которые отфрезерованы, но не шпон (шпон не требует шлифовки)
-    orders = Order.query.filter(
+    # Заказы для шлифовки: отфрезерованы, но не шпон (шпон не требует шлифовки)
+    polishing_orders = Order.query.filter(
         Order.milling == True,
         Order.facade_type != "шпон",
         Order.shipment == False
     ).order_by(Order.due_date.asc()).all()
     
-    # Добавляем информацию о срочности для каждого заказа
-    order_urgency = {}
-    for order in orders:
+    # Заказы для упаковки: прошли шлифовку и не отгружены
+    packaging_orders = Order.query.filter(
+        Order.polishing_1 == True,
+        Order.shipment == False
+    ).order_by(Order.due_date.asc()).all()
+    
+    # Информация о срочности для заказов шлифовки
+    polishing_urgency = {}
+    for order in polishing_orders:
         days_left = (order.due_date - datetime.now(timezone.utc).date()).days
-        order_urgency[order.id] = {
+        polishing_urgency[order.id] = {
             'is_urgent': is_urgent_order(order),
             'days_left': days_left
         }
     
-    return render_template("polishing.html", orders=orders, order_urgency=order_urgency)
-
-@app.route("/packaging")
-@login_required
-def packaging_station():
-    """Страница упаковки: показываем только заказы после шлифовки"""
-    if current_user.role not in ["Производство", "Фрезеровка", "Шлифовка"]:
-        return redirect(url_for("dashboard"))
-
-    # Заказы допущенные к упаковке: прошли шлифовку и не отгружены
-    orders = Order.query.filter(
-        Order.polishing_1 == True,
-        Order.shipment == False
-    ).order_by(Order.due_date.asc()).all()
-
-    # Информация о срочности (для подсветки сроков)
-    order_urgency = {}
-    for order in orders:
+    # Информация о срочности для заказов упаковки
+    packaging_urgency = {}
+    for order in packaging_orders:
         days_left = (order.due_date - datetime.now(timezone.utc).date()).days
-        order_urgency[order.id] = {
+        packaging_urgency[order.id] = {
             'is_urgent': is_urgent_order(order),
             'days_left': days_left
         }
-
-    return render_template("packaging.html", orders=orders, order_urgency=order_urgency)
-
+    
+    return render_template("polishing.html", 
+                          polishing_orders=polishing_orders,
+                          packaging_orders=packaging_orders,
+                          polishing_urgency=polishing_urgency,
+                          packaging_urgency=packaging_urgency)
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):

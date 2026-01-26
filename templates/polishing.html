@@ -258,7 +258,7 @@
             {% set row_class = "warning-order" %}
           {% endif %}
           
-          <tr data-order-id="{{ o.id }}" class="{{ row_class }}">
+          <tr data-order-id="{{ o.id }}" data-paid="{% if o.paid %}true{% else %}false{% endif %}" class="{{ row_class }}">
             <td>{{ o.order_id }}</td>
             <td>{{ o.client }}</td>
             <td>
@@ -518,7 +518,18 @@
       checkbox.addEventListener('change', async (e) => {
         const row = e.target.closest('tr');
         const orderId = row.getAttribute('data-order-id');
+        const isPaid = row.getAttribute('data-paid') === 'true';
         const status = e.target.checked;
+
+        // Если пытаются отметить отгруженным и заказ не оплачен
+        if (status && !isPaid) {
+          const confirmed = confirm('Заказ не оплачен, вы уверены что хотите отгрузить?');
+          if (!confirmed) {
+            // Отменяем изменение
+            e.target.checked = false;
+            return;
+          }
+        }
 
         try {
           const response = await fetch('/update_stage', {

@@ -51,44 +51,58 @@ def init_database():
         try:
             with app.app_context():
                 print(f"🚀 Инициализация базы данных... (попытка {attempt}/{max_attempts})")
+                
+                # Создаем все таблицы
                 db.create_all()
                 print("✅ Таблицы созданы")
-
+                
+                # Проверяем количество пользователей
                 user_count = User.query.count()
                 print(f"👥 Пользователей в базе: {user_count}")
-
+                
                 if user_count == 0:
                     print("👤 Создание пользователей...")
+                    
+                    # Создаем менеджера
                     manager = User(
                         username='manager',
                         password=User.hash_password('5678'),
                         role='Менеджер'
                     )
                     db.session.add(manager)
+                    
+                    # Создаем админа
                     admin = User(
                         username='admin',
                         password=User.hash_password('admin123'),
                         role='Админ'
                     )
                     db.session.add(admin)
-                    for username, password, role in [
+                    
+                    # Создаем других пользователей
+                    users_data = [
                         ('worker', '0000', 'Производство'),
                         ('cutter', '7777', 'Фрезеровка'),
                         ('polisher', '8888', 'Шлифовка'),
                         ('monitor', '9999', 'Монитор')
-                    ]:
-                        db.session.add(User(
+                    ]
+                    
+                    for username, password, role in users_data:
+                        user = User(
                             username=username,
                             password=User.hash_password(password),
                             role=role
-                        ))
+                        )
+                        db.session.add(user)
+                    
                     db.session.commit()
                     print("✅ Пользователи созданы")
                 else:
                     print("✅ Пользователи уже существуют")
-
+                
                 print("🎉 Инициализация завершена!")
                 return
+                
         except Exception as e:
             err_msg = str(e).lower()
             is_retryable = use_pg and (
@@ -255,10 +269,7 @@ def is_urgent_order(order):
     Определяет является ли заказ срочным.
     Срочные заказы: осталось URGENT_DAYS_THRESHOLD дней или меньше до срока сдачи.
     """
-    if not order.due_date:
-        return False
     days_left = (order.due_date - datetime.now(timezone.utc).date()).days
-    # Обрабатываем просроченные заказы (отрицательные дни) как срочные
     return days_left <= URGENT_DAYS_THRESHOLD
 
 def generate_daily_pool():
@@ -294,7 +305,7 @@ def generate_daily_pool():
     if urgent_orders:
         urgent_order = urgent_orders[0]
         # Если срочный заказ очень большой - отдельный пул
-        if urgent_order.area and urgent_order.area >= LARGE_ORDER_THRESHOLD:
+        if urgent_order.area >= LARGE_ORDER_THRESHOLD:
             return [urgent_order]
         
         # Для срочного заказа просто добавляем заказы того же типа до 4 листов
@@ -303,10 +314,9 @@ def generate_daily_pool():
         total_area = 0
         
         for order in same_type_urgent:
-            order_area = order.area or 0
-            if total_area + order_area <= LARGE_ORDER_THRESHOLD:
+            if total_area + order.area <= LARGE_ORDER_THRESHOLD:
                 pool.append(order)
-                total_area += order_area
+                total_area += order.area
             else:
                 break
         
@@ -317,7 +327,7 @@ def generate_daily_pool():
     target_facade_type = first_order.facade_type
 
     # Если первый заказ очень большой (>4 листов) - делаем отдельный пул
-    if first_order.area and first_order.area >= LARGE_ORDER_THRESHOLD:
+    if first_order.area >= LARGE_ORDER_THRESHOLD:
         return [first_order]
 
     # Получаем заказы того же типа
@@ -376,10 +386,9 @@ def pack_orders_greedy(orders, max_area, sort_by='area_desc'):
     total_area = 0
     
     for order in sorted_orders:
-        order_area = order.area or 0
-        if total_area + order_area <= max_area:
+        if total_area + order.area <= max_area:
             combination.append(order)
-            total_area += order_area
+            total_area += order.area
     
     return combination
 
@@ -401,10 +410,9 @@ def pack_orders_complementary(orders, max_area, sheet_area):
         best_waste = float('inf')
         
         for order in remaining_orders:
-            order_area = order.area or 0
-            if total_area + order_area <= max_area:
+            if total_area + order.area <= max_area:
                 # Рассчитываем остатки после добавления этого заказа
-                new_total = total_area + order_area
+                new_total = total_area + order.area
                 sheets_needed = (new_total / sheet_area)
                 full_sheets = int(sheets_needed)
                 
@@ -421,8 +429,7 @@ def pack_orders_complementary(orders, max_area, sheet_area):
         if best_fit:
             combination.append(best_fit)
             total_area += best_fit.area
-            # Используем список без удаленного элемента вместо remove()
-            remaining_orders = [o for o in remaining_orders if o.id != best_fit.id]
+            remaining_orders.remove(best_fit)
         else:
             break
     
@@ -432,13 +439,10 @@ def calculate_efficiency(combination, sheet_area):
     """
     Рассчитывает эффективность использования материала
     """
-    if not combination or sheet_area <= 0:
+    if not combination:
         return 0
     
-    total_area = sum(order.area or 0 for order in combination)
-    if total_area <= 0:
-        return 0
-    
+    total_area = sum(order.area for order in combination)
     sheets_needed = total_area / sheet_area
     full_sheets = int(sheets_needed)
     
@@ -531,12 +535,8 @@ def dashboard():
         flash(f"🧹 Удалено заказов: {len(expired)}")
 
     if request.method == "POST" and current_user.role == "Менеджер":
-        order_id = request.form.get("order_id", "").strip()
-        client = request.form.get("client", "").strip()
-        
-        if not order_id or not client:
-            flash("Заполните все обязательные поля", "error")
-            return redirect(url_for("dashboard"))
+        order_id = request.form["order_id"]
+        client = request.form["client"]
         
         # Валидация входных данных
         try:
@@ -646,12 +646,8 @@ def dashboard():
 def render_admin_dashboard():
     """Рендеринг панели администратора"""
     if request.method == "POST":
-        order_id = request.form.get("order_id", "").strip()
-        client = request.form.get("client", "").strip()
-        
-        if not order_id or not client:
-            flash("Заполните все обязательные поля", "error")
-            return redirect(url_for("dashboard"))
+        order_id = request.form["order_id"]
+        client = request.form["client"]
         
         # Валидация входных данных
         try:
@@ -812,22 +808,18 @@ def milling_station():
         }
     
     if pool:
-        total_area = sum(order.area or 0 for order in pool)
+        total_area = sum(order.area for order in pool)
         sheet_area = SHEET_AREA
-        if sheet_area > 0 and total_area > 0:
-            sheets_needed = total_area / sheet_area
-            full_sheets = int(sheets_needed)
-            partial_sheet = sheets_needed - full_sheets
-            
-            if partial_sheet > 0:
-                pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
-                pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
-            else:
-                pool_info['waste'] = 0
-                pool_info['efficiency'] = 100
+        sheets_needed = total_area / sheet_area
+        full_sheets = int(sheets_needed)
+        partial_sheet = sheets_needed - full_sheets
+        
+        if partial_sheet > 0:
+            pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
+            pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
         else:
             pool_info['waste'] = 0
-            pool_info['efficiency'] = 0
+            pool_info['efficiency'] = 100
     
     return render_template("milling.html", orders=pool, pool_info=pool_info, order_urgency=order_urgency)
 
@@ -845,7 +837,7 @@ def mark_pool_complete():
     
     # Возвращаем JSON ответ для AJAX запросов
     if request.headers.get('Content-Type') == 'application/json':
-        return jsonify({"success": True, "message": "✅ Пул заказов завершён"})
+        return {"success": True, "message": "✅ Пул заказов завершён"}
     
     flash("✅ Пул заказов завершён. Загружается следующий...")
     return redirect(url_for("milling_station"))
@@ -876,22 +868,18 @@ def milling_pool():
         }
     
     if pool:
-        total_area = sum(order.area or 0 for order in pool)
+        total_area = sum(order.area for order in pool)
         sheet_area = SHEET_AREA
-        if sheet_area > 0 and total_area > 0:
-            sheets_needed = total_area / sheet_area
-            full_sheets = int(sheets_needed)
-            partial_sheet = sheets_needed - full_sheets
-            
-            if partial_sheet > 0:
-                pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
-                pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
-            else:
-                pool_info['waste'] = 0
-                pool_info['efficiency'] = 100
+        sheets_needed = total_area / sheet_area
+        full_sheets = int(sheets_needed)
+        partial_sheet = sheets_needed - full_sheets
+        
+        if partial_sheet > 0:
+            pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
+            pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
         else:
             pool_info['waste'] = 0
-            pool_info['efficiency'] = 0
+            pool_info['efficiency'] = 100
     
     return render_template("milling_pool.html", orders=pool, pool_info=pool_info, order_urgency=order_urgency)
 
@@ -958,22 +946,18 @@ def update_milling_manual():
         }
         
         if new_pool:
-            total_area = sum(order.area or 0 for order in new_pool)
+            total_area = sum(order.area for order in new_pool)
             sheet_area = SHEET_AREA
-            if sheet_area > 0 and total_area > 0:
-                sheets_needed = total_area / sheet_area
-                full_sheets = int(sheets_needed)
-                partial_sheet = sheets_needed - full_sheets
-                
-                if partial_sheet > 0:
-                    pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
-                    pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
-                else:
-                    pool_info['waste'] = 0
-                    pool_info['efficiency'] = 100
+            sheets_needed = total_area / sheet_area
+            full_sheets = int(sheets_needed)
+            partial_sheet = sheets_needed - full_sheets
+            
+            if partial_sheet > 0:
+                pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
+                pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
             else:
                 pool_info['waste'] = 0
-                pool_info['efficiency'] = 0
+                pool_info['efficiency'] = 100
         
         return jsonify({
             'success': True,
@@ -1036,11 +1020,9 @@ def polishing_station():
     # Получаем все заказы, которые отфрезерованы, но не шпон (шпон не требует шлифовки)
     orders = Order.query.filter(
         Order.milling == True,
+        Order.facade_type != "шпон",
         Order.shipment == False
     ).order_by(Order.due_date.asc()).all()
-    
-    # Фильтруем заказы, исключая шпон (обрабатываем None значения)
-    orders = [o for o in orders if o.facade_type != "шпон"]
     
     # Добавляем информацию о срочности для каждого заказа
     order_urgency = {}
@@ -1081,19 +1063,7 @@ def packaging_station():
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     """Маршрут для обслуживания загруженных файлов"""
-    # Защита от path traversal атак
-    safe_filename = secure_filename_custom(filename)
-    if safe_filename != filename:
-        flash("Недопустимое имя файла", "error")
-        return redirect(url_for("dashboard"))
-    
-    # Проверяем, что файл существует и находится в правильной директории
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], safe_filename)
-    if not os.path.exists(file_path) or not os.path.abspath(file_path).startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
-        flash("Файл не найден", "error")
-        return redirect(url_for("dashboard"))
-    
-    return send_from_directory(app.config['UPLOAD_FOLDER'], safe_filename)
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route("/health")
 def health():

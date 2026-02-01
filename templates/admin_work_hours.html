@@ -3,12 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ввод рабочих часов - Админ панель</title>
+    <title>Ввод рабочих часов по дням - Админ панель</title>
     <style>
-        * {
-            box-sizing: border-box;
-        }
-        
+        * { box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
@@ -17,13 +14,7 @@
             color: #2c3e50;
             line-height: 1.5;
         }
-        
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        
+        .container { max-width: 720px; margin: 0 auto; padding: 20px; }
         .top-bar {
             background: white;
             border-radius: 8px;
@@ -35,19 +26,8 @@
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             border: 1px solid #ddd;
         }
-        
-        .top-bar h1 {
-            margin: 0;
-            font-size: 24px;
-            font-weight: 600;
-            color: #2c3e50;
-        }
-        
-        .nav-links {
-            display: flex;
-            gap: 10px;
-        }
-        
+        .top-bar h1 { margin: 0; font-size: 24px; font-weight: 600; color: #2c3e50; }
+        .nav-links { display: flex; gap: 10px; }
         .nav-links a {
             padding: 8px 16px;
             border-radius: 6px;
@@ -55,25 +35,10 @@
             font-weight: 500;
             transition: all 0.2s ease;
         }
-        
-        .btn-primary {
-            background: #007bff;
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background: #0056b3;
-        }
-        
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-        
-        .btn-secondary:hover {
-            background: #545b62;
-        }
-        
+        .btn-primary { background: #007bff; color: white; }
+        .btn-primary:hover { background: #0056b3; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-secondary:hover { background: #545b62; }
         .content-card {
             background: white;
             border-radius: 8px;
@@ -82,84 +47,83 @@
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             border: 1px solid #ddd;
         }
-        
-        .content-card h3 {
-            margin-top: 0;
-            color: #2c3e50;
-            font-size: 18px;
-            font-weight: 600;
-        }
-        
-        .form-group {
-            margin-bottom: 15px;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-            color: #2c3e50;
-        }
-        
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
+        .content-card h3 { margin-top: 0; color: #2c3e50; font-size: 18px; font-weight: 600; }
+        .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
+        .form-group { flex: 1; min-width: 140px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 500; color: #2c3e50; font-size: 14px; }
+        .form-group input, .form-group select {
             width: 100%;
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 6px;
             font-size: 14px;
-            transition: border-color 0.2s ease;
         }
-        
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
+        .form-group input:focus, .form-group select:focus {
             outline: none;
             border-color: #007bff;
             box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
         }
-        
         .btn-submit {
             background: #28a745;
             color: white;
-            padding: 12px 24px;
+            padding: 10px 20px;
             border: none;
             border-radius: 6px;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 500;
             cursor: pointer;
             transition: background-color 0.2s ease;
         }
-        
-        .btn-submit:hover {
-            background: #218838;
+        .btn-submit:hover { background: #218838; }
+        .hours-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
         }
-        
+        .hours-table th, .hours-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .hours-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+            font-size: 13px;
+        }
+        .hours-table td.day-name { font-weight: 500; width: 48px; }
+        .hours-table td.date-cell { color: #6c757d; font-size: 13px; white-space: nowrap; }
+        .hours-table input[type="number"] {
+            width: 72px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .hours-table input[type="text"] {
+            width: 100%;
+            min-width: 100px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 13px;
+        }
         .flash-message {
             padding: 12px 20px;
             border-radius: 6px;
             margin-bottom: 20px;
             font-weight: 500;
         }
-        
-        .flash-success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .flash-error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
+        .flash-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .flash-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .week-form .btn-submit { background: #007bff; }
+        .week-form .btn-submit:hover { background: #0056b3; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="top-bar">
-            <h1>⏰ Ввод рабочих часов</h1>
+            <h1>⏰ Часы по рабочим дням</h1>
             <div class="nav-links">
                 <a href="{{ url_for('admin_salary') }}" class="btn-primary">💰 Зарплаты</a>
                 <a href="{{ url_for('admin_employees') }}" class="btn-primary">👥 Сотрудники</a>
@@ -176,41 +140,80 @@
         {% endwith %}
 
         <div class="content-card">
-            <h3>📝 Добавить рабочие часы</h3>
-            <form method="POST">
-                <div class="form-group">
-                    <label for="employee_id">Сотрудник:</label>
-                    <select id="employee_id" name="employee_id" required>
-                        <option value="">Выберите сотрудника</option>
-                        {% for employee in employees %}
-                            <option value="{{ employee.id }}">{{ employee.name }} ({{ employee.position }})</option>
-                        {% endfor %}
-                    </select>
+            <h3>📅 Выберите неделю и сотрудника</h3>
+            <form method="GET" class="week-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="employee_id">Сотрудник</label>
+                        <select id="employee_id" name="employee_id">
+                            <option value="">— Выберите —</option>
+                            {% for emp in employees %}
+                                <option value="{{ emp.id }}" {% if selected_employee_id == emp.id %}selected{% endif %}>
+                                    {{ emp.name }} ({{ emp.position }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="week_start">Неделя с (пн)</label>
+                        <input type="date" id="week_start" name="week_start" value="{{ week_start.strftime('%Y-%m-%d') }}">
+                    </div>
+                    <div class="form-group">
+                        <button type="submit" class="btn-submit">Показать</button>
+                    </div>
                 </div>
-                
-                <div class="form-group">
-                    <label for="date">Дата:</label>
-                    <input type="date" id="date" name="date" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="hours">Количество часов:</label>
-                    <input type="number" id="hours" name="hours" step="0.5" min="0" max="24" required placeholder="8.0">
-                </div>
-                
-                <div class="form-group">
-                    <label for="notes">Заметки (необязательно):</label>
-                    <textarea id="notes" name="notes" rows="3" placeholder="Дополнительная информация о работе"></textarea>
-                </div>
-                
-                <button type="submit" class="btn-submit">✅ Добавить часы</button>
             </form>
         </div>
+
+        {% if selected_employee_id %}
+        <div class="content-card">
+            <h3>📝 Часы по каждому дню</h3>
+            <p style="color: #6c757d; font-size: 14px; margin-bottom: 12px;">
+                Введите количество часов за каждый день. Пустое поле — день не учитывается. Можно указать 0.
+            </p>
+            <form method="POST">
+                <input type="hidden" name="employee_id" value="{{ selected_employee_id }}">
+                <input type="hidden" name="week_start" value="{{ week_start.strftime('%Y-%m-%d') }}">
+                <table class="hours-table">
+                    <thead>
+                        <tr>
+                            <th>День</th>
+                            <th>Дата</th>
+                            <th>Часы</th>
+                            <th>Заметки</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in week_dates %}
+                            {% set wh = existing_by_date.get(d) %}
+                            <tr>
+                                <td class="day-name">{{ day_names[loop.index0] }}</td>
+                                <td class="date-cell">{{ d.strftime('%d.%m.%Y') }}</td>
+                                <td>
+                                    <input type="number" name="hours_{{ d.strftime('%Y-%m-%d') }}"
+                                           step="0.5" min="0" max="24" placeholder="—"
+                                           value="{{ '%.1f'|format(wh.hours) if wh and wh.hours is not none else '' }}">
+                                </td>
+                                <td>
+                                    <input type="text" name="notes_{{ d.strftime('%Y-%m-%d') }}"
+                                           placeholder="необязательно"
+                                           value="{{ wh.notes or '' }}">
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <div class="form-row" style="margin-top: 16px;">
+                    <button type="submit" class="btn-submit">✅ Сохранить часы за неделю</button>
+                </div>
+            </form>
+        </div>
+        {% else %}
+        <div class="content-card">
+            <p style="color: #6c757d; margin: 0;">Выберите сотрудника и неделю выше и нажмите «Показать», чтобы ввести часы по дням.</p>
+        </div>
+        {% endif %}
     </div>
 
-    <script>
-        // Устанавливаем сегодняшнюю дату по умолчанию
-        document.getElementById('date').valueAsDate = new Date();
-    </script>
 </body>
 </html>

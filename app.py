@@ -1154,10 +1154,17 @@ def admin_employees():
     return render_template("admin_employees.html", employees=employees)
 
 
+def _week_monday(d):
+    """Понедельник недели для даты d."""
+    if isinstance(d, datetime):
+        d = d.date()
+    return d - timedelta(days=d.weekday())  # weekday(): 0=Mon, 6=Sun
+
+
 @app.route("/admin/work-hours", methods=["GET", "POST"])
 @login_required
 def admin_work_hours():
-    """Страница управления рабочими часами"""
+    """Страница управления рабочими часами — ввод по каждому рабочему дню."""
     if current_user.role != "Админ":
         flash("Доступ запрещен", "error")
         return redirect(url_for("dashboard"))
@@ -1165,55 +1172,93 @@ def admin_work_hours():
     try:
         if request.method == "POST":
             employee_id = request.form.get("employee_id")
-            date_str = request.form.get("date")
-            try:
-                hours = float(request.form.get("hours", 0))
-                if hours < 0:
-                    raise ValueError("Количество часов не может быть отрицательным")
-            except (ValueError, TypeError):
-                flash("Неверное количество часов", "error")
+            week_start_str = request.form.get("week_start")
+            if not employee_id or not week_start_str:
+                flash("Выберите сотрудника и неделю", "error")
                 return redirect(url_for("admin_work_hours"))
-            notes = request.form.get("notes", "")
-            
-            if employee_id and date_str and hours > 0:
+            try:
+                week_start = datetime.strptime(week_start_str, "%Y-%m-%d").date()
+                employee_id_int = int(employee_id)
+                if employee_id_int <= 0:
+                    raise ValueError("Неверный ID сотрудника")
+            except (ValueError, TypeError):
+                flash("Неверные данные", "error")
+                return redirect(url_for("admin_work_hours"))
+            week_start = _week_monday(week_start)
+            saved_count = 0
+            for key, value in request.form.items():
+                if not key.startswith("hours_"):
+                    continue
+                date_str = key[6:]
                 try:
-                    date = datetime.strptime(date_str, "%Y-%m-%d").date()
-                    employee_id_int = int(employee_id)
-                    if employee_id_int <= 0:
-                        raise ValueError("Неверный ID сотрудника")
-                    
-                    # Проверяем, не добавлены ли уже часы на эту дату
-                    existing = WorkHours.query.filter_by(
-                        employee_id=employee_id_int,
-                        date=date
-                    ).first()
-                    
-                    if existing:
-                        # Обновляем существующие часы
-                        existing.hours = hours
-                        existing.notes = notes
-                        flash("Рабочие часы обновлены", "success")
-                    else:
-                        # Добавляем новые часы
-                        work_hours = WorkHours(
-                            employee_id=employee_id_int,
-                            date=date,
-                            hours=hours,
-                            notes=notes
-                        )
-                        db.session.add(work_hours)
-                        flash("Рабочие часы добавлены", "success")
-                    
-                    db.session.commit()
+                    day_date = datetime.strptime(date_str, "%Y-%m-%d").date()
                 except ValueError:
-                    flash("Неверный формат даты", "error")
-            else:
-                flash("Заполните все обязательные поля", "error")
-            
-            return redirect(url_for("admin_work_hours"))
+                    continue
+                try:
+                    hours_val = float(value.strip()) if value and value.strip() else None
+                except (ValueError, TypeError):
+                    continue
+                if hours_val is not None and hours_val < 0:
+                    continue
+                notes = request.form.get(f"notes_{date_str}", "").strip()
+                if hours_val is None and not notes:
+                    existing = WorkHours.query.filter_by(
+                        employee_id=employee_id_int, date=day_date
+                    ).first()
+                    if existing:
+                        db.session.delete(existing)
+                        saved_count += 1
+                    continue
+                hours_to_save = (hours_val if hours_val is not None else 0.0)
+                existing = WorkHours.query.filter_by(
+                    employee_id=employee_id_int, date=day_date
+                ).first()
+                if existing:
+                    existing.hours = hours_to_save
+                    existing.notes = notes or None
+                else:
+                    db.session.add(WorkHours(
+                        employee_id=employee_id_int,
+                        date=day_date,
+                        hours=hours_to_save,
+                        notes=notes or None
+                    ))
+                saved_count += 1
+            db.session.commit()
+            flash(f"Сохранено: обработано дней — {saved_count}", "success")
+            return redirect(url_for("admin_work_hours", week_start=week_start.strftime("%Y-%m-%d"), employee_id=employee_id_int))
         
         employees = Employee.query.filter_by(is_active=True).all()
-        return render_template("admin_work_hours.html", employees=employees)
+        week_start_str = request.args.get("week_start")
+        employee_id_param = request.args.get("employee_id", type=int)
+        today = datetime.now(timezone.utc).date()
+        if week_start_str:
+            try:
+                week_start = datetime.strptime(week_start_str, "%Y-%m-%d").date()
+                week_start = _week_monday(week_start)
+            except ValueError:
+                week_start = _week_monday(today)
+        else:
+            week_start = _week_monday(today)
+        week_dates = [week_start + timedelta(days=i) for i in range(7)]
+        existing_by_date = {}
+        if employee_id_param:
+            for wh in WorkHours.query.filter(
+                WorkHours.employee_id == employee_id_param,
+                WorkHours.date >= week_start,
+                WorkHours.date < week_start + timedelta(days=7)
+            ).all():
+                existing_by_date[wh.date] = wh
+        day_names = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+        return render_template(
+            "admin_work_hours.html",
+            employees=employees,
+            week_dates=week_dates,
+            day_names=day_names,
+            existing_by_date=existing_by_date,
+            week_start=week_start,
+            selected_employee_id=employee_id_param,
+        )
     except Exception as e:
         print(f"Ошибка в admin_work_hours: {e}")
         import traceback

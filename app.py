@@ -686,11 +686,13 @@ def dashboard():
     # Для менеджера — список заказчиков из заказов и контрагенты из справочника
     customers = []
     counterparties = []
+    counterparties_json = []
     if current_user.role == "Менеджер":
         customers = [row[0] for row in db.session.query(Order.client).distinct().order_by(Order.client).all()]
         counterparties = Counterparty.query.order_by(Counterparty.name).all()
-    
-    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers, counterparties=counterparties)
+        counterparties_json = [{"name": c.name, "id": c.id} for c in counterparties]
+
+    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers, counterparties=counterparties, counterparties_json=counterparties_json)
 
 
 @app.route("/counterparty/add", methods=["POST"])

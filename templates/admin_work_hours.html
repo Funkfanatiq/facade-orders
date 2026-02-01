@@ -80,8 +80,7 @@
         .hours-table { width: 100%; border-collapse: collapse; font-size: 14px; }
         .hours-table th, .hours-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #eee; }
         .hours-table th { background: rgba(0,0,0,0.05); font-weight: 600; color: #495057; }
-        .hours-table input[type="number"] { width: 64px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; }
-        .hours-table input[type="text"] { width: 100%; min-width: 80px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+        .hours-table input[type="number"] { width: 72px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
         .day-num { font-weight: 500; width: 36px; }
         .date-cell { white-space: nowrap; color: #6c757d; }
         .flash-message { padding: 12px 20px; border-radius: 6px; margin-bottom: 20px; font-weight: 500; }
@@ -170,7 +169,6 @@
                                 <th>Дата</th>
                                 <th>День недели</th>
                                 <th>Часы</th>
-                                <th>Заметки</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -181,14 +179,9 @@
                                     <td class="date-cell">{{ d.strftime('%d.%m.%Y') }}</td>
                                     <td>{{ day_names[d.weekday()] }}</td>
                                     <td>
-                                        <input type="number" name="hours_{{ d.strftime('%Y-%m-%d') }}"
+                                        <input type="number" class="hours-input" name="hours_{{ d.strftime('%Y-%m-%d') }}"
                                                step="0.5" min="0" max="24" placeholder="—"
                                                value="{{ '%.1f'|format(wh.hours) if wh and wh.hours is not none else '' }}">
-                                    </td>
-                                    <td>
-                                        <input type="text" name="notes_{{ d.strftime('%Y-%m-%d') }}"
-                                               placeholder="—"
-                                               value="{{ wh.notes or '' }}">
                                     </td>
                                 </tr>
                             {% endfor %}
@@ -206,7 +199,6 @@
                                 <th>Дата</th>
                                 <th>День недели</th>
                                 <th>Часы</th>
-                                <th>Заметки</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -217,14 +209,9 @@
                                     <td class="date-cell">{{ d.strftime('%d.%m.%Y') }}</td>
                                     <td>{{ day_names[d.weekday()] }}</td>
                                     <td>
-                                        <input type="number" name="hours_{{ d.strftime('%Y-%m-%d') }}"
+                                        <input type="number" class="hours-input" name="hours_{{ d.strftime('%Y-%m-%d') }}"
                                                step="0.5" min="0" max="24" placeholder="—"
                                                value="{{ '%.1f'|format(wh.hours) if wh and wh.hours is not none else '' }}">
-                                    </td>
-                                    <td>
-                                        <input type="text" name="notes_{{ d.strftime('%Y-%m-%d') }}"
-                                               placeholder="—"
-                                               value="{{ wh.notes or '' }}">
                                     </td>
                                 </tr>
                             {% endfor %}
@@ -243,5 +230,19 @@
         </div>
         {% endif %}
     </div>
+    <script>
+        (function() {
+            var inputs = document.querySelectorAll('.hours-input');
+            inputs.forEach(function(inp, i) {
+                inp.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        var next = inputs[i + 1];
+                        if (next) next.focus(); else document.querySelector('.btn-submit') && document.querySelector('.btn-submit').focus();
+                    }
+                });
+            });
+        })();
+    </script>
 </body>
 </html>

@@ -225,6 +225,8 @@
     .pricelist-table th, .pricelist-table td { padding: 10px 12px; text-align: left; border: 1px solid #ddd; }
     .pricelist-table th { background: #f5f5f5; font-weight: 600; }
     .pricelist-table tbody tr:nth-child(even) { background: #fafafa; }
+    .pricelist-category-title { margin: 20px 0 8px 0; font-size: 17px; color: #333; }
+    .pricelist-category-title:first-of-type { margin-top: 12px; }
     .btn-edit-pricelist { padding: 6px 12px; font-size: 13px; cursor: pointer; background: #2196F3; color: #fff; border: none; border-radius: 6px; }
     .btn-edit-pricelist:hover { background: #1976D2; }
   </style>
@@ -428,6 +430,12 @@
         <form id="pricelist-form" method="POST" action="{{ url_for('pricelist_add') }}" class="counterparty-form">
           <div class="counterparty-block">
             <h4 id="pricelist-form-title">Позиция прайс-листа</h4>
+            <select name="pricelist_category" id="pricelist_category">
+              <option value="">— Категория —</option>
+              <option value="плоский">Плоские</option>
+              <option value="фрезерованный">Фрезерованные</option>
+              <option value="шпон">Шпон</option>
+            </select>
             <input type="text" name="pricelist_name" id="pricelist_name" placeholder="Наименование" required>
             <input type="number" name="pricelist_price" id="pricelist_price" placeholder="Цена (руб.)" step="0.01" min="0" required>
             <input type="text" name="pricelist_unit" id="pricelist_unit" placeholder="Ед. изм. (шт, м², п.м.)">
@@ -439,13 +447,18 @@
         </form>
       </div>
       {% if price_list %}
-      <table class="pricelist-table" id="pricelist-list">
+      <div id="pricelist-list">
+      {% for cat in price_categories %}
+      {% set cat_items = price_list|selectattr('category', 'equalto', cat)|list %}
+      {% if cat_items %}
+      <h4 class="pricelist-category-title">{% if cat == 'плоский' %}Плоские{% elif cat == 'фрезерованный' %}Фрезерованные{% else %}Шпон{% endif %}</h4>
+      <table class="pricelist-table pricelist-list" data-category="{{ cat }}">
         <thead>
           <tr><th>Наименование</th><th>Цена, ₽</th><th>Ед. изм.</th><th>Действия</th></tr>
         </thead>
         <tbody>
-        {% for p in price_list %}
-        <tr class="pricelist-item" data-search="{{ (p.name or '')|lower }} {{ (p.unit or '')|lower }}" data-id="{{ p.id }}" data-name="{{ p.name|e }}" data-price="{{ p.price }}" data-unit="{{ p.unit or '' }}">
+        {% for p in cat_items %}
+        <tr class="pricelist-item" data-search="{{ (p.name or '')|lower }} {{ (p.unit or '')|lower }}" data-id="{{ p.id }}" data-name="{{ p.name|e }}" data-price="{{ p.price }}" data-unit="{{ p.unit or '' }}" data-category="{{ p.category or '' }}">
           <td>{{ p.name }}</td>
           <td>{{ (p.price|round(2))|string|replace(".", ",") }}</td>
           <td>{{ p.unit or '—' }}</td>
@@ -454,6 +467,28 @@
         {% endfor %}
         </tbody>
       </table>
+      {% endif %}
+      {% endfor %}
+      {% set other_items = price_list|selectattr('category', 'none')|list %}
+      {% if other_items %}
+      <h4 class="pricelist-category-title">Прочее</h4>
+      <table class="pricelist-table pricelist-list" data-category="">
+        <thead>
+          <tr><th>Наименование</th><th>Цена, ₽</th><th>Ед. изм.</th><th>Действия</th></tr>
+        </thead>
+        <tbody>
+        {% for p in other_items %}
+        <tr class="pricelist-item" data-search="{{ (p.name or '')|lower }} {{ (p.unit or '')|lower }}" data-id="{{ p.id }}" data-name="{{ p.name|e }}" data-price="{{ p.price }}" data-unit="{{ p.unit or '' }}" data-category="">
+          <td>{{ p.name }}</td>
+          <td>{{ (p.price|round(2))|string|replace(".", ",") }}</td>
+          <td>{{ p.unit or '—' }}</td>
+          <td><button type="button" class="btn-edit-pricelist" onclick="editPricelistRow(this)">Изменить</button></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+      </div>
       {% else %}
       <p style="color: #666; margin: 12px 0 0;">Пока нет позиций. Нажмите «Добавить позицию».</p>
       {% endif %}
@@ -487,9 +522,11 @@
       var titleEl = document.getElementById('pricelist-form-title');
       if (form) {
         form.action = "{{ url_for('pricelist_add') }}";
+        var catInp = document.getElementById('pricelist_category');
         var nameInp = document.getElementById('pricelist_name');
         var priceInp = document.getElementById('pricelist_price');
         var unitInp = document.getElementById('pricelist_unit');
+        if (catInp) catInp.value = '';
         if (nameInp) nameInp.value = '';
         if (priceInp) priceInp.value = '';
         if (unitInp) unitInp.value = '';
@@ -504,13 +541,16 @@
       var name = tr.getAttribute('data-name') || '';
       var price = tr.getAttribute('data-price') || '';
       var unit = tr.getAttribute('data-unit') || '';
+      var category = tr.getAttribute('data-category') || '';
       var form = document.getElementById('pricelist-form');
       var titleEl = document.getElementById('pricelist-form-title');
       if (form && id) {
         form.action = "{{ url_for('pricelist_edit', item_id=0) }}".replace('0', id);
+        var catInp = document.getElementById('pricelist_category');
         var nameInp = document.getElementById('pricelist_name');
         var priceInp = document.getElementById('pricelist_price');
         var unitInp = document.getElementById('pricelist_unit');
+        if (catInp) catInp.value = category;
         if (nameInp) nameInp.value = name;
         if (priceInp) priceInp.value = price;
         if (unitInp) unitInp.value = unit;

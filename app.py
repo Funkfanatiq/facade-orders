@@ -32,7 +32,7 @@ app.config.from_object('config.Config')
 
 
 # Импортируем модели после инициализации Flask
-from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty, PriceListItem
+from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty, PriceListItem, PRICE_CATEGORIES
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -71,6 +71,33 @@ def _ensure_counterparty_column():
         print(f"⚠️ Проверка/добавление counterparty_id: {e}")
 
 
+def _ensure_pricelist_category_column():
+    """Добавляет колонку category в таблицу price_list_item, если её ещё нет."""
+    try:
+        with db.engine.connect() as conn:
+            backend = db.engine.url.get_backend_name()
+            if backend == "postgresql":
+                r = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'price_list_item' AND column_name = 'category'
+                """))
+                if r.fetchone() is None:
+                    conn.execute(text("ALTER TABLE price_list_item ADD COLUMN category VARCHAR(32)"))
+                    conn.commit()
+                    print("✅ Колонка price_list_item.category добавлена")
+                else:
+                    conn.commit()
+            else:
+                r = conn.execute(text('PRAGMA table_info(price_list_item)'))
+                cols = [row[1] for row in r.fetchall()]
+                if "category" not in cols:
+                    conn.execute(text("ALTER TABLE price_list_item ADD COLUMN category VARCHAR(32)"))
+                    conn.commit()
+                    print("✅ Колонка price_list_item.category добавлена")
+    except Exception as e:
+        print(f"⚠️ Проверка/добавление category в прайс-лист: {e}")
+
+
 # Инициализация базы данных при запуске (с retry для Render PostgreSQL)
 def init_database():
     """Инициализация базы данных. Retry при SSL/сетевых ошибках (Render)."""
@@ -88,6 +115,8 @@ def init_database():
                 print("✅ Таблицы созданы")
                 # Добавляем колонку counterparty_id в order, если её ещё нет (миграция без Alembic)
                 _ensure_counterparty_column()
+                # Добавляем колонку category в price_list_item, если её ещё нет
+                _ensure_pricelist_category_column()
 
                 # Проверяем количество пользователей
                 user_count = User.query.count()
@@ -692,9 +721,9 @@ def dashboard():
         customers = [row[0] for row in db.session.query(Order.client).distinct().order_by(Order.client).all()]
         counterparties = Counterparty.query.order_by(Counterparty.name).all()
         counterparties_json = [{"name": c.name, "id": c.id} for c in counterparties]
-        price_list = PriceListItem.query.order_by(PriceListItem.name).all()
+        price_list = PriceListItem.query.order_by(PriceListItem.category, PriceListItem.name).all()
 
-    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers, counterparties=counterparties, counterparties_json=counterparties_json, price_list=price_list)
+    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers, counterparties=counterparties, counterparties_json=counterparties_json, price_list=price_list, price_categories=PRICE_CATEGORIES)
 
 
 @app.route("/counterparty/add", methods=["POST"])
@@ -752,6 +781,7 @@ def pricelist_add():
         name=name,
         price=price,
         unit=request.form.get("pricelist_unit") or None,
+        category=request.form.get("pricelist_category") or None,
         note=request.form.get("pricelist_note") or None,
     )
     db.session.add(item)
@@ -780,6 +810,7 @@ def pricelist_edit(item_id):
     item.name = name
     item.price = price
     item.unit = request.form.get("pricelist_unit") or None
+    item.category = request.form.get("pricelist_category") or None
     db.session.commit()
     flash("Позиция прайс-листа изменена", "success")
     return redirect(url_for("dashboard"))

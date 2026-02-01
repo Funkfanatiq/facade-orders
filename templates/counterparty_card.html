@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Карточка контрагента</title>
+  <style>
+    body { margin: 0; background: #f9f9f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #333; }
+    .top-bar {
+      background: #fff;
+      padding: 16px 20px;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .top-bar h1 { margin: 0; font-size: 22px; font-weight: 600; }
+    .back-link { color: #1976D2; text-decoration: none; font-weight: 500; }
+    .back-link:hover { text-decoration: underline; }
+    .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+    .card-block {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      border: 1px solid #eee;
+    }
+    .card-block h3 { margin: 0 0 16px 0; font-size: 18px; color: #555; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+    .card-block dl { margin: 0; display: grid; grid-template-columns: 180px 1fr; gap: 8px 20px; }
+    .card-block dt { margin: 0; color: #666; font-weight: 500; }
+    .card-block dd { margin: 0; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+    th { background: #f5f5f5; font-weight: 600; color: #555; font-size: 14px; }
+    .row-green { background-color: #f1f8e9; }
+    .row-warning { background-color: #fff8e1; }
+    .row-danger { background-color: #ffebee; }
+    .empty-orders { color: #666; padding: 20px; text-align: center; background: #fff; border-radius: 8px; border: 1px dashed #ddd; }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <h1>👤 {{ counterparty.name }}</h1>
+    <a href="{{ url_for('dashboard') }}" class="back-link">← Назад к панели заказов</a>
+  </div>
+
+  <div class="container">
+    <div class="card-block">
+      <h3>О контрагенте</h3>
+      <dl>
+        <dt>Имя</dt><dd>{{ counterparty.name }}</dd>
+        <dt>Телефон</dt><dd>{{ counterparty.phone or '—' }}</dd>
+        <dt>Электронный адрес</dt><dd>{{ counterparty.email or '—' }}</dd>
+      </dl>
+    </div>
+
+    <div class="card-block">
+      <h3>Реквизиты</h3>
+      <dl>
+        <dt>Тип контрагента</dt><dd>{{ counterparty.counterparty_type or '—' }}</dd>
+        <dt>ИНН</dt><dd>{{ counterparty.inn or '—' }}</dd>
+        <dt>Полное наименование</dt><dd>{{ counterparty.full_name or '—' }}</dd>
+        <dt>Юридический адрес</dt><dd>{{ counterparty.legal_address or '—' }}</dd>
+        <dt>Код ФИАС</dt><dd>{{ counterparty.fias_code or '—' }}</dd>
+        <dt>КПП</dt><dd>{{ counterparty.kpp or '—' }}</dd>
+        <dt>ОГРН</dt><dd>{{ counterparty.ogrn or '—' }}</dd>
+        <dt>ОКПО</dt><dd>{{ counterparty.okpo or '—' }}</dd>
+        <dt>БИК</dt><dd>{{ counterparty.bik or '—' }}</dd>
+        <dt>Банк</dt><dd>{{ counterparty.bank or '—' }}</dd>
+        <dt>Адрес</dt><dd>{{ counterparty.address or '—' }}</dd>
+        <dt>Корр. счёт</dt><dd>{{ counterparty.corr_account or '—' }}</dd>
+        <dt>Расчётный счёт</dt><dd>{{ counterparty.payment_account or '—' }}</dd>
+      </dl>
+    </div>
+
+    <div class="card-block">
+      <h3>Текущие заказы</h3>
+      {% if orders %}
+      <table>
+        <thead>
+          <tr>
+            <th>№ заказа</th>
+            <th>Клиент</th>
+            <th>Срок</th>
+            <th>Фрезеровка</th>
+            <th>Шлифовка</th>
+            <th>Упаковка</th>
+            <th>Отгрузка</th>
+            <th>Оплата</th>
+            <th>Файлы</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in orders %}
+            {% set days_left = (o.due_date - datetime.utcnow().date()).days %}
+            {% set row_class = "" %}
+            {% if o.packaging %} {% set row_class = "row-green" %}
+            {% elif days_left <= 3 %} {% set row_class = "row-danger" %}
+            {% elif days_left <= 6 %} {% set row_class = "row-warning" %}
+            {% endif %}
+            <tr class="{{ row_class }}">
+              <td>{{ o.order_id }}</td>
+              <td>{{ o.client }}</td>
+              <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
+              <td>{{ "✔" if o.milling else "—" }}</td>
+              <td>{{ "✔" if o.polishing_1 else "—" }}</td>
+              <td>{{ "✔" if o.packaging else "—" }}</td>
+              <td>{{ "✔" if o.shipment else "—" }}</td>
+              <td>{{ "✔" if o.paid else "—" }}</td>
+              <td>
+                {% if o.filenames %}
+                  {% for fn in o.filenames.split(';') %}
+                    {% if fn %}
+                      <a href="{{ url_for('uploaded_file', filename=fn) }}" target="_blank">📎 {{ fn }}</a><br>
+                    {% endif %}
+                  {% endfor %}
+                {% else %}—
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty-orders">Нет заказов по этому контрагенту.</p>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

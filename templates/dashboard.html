@@ -218,6 +218,9 @@
     .counterparty-form-actions button[type="submit"]:hover { background: #45A049; }
     .counterparty-form-actions button[type="button"] { background: #9e9e9e; color: #fff; }
     .counterparty-form-actions button[type="button"]:hover { background: #757575; }
+    .counterparty-link { text-decoration: none; color: #333; display: block; }
+    .counterparty-link:hover { color: #1976D2; }
+    .counterparty-link .cp-info { color: #666; font-weight: normal; }
   </style>
 </head>
 <body>
@@ -263,9 +266,17 @@
   {% if current_user.role == "Менеджер" %}
   <div class="form-box">
     <h3>Добавить заказ</h3>
-    <form method="POST" enctype="multipart/form-data">
+    <form method="POST" enctype="multipart/form-data" id="add-order-form">
       <input type="text" name="order_id" placeholder="№ заказа" required>
-      <input type="text" name="client" placeholder="Клиент" required>
+      <label for="client_select" style="display:block; margin-top:8px; font-weight:500;">Клиент</label>
+      <select id="client_select" style="margin-bottom:8px;">
+        <option value="">— Ввести вручную —</option>
+        {% for c in counterparties %}
+        <option value="{{ c.id }}">{{ c.name }}</option>
+        {% endfor %}
+      </select>
+      <input type="text" name="client" id="client_name" placeholder="Имя клиента (введите или выберите выше)" required>
+      <input type="hidden" name="counterparty_id" id="counterparty_id" value="">
       <input type="number" name="days" placeholder="Срок (в днях)" required>
       <select name="facade_type" required>
         <option value="">— Тип фасада —</option>
@@ -387,7 +398,13 @@
       {% if counterparties %}
       <ul class="customers-list counterparties-list">
         {% for c in counterparties %}
-        <li><strong>{{ c.name }}</strong>{% if c.phone %} · {{ c.phone }}{% endif %}{% if c.full_name %} · {{ c.full_name }}{% endif %}</li>
+        <li>
+          <a href="{{ url_for('counterparty_card', counterparty_id=c.id) }}" class="counterparty-link">
+            <strong>{{ c.name }}</strong>
+            {% if c.phone %}<span class="cp-info"> · {{ c.phone }}</span>{% endif %}
+            {% if c.email %}<span class="cp-info"> · {{ c.email }}</span>{% endif %}
+          </a>
+        </li>
         {% endfor %}
       </ul>
       {% else %}
@@ -414,6 +431,24 @@
       var wrap = document.getElementById('counterparty-form-wrap');
       if (wrap) wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
     }
+    (function() {
+      var clientSelect = document.getElementById('client_select');
+      var clientName = document.getElementById('client_name');
+      var counterpartyId = document.getElementById('counterparty_id');
+      if (clientSelect && clientName && counterpartyId) {
+        clientSelect.addEventListener('change', function() {
+          if (this.value) {
+            clientName.value = this.options[this.selectedIndex].text;
+            counterpartyId.value = this.value;
+          } else {
+            counterpartyId.value = '';
+          }
+        });
+        clientName.addEventListener('input', function() {
+          counterpartyId.value = '';
+        });
+      }
+    })();
     {% endif %}
     document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
       cb.addEventListener('change', () => {

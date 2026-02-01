@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
+from sqlalchemy import or_
 from datetime import datetime, timedelta, timezone, date
 from calendar import monthrange
 import os
@@ -537,7 +538,15 @@ def dashboard():
 
     if request.method == "POST" and current_user.role == "Менеджер":
         order_id = request.form["order_id"]
-        client = request.form["client"]
+        client = (request.form.get("client") or "").strip()
+        counterparty_id = request.form.get("counterparty_id", type=int)
+        if counterparty_id:
+            cp = Counterparty.query.get(counterparty_id)
+            if cp:
+                client = cp.name
+        if not client:
+            flash("Укажите клиента или выберите контрагента", "error")
+            return redirect(url_for("dashboard"))
         
         # Валидация входных данных
         try:
@@ -597,6 +606,7 @@ def dashboard():
         order = Order(
             order_id=order_id,
             client=client,
+            counterparty_id=counterparty_id if counterparty_id else None,
             days=days,
             due_date=due_date,
             milling=False,
@@ -685,6 +695,20 @@ def counterparty_add():
     db.session.commit()
     flash("Контрагент добавлен", "success")
     return redirect(url_for("dashboard"))
+
+
+@app.route("/counterparty/<int:counterparty_id>")
+@login_required
+def counterparty_card(counterparty_id):
+    """Карточка контрагента: данные и текущие заказы с этапами производства."""
+    if current_user.role not in ["Админ", "Менеджер"]:
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    cp = Counterparty.query.get_or_404(counterparty_id)
+    orders = Order.query.filter(
+        or_(Order.counterparty_id == counterparty_id, Order.client == cp.name)
+    ).order_by(Order.due_date.asc()).all()
+    return render_template("counterparty_card.html", counterparty=cp, orders=orders, datetime=datetime)
 
 
 def render_admin_dashboard():

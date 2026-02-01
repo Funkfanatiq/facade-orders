@@ -24,6 +24,7 @@ class Order(db.Model):
     id         = db.Column(db.Integer, primary_key=True)
     order_id   = db.Column(db.String(64), nullable=False)
     client     = db.Column(db.String(128), nullable=False)
+    counterparty_id = db.Column(db.Integer, db.ForeignKey('counterparty.id'), nullable=True)  # связь с контрагентом
     days       = db.Column(db.Integer, nullable=False)
     due_date   = db.Column(db.Date, nullable=False)
 
@@ -38,6 +39,8 @@ class Order(db.Model):
 
     facade_type = db.Column(db.String(32), nullable=True)  # фрезерованный / плоский / шпон
     area        = db.Column(db.Float, nullable=True)       # площадь в м²
+
+    counterparty = db.relationship('Counterparty', backref=db.backref('orders', lazy=True))
 
 class Employee(db.Model):
     """Модель сотрудника"""
@@ -103,4 +106,6 @@ class Counterparty(db.Model):
     corr_account = db.Column(db.String(34), nullable=True)  # Корр. счёт
     payment_account = db.Column(db.String(34), nullable=True)  # Расчётный счёт
     created_at = db.Column(db.DateTime, default=db.func.now())
+
+    # orders — обратная связь через Order.counterparty_id
 

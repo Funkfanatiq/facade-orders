@@ -52,15 +52,6 @@
         .period-select select { padding: 8px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 14px; }
         .period-select button { padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
         .period-select button:hover { background: #0056b3; }
-        .info-box {
-            background: #e7f3ff;
-            border: 1px solid #b3d7ff;
-            border-radius: 8px;
-            padding: 12px 16px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            color: #004085;
-        }
         .salary-table { width: 100%; border-collapse: collapse; }
         .salary-table th, .salary-table td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
         .salary-table th { background: #f8f9fa; font-weight: 600; color: #495057; font-size: 13px; }
@@ -82,7 +73,7 @@
         <div class="top-bar">
             <h1>💰 Расчёт зарплат</h1>
             <div class="nav-links">
-                <a href="{{ url_for('admin_work_hours') }}" class="btn-primary">⏰ Часы по дням</a>
+                <a href="{{ url_for('admin_work_hours') }}" class="btn-primary">⏰ Рабочие часы</a>
                 <a href="{{ url_for('admin_employees') }}" class="btn-primary">👥 Сотрудники</a>
                 <a href="{{ url_for('dashboard') }}" class="btn-secondary">← Назад</a>
             </div>
@@ -115,12 +106,6 @@
                 </select>
                 <button type="submit">Показать</button>
             </form>
-        </div>
-
-        <div class="info-box">
-            <strong>Начисление:</strong> период 1–15 числа и период с 16 числа до конца месяца.<br>
-            <strong>Формула:</strong> зарплата = часовая ставка × количество часов.<br>
-            <strong>Выплаты:</strong> <strong>10 числа</strong> — за период с 16 по конец предыдущего месяца; <strong>25 числа</strong> — за период с 1 по 15 текущего месяца.
         </div>
 
         <div class="content-card">

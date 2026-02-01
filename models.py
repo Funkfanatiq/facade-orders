@@ -109,3 +109,13 @@ class Counterparty(db.Model):
 
     # orders — обратная связь через Order.counterparty_id
 
+
+class PriceListItem(db.Model):
+    """Позиция прайс-листа."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(256), nullable=False)   # Наименование
+    price = db.Column(db.Float, nullable=False)        # Цена
+    unit = db.Column(db.String(32), nullable=True)     # Ед. изм. (шт, м², п.м. и т.д.)
+    note = db.Column(db.String(512), nullable=True)    # Примечание
+    created_at = db.Column(db.DateTime, default=db.func.now())
+

@@ -259,6 +259,7 @@
   <div class="tabs">
     <button type="button" class="tab active" onclick="showManagerTab('orders')">📋 Панель заказов</button>
     <button type="button" class="tab" onclick="showManagerTab('counterparties')">👥 Контрагенты</button>
+    <button type="button" class="tab" onclick="showManagerTab('pricelist')">💰 Прайс лист</button>
   </div>
   <div id="manager-orders-tab" class="tab-content active">
   {% endif %}
@@ -412,6 +413,39 @@
       {% endif %}
     </div>
   </div>
+  <div id="manager-pricelist-tab" class="tab-content">
+    <div class="form-box">
+      <h3>💰 Прайс лист</h3>
+      <input type="text" id="pricelist-search" placeholder="Поиск по наименованию, ед. изм. или примечанию..." style="width:100%; max-width:320px; margin-bottom:12px; padding:8px;">
+      <button type="button" class="btn-add-counterparty" onclick="togglePricelistForm()">➕ Добавить позицию</button>
+      <div id="pricelist-form-wrap" class="counterparty-form-wrap" style="display: none;">
+        <form method="POST" action="{{ url_for('pricelist_add') }}" class="counterparty-form">
+          <div class="counterparty-block">
+            <h4>Позиция прайс-листа</h4>
+            <input type="text" name="pricelist_name" placeholder="Наименование" required>
+            <input type="number" name="pricelist_price" placeholder="Цена (руб.)" step="0.01" min="0" required>
+            <input type="text" name="pricelist_unit" placeholder="Ед. изм. (шт, м², п.м.)">
+            <input type="text" name="pricelist_note" placeholder="Примечание">
+          </div>
+          <div class="counterparty-form-actions">
+            <button type="submit">Сохранить</button>
+            <button type="button" onclick="togglePricelistForm()">Отмена</button>
+          </div>
+        </form>
+      </div>
+      {% if price_list %}
+      <ul class="customers-list counterparties-list" id="pricelist-list">
+        {% for p in price_list %}
+        <li class="pricelist-item" data-search="{{ (p.name or '')|lower }} {{ (p.unit or '')|lower }} {{ (p.note or '')|lower }}">
+          <span class="pricelist-row"><strong>{{ p.name }}</strong> — {{ (p.price|round(2))|string|replace(".", ",") }} ₽{% if p.unit %} / {{ p.unit }}{% endif %}{% if p.note %} <span class="cp-info">· {{ p.note }}</span>{% endif %}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p style="color: #666; margin: 12px 0 0;">Пока нет позиций. Нажмите «Добавить позицию».</p>
+      {% endif %}
+    </div>
+  </div>
   {% endif %}
 
   <script>
@@ -429,6 +463,10 @@
     }
     function toggleCounterpartyForm() {
       var wrap = document.getElementById('counterparty-form-wrap');
+      if (wrap) wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+    }
+    function togglePricelistForm() {
+      var wrap = document.getElementById('pricelist-form-wrap');
       if (wrap) wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
     }
     (function() {
@@ -455,6 +493,19 @@
         searchInput.addEventListener('input', function() {
           var q = this.value.trim().toLowerCase();
           list.querySelectorAll('.counterparty-item').forEach(function(li) {
+            var show = !q || (li.getAttribute('data-search') || '').indexOf(q) !== -1;
+            li.style.display = show ? '' : 'none';
+          });
+        });
+      }
+    })();
+    (function() {
+      var searchInput = document.getElementById('pricelist-search');
+      var list = document.getElementById('pricelist-list');
+      if (searchInput && list) {
+        searchInput.addEventListener('input', function() {
+          var q = this.value.trim().toLowerCase();
+          list.querySelectorAll('.pricelist-item').forEach(function(li) {
             var show = !q || (li.getAttribute('data-search') || '').indexOf(q) !== -1;
             li.style.display = show ? '' : 'none';
           });

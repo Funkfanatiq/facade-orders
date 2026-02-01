@@ -32,7 +32,7 @@ app.config.from_object('config.Config')
 
 
 # Импортируем модели после инициализации Flask
-from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty
+from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty, PriceListItem
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -687,12 +687,14 @@ def dashboard():
     customers = []
     counterparties = []
     counterparties_json = []
+    price_list = []
     if current_user.role == "Менеджер":
         customers = [row[0] for row in db.session.query(Order.client).distinct().order_by(Order.client).all()]
         counterparties = Counterparty.query.order_by(Counterparty.name).all()
         counterparties_json = [{"name": c.name, "id": c.id} for c in counterparties]
+        price_list = PriceListItem.query.order_by(PriceListItem.name).all()
 
-    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers, counterparties=counterparties, counterparties_json=counterparties_json)
+    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers, counterparties=counterparties, counterparties_json=counterparties_json, price_list=price_list)
 
 
 @app.route("/counterparty/add", methods=["POST"])
@@ -727,6 +729,34 @@ def counterparty_add():
     db.session.add(c)
     db.session.commit()
     flash("Контрагент добавлен", "success")
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/pricelist/add", methods=["POST"])
+@login_required
+def pricelist_add():
+    """Добавление позиции прайс-листа (только менеджер)."""
+    if current_user.role != "Менеджер":
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    name = (request.form.get("pricelist_name") or "").strip()
+    if not name:
+        flash("Укажите наименование позиции", "error")
+        return redirect(url_for("dashboard"))
+    try:
+        price = float(request.form.get("pricelist_price") or "0")
+    except (TypeError, ValueError):
+        flash("Укажите корректную цену", "error")
+        return redirect(url_for("dashboard"))
+    item = PriceListItem(
+        name=name,
+        price=price,
+        unit=request.form.get("pricelist_unit") or None,
+        note=request.form.get("pricelist_note") or None,
+    )
+    db.session.add(item)
+    db.session.commit()
+    flash("Позиция прайс-листа добавлена", "success")
     return redirect(url_for("dashboard"))
 
 

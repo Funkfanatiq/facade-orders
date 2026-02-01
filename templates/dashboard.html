@@ -165,6 +165,59 @@
       border: 1px solid #eee;
       font-size: 15px;
     }
+    .btn-add-counterparty {
+      background: #2196F3;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-bottom: 16px;
+    }
+    .btn-add-counterparty:hover { background: #1976D2; }
+    .counterparty-form-wrap {
+      background: #f5f5f5;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      border: 1px solid #ddd;
+    }
+    .counterparty-block {
+      margin-bottom: 20px;
+    }
+    .counterparty-block h4 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
+      color: #333;
+    }
+    .counterparty-block input,
+    .counterparty-block select {
+      display: block;
+      width: 100%;
+      margin: 8px 0;
+      padding: 10px;
+      font-size: 15px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+    .counterparty-form-actions {
+      margin-top: 16px;
+      display: flex;
+      gap: 12px;
+    }
+    .counterparty-form-actions button {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: pointer;
+      border: none;
+    }
+    .counterparty-form-actions button[type="submit"] { background: #4CAF50; color: #fff; }
+    .counterparty-form-actions button[type="submit"]:hover { background: #45A049; }
+    .counterparty-form-actions button[type="button"] { background: #9e9e9e; color: #fff; }
+    .counterparty-form-actions button[type="button"]:hover { background: #757575; }
   </style>
 </head>
 <body>
@@ -202,7 +255,7 @@
   {% if current_user.role == "Менеджер" %}
   <div class="tabs">
     <button type="button" class="tab active" onclick="showManagerTab('orders')">📋 Панель заказов</button>
-    <button type="button" class="tab" onclick="showManagerTab('customers')">👥 Заказчики</button>
+    <button type="button" class="tab" onclick="showManagerTab('counterparties')">👥 Контрагенты</button>
   </div>
   <div id="manager-orders-tab" class="tab-content active">
   {% endif %}
@@ -293,17 +346,52 @@
 
   {% if current_user.role == "Менеджер" %}
   </div>
-  <div id="manager-customers-tab" class="tab-content">
+  <div id="manager-counterparties-tab" class="tab-content">
     <div class="form-box">
-      <h3>👥 Заказчики</h3>
-      {% if customers %}
-      <ul class="customers-list">
-        {% for client in customers %}
-        <li>{{ client }}</li>
+      <h3>👥 Контрагенты</h3>
+      <button type="button" class="btn-add-counterparty" onclick="toggleCounterpartyForm()">➕ Добавить контрагента</button>
+      <div id="counterparty-form-wrap" class="counterparty-form-wrap" style="display: none;">
+        <form method="POST" action="{{ url_for('counterparty_add') }}" class="counterparty-form">
+          <div class="counterparty-block">
+            <h4>О контрагенте</h4>
+            <input type="text" name="counterparty_name" placeholder="Имя" required>
+            <input type="text" name="counterparty_phone" placeholder="Телефон">
+            <input type="text" name="counterparty_email" placeholder="Электронный адрес">
+          </div>
+          <div class="counterparty-block">
+            <h4>Реквизиты</h4>
+            <select name="counterparty_type">
+              <option value="">— Тип контрагента —</option>
+              <option value="юр лицо">Юр. лицо</option>
+              <option value="физ лицо">Физ. лицо</option>
+            </select>
+            <input type="text" name="counterparty_inn" placeholder="ИНН">
+            <input type="text" name="counterparty_full_name" placeholder="Полное наименование">
+            <input type="text" name="counterparty_legal_address" placeholder="Юридический адрес">
+            <input type="text" name="counterparty_fias_code" placeholder="Код ФИАС">
+            <input type="text" name="counterparty_kpp" placeholder="КПП">
+            <input type="text" name="counterparty_ogrn" placeholder="ОГРН">
+            <input type="text" name="counterparty_okpo" placeholder="ОКПО">
+            <input type="text" name="counterparty_bik" placeholder="БИК">
+            <input type="text" name="counterparty_bank" placeholder="Банк">
+            <input type="text" name="counterparty_address" placeholder="Адрес">
+            <input type="text" name="counterparty_corr_account" placeholder="Корр. счёт">
+            <input type="text" name="counterparty_payment_account" placeholder="Расчётный счёт">
+          </div>
+          <div class="counterparty-form-actions">
+            <button type="submit">Сохранить</button>
+            <button type="button" onclick="toggleCounterpartyForm()">Отмена</button>
+          </div>
+        </form>
+      </div>
+      {% if counterparties %}
+      <ul class="customers-list counterparties-list">
+        {% for c in counterparties %}
+        <li><strong>{{ c.name }}</strong>{% if c.phone %} · {{ c.phone }}{% endif %}{% if c.full_name %} · {{ c.full_name }}{% endif %}</li>
         {% endfor %}
       </ul>
       {% else %}
-      <p style="color: #666; margin: 0;">Пока нет заказчиков. Они появятся после добавления заказов.</p>
+      <p style="color: #666; margin: 12px 0 0;">Пока нет контрагентов. Нажмите «Добавить контрагента».</p>
       {% endif %}
     </div>
   </div>
@@ -321,6 +409,10 @@
       var tabEl = document.getElementById('manager-' + tabName + '-tab');
       if (tabEl) tabEl.classList.add('active');
       event.target.classList.add('active');
+    }
+    function toggleCounterpartyForm() {
+      var wrap = document.getElementById('counterparty-form-wrap');
+      if (wrap) wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
     }
     {% endif %}
     document.querySelectorAll('input[type="checkbox"]').forEach(cb => {

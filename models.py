@@ -80,3 +80,27 @@ class SalaryPeriod(db.Model):
     # Уникальный индекс для предотвращения дублирования периодов
     __table_args__ = (db.UniqueConstraint('employee_id', 'year', 'month', 'period_type', name='unique_salary_period'),)
 
+
+class Counterparty(db.Model):
+    """Контрагент (заказчик/поставщик)."""
+    id = db.Column(db.Integer, primary_key=True)
+    # Блок 1: контактные данные
+    name = db.Column(db.String(256), nullable=False)  # Имя
+    phone = db.Column(db.String(64), nullable=True)  # Телефон
+    email = db.Column(db.String(256), nullable=True)  # Электронный адрес
+    # Блок 2: реквизиты
+    counterparty_type = db.Column(db.String(16), nullable=True)  # юр лицо / физ лицо
+    inn = db.Column(db.String(20), nullable=True)  # ИНН
+    full_name = db.Column(db.String(512), nullable=True)  # Полное наименование
+    legal_address = db.Column(db.String(512), nullable=True)  # Юридический адрес
+    fias_code = db.Column(db.String(64), nullable=True)  # Код ФИАС
+    kpp = db.Column(db.String(20), nullable=True)  # КПП
+    ogrn = db.Column(db.String(20), nullable=True)  # ОГРН
+    okpo = db.Column(db.String(20), nullable=True)  # ОКПО
+    bik = db.Column(db.String(20), nullable=True)  # БИК
+    bank = db.Column(db.String(256), nullable=True)  # Банк
+    address = db.Column(db.String(512), nullable=True)  # Адрес
+    corr_account = db.Column(db.String(34), nullable=True)  # Корр. счёт
+    payment_account = db.Column(db.String(34), nullable=True)  # Расчётный счёт
+    created_at = db.Column(db.DateTime, default=db.func.now())
+

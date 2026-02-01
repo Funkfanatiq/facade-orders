@@ -31,7 +31,7 @@ app.config.from_object('config.Config')
 
 
 # Импортируем модели после инициализации Flask
-from models import db, User, Order, Employee, WorkHours, SalaryPeriod
+from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -642,12 +642,50 @@ def dashboard():
         'percentage': round((storage_usage / STORAGE_LIMIT_MB) * 100, 1)
     }
     
-    # Для менеджера — список заказчиков (уникальные клиенты из заказов)
+    # Для менеджера — список заказчиков из заказов и контрагенты из справочника
     customers = []
+    counterparties = []
     if current_user.role == "Менеджер":
         customers = [row[0] for row in db.session.query(Order.client).distinct().order_by(Order.client).all()]
+        counterparties = Counterparty.query.order_by(Counterparty.name).all()
     
-    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers)
+    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers, counterparties=counterparties)
+
+
+@app.route("/counterparty/add", methods=["POST"])
+@login_required
+def counterparty_add():
+    """Добавление контрагента (только менеджер)."""
+    if current_user.role != "Менеджер":
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    name = (request.form.get("counterparty_name") or "").strip()
+    if not name:
+        flash("Укажите имя контрагента", "error")
+        return redirect(url_for("dashboard"))
+    c = Counterparty(
+        name=name,
+        phone=request.form.get("counterparty_phone") or None,
+        email=request.form.get("counterparty_email") or None,
+        counterparty_type=request.form.get("counterparty_type") or None,
+        inn=request.form.get("counterparty_inn") or None,
+        full_name=request.form.get("counterparty_full_name") or None,
+        legal_address=request.form.get("counterparty_legal_address") or None,
+        fias_code=request.form.get("counterparty_fias_code") or None,
+        kpp=request.form.get("counterparty_kpp") or None,
+        ogrn=request.form.get("counterparty_ogrn") or None,
+        okpo=request.form.get("counterparty_okpo") or None,
+        bik=request.form.get("counterparty_bik") or None,
+        bank=request.form.get("counterparty_bank") or None,
+        address=request.form.get("counterparty_address") or None,
+        corr_account=request.form.get("counterparty_corr_account") or None,
+        payment_account=request.form.get("counterparty_payment_account") or None,
+    )
+    db.session.add(c)
+    db.session.commit()
+    flash("Контрагент добавлен", "success")
+    return redirect(url_for("dashboard"))
+
 
 def render_admin_dashboard():
     """Рендеринг панели администратора"""

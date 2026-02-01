@@ -3,7 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 from datetime import datetime, timedelta, timezone, date
 from calendar import monthrange
 import os
@@ -42,6 +42,35 @@ login_manager.login_view = "login"
 
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
+
+def _ensure_counterparty_column():
+    """Добавляет колонку counterparty_id в таблицу order, если её ещё нет (миграция без Alembic)."""
+    try:
+        with db.engine.connect() as conn:
+            backend = db.engine.url.get_backend_name()
+            if backend == "postgresql":
+                r = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'order' AND column_name = 'counterparty_id'
+                """))
+                if r.fetchone() is None:
+                    conn.execute(text('ALTER TABLE "order" ADD COLUMN counterparty_id INTEGER REFERENCES counterparty(id)'))
+                    conn.commit()
+                    print("✅ Колонка order.counterparty_id добавлена")
+                else:
+                    conn.commit()
+            else:
+                # SQLite
+                r = conn.execute(text('PRAGMA table_info("order")'))
+                cols = [row[1] for row in r.fetchall()]
+                if "counterparty_id" not in cols:
+                    conn.execute(text('ALTER TABLE "order" ADD COLUMN counterparty_id INTEGER REFERENCES counterparty(id)'))
+                    conn.commit()
+                    print("✅ Колонка order.counterparty_id добавлена")
+    except Exception as e:
+        print(f"⚠️ Проверка/добавление counterparty_id: {e}")
+
+
 # Инициализация базы данных при запуске (с retry для Render PostgreSQL)
 def init_database():
     """Инициализация базы данных. Retry при SSL/сетевых ошибках (Render)."""
@@ -57,7 +86,9 @@ def init_database():
                 # Создаем все таблицы
                 db.create_all()
                 print("✅ Таблицы созданы")
-                
+                # Добавляем колонку counterparty_id в order, если её ещё нет (миграция без Alembic)
+                _ensure_counterparty_column()
+
                 # Проверяем количество пользователей
                 user_count = User.query.count()
                 print(f"👥 Пользователей в базе: {user_count}")

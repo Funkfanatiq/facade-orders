@@ -3,12 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Управление зарплатами - Админ панель</title>
+    <title>Расчёт зарплат - Админ панель</title>
     <style>
-        * {
-            box-sizing: border-box;
-        }
-        
+        * { box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
@@ -17,13 +14,7 @@
             color: #2c3e50;
             line-height: 1.5;
         }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
         .top-bar {
             background: white;
             border-radius: 8px;
@@ -35,45 +26,18 @@
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             border: 1px solid #ddd;
         }
-        
-        .top-bar h1 {
-            margin: 0;
-            font-size: 24px;
-            font-weight: 600;
-            color: #2c3e50;
-        }
-        
-        .nav-links {
-            display: flex;
-            gap: 10px;
-        }
-        
+        .top-bar h1 { margin: 0; font-size: 24px; font-weight: 600; color: #2c3e50; }
+        .nav-links { display: flex; gap: 10px; }
         .nav-links a {
             padding: 8px 16px;
             border-radius: 6px;
             text-decoration: none;
             font-weight: 500;
-            transition: all 0.2s ease;
         }
-        
-        .btn-primary {
-            background: #007bff;
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background: #0056b3;
-        }
-        
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-        
-        .btn-secondary:hover {
-            background: #545b62;
-        }
-        
+        .btn-primary { background: #007bff; color: white; }
+        .btn-primary:hover { background: #0056b3; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-secondary:hover { background: #545b62; }
         .content-card {
             background: white;
             border-radius: 8px;
@@ -82,71 +46,43 @@
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             border: 1px solid #ddd;
         }
-        
-        .content-card h3 {
-            margin-top: 0;
-            color: #2c3e50;
-            font-size: 18px;
-            font-weight: 600;
-        }
-        
-        .employees-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-        }
-        
-        .employee-card {
-            background: #f8f9fa;
+        .content-card h3 { margin-top: 0; color: #2c3e50; font-size: 18px; font-weight: 600; }
+        .period-select { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+        .period-select label { font-weight: 500; }
+        .period-select select { padding: 8px 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 14px; }
+        .period-select button { padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
+        .period-select button:hover { background: #0056b3; }
+        .info-box {
+            background: #e7f3ff;
+            border: 1px solid #b3d7ff;
             border-radius: 8px;
-            padding: 15px;
-            border: 1px solid #e9ecef;
-        }
-        
-        .employee-card h4 {
-            margin: 0 0 10px 0;
-            color: #2c3e50;
-            font-size: 16px;
-        }
-        
-        .employee-info {
-            font-size: 14px;
-            color: #6c757d;
-            margin-bottom: 5px;
-        }
-        
-        .employee-rate {
-            font-size: 16px;
-            font-weight: 600;
-            color: #28a745;
-        }
-        
-        .flash-message {
-            padding: 12px 20px;
-            border-radius: 6px;
+            padding: 12px 16px;
             margin-bottom: 20px;
-            font-weight: 500;
+            font-size: 14px;
+            color: #004085;
         }
-        
-        .flash-success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .flash-error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
+        .salary-table { width: 100%; border-collapse: collapse; }
+        .salary-table th, .salary-table td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        .salary-table th { background: #f8f9fa; font-weight: 600; color: #495057; font-size: 13px; }
+        .salary-table td { font-size: 14px; }
+        .salary-table .num { text-align: right; white-space: nowrap; }
+        .salary-table .period-cell { min-width: 140px; }
+        .paid-badge { display: inline-block; background: #28a745; color: white; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; }
+        .btn-mark { padding: 6px 12px; font-size: 12px; background: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        .btn-mark:hover { background: #218838; }
+        .btn-mark:disabled { background: #6c757d; cursor: default; }
+        .pay-date { font-size: 12px; color: #6c757d; }
+        .flash-message { padding: 12px 20px; border-radius: 6px; margin-bottom: 20px; font-weight: 500; }
+        .flash-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .flash-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="top-bar">
-            <h1>💰 Управление зарплатами</h1>
+            <h1>💰 Расчёт зарплат</h1>
             <div class="nav-links">
-                <a href="{{ url_for('admin_work_hours') }}" class="btn-primary">⏰ Ввести часы</a>
+                <a href="{{ url_for('admin_work_hours') }}" class="btn-primary">⏰ Часы по дням</a>
                 <a href="{{ url_for('admin_employees') }}" class="btn-primary">👥 Сотрудники</a>
                 <a href="{{ url_for('dashboard') }}" class="btn-secondary">← Назад</a>
             </div>
@@ -161,27 +97,95 @@
         {% endwith %}
 
         <div class="content-card">
-            <h3>👥 Список сотрудников</h3>
-            {% if employees %}
-                <div class="employees-grid">
-                    {% for employee in employees %}
-                        <div class="employee-card">
-                            <h4>{{ employee.name }}</h4>
-                            <div class="employee-info">Должность: {{ employee.position }}</div>
-                            <div class="employee-rate">Часовая ставка: {{ "%.2f"|format(employee.hourly_rate) }} ₽</div>
-                            <div class="employee-info">
-                                Статус: 
-                                {% if employee.is_active %}
-                                    <span style="color: #28a745;">Активен</span>
-                                {% else %}
-                                    <span style="color: #dc3545;">Неактивен</span>
-                                {% endif %}
-                            </div>
-                        </div>
+            <h3>📅 Период</h3>
+            <form method="GET" action="{{ url_for('admin_salary') }}" class="period-select">
+                <label for="month">Месяц:</label>
+                <select id="month" name="month">
+                    {% for m in range(1, 13) %}
+                        <option value="{{ m }}" {% if month == m %}selected{% endif %}>
+                            {{ ['январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'][m-1] }}
+                        </option>
                     {% endfor %}
-                </div>
+                </select>
+                <label for="year">Год:</label>
+                <select id="year" name="year">
+                    {% for y in range(2020, 2031) %}
+                        <option value="{{ y }}" {% if year == y %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit">Показать</button>
+            </form>
+        </div>
+
+        <div class="info-box">
+            <strong>Начисление:</strong> период 1–15 числа и период с 16 числа до конца месяца.<br>
+            <strong>Формула:</strong> зарплата = часовая ставка × количество часов.<br>
+            <strong>Выплаты:</strong> <strong>10 числа</strong> — за период с 16 по конец предыдущего месяца; <strong>25 числа</strong> — за период с 1 по 15 текущего месяца.
+        </div>
+
+        <div class="content-card">
+            <h3>💰 {{ month_name }} {{ year }}</h3>
+            {% if rows %}
+                <table class="salary-table">
+                    <thead>
+                        <tr>
+                            <th>Сотрудник</th>
+                            <th>Ставка ₽/час</th>
+                            <th class="period-cell">Период 1–15 (выплата 25-го)</th>
+                            <th></th>
+                            <th class="period-cell">Период 16–конец (выплата 10-го след. мес.)</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in rows %}
+                            <tr>
+                                <td>{{ r.employee.name }}<br><span style="font-size:12px;color:#6c757d;">{{ r.employee.position }}</span></td>
+                                <td class="num">{{ "%.2f"|format(r.employee.hourly_rate) }} ₽</td>
+                                <td class="period-cell num">
+                                    {{ "%.1f"|format(r.hours_first) }} ч → {{ "%.2f"|format(r.salary_first) }} ₽
+                                </td>
+                                <td>
+                                    {% if r.is_paid_first %}
+                                        <span class="paid-badge">Выплачено</span>
+                                        {% if r.paid_at_first %}
+                                            <span class="pay-date"><br>{{ r.paid_at_first.strftime('%d.%m.%Y %H:%M') }}</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <form method="POST" action="{{ url_for('admin_salary_mark_paid') }}" style="display:inline;">
+                                            <input type="hidden" name="employee_id" value="{{ r.employee.id }}">
+                                            <input type="hidden" name="year" value="{{ year }}">
+                                            <input type="hidden" name="month" value="{{ month }}">
+                                            <input type="hidden" name="period_type" value="first">
+                                            <button type="submit" class="btn-mark">Отметить выплату</button>
+                                        </form>
+                                    {% endif %}
+                                </td>
+                                <td class="period-cell num">
+                                    {{ "%.1f"|format(r.hours_second) }} ч → {{ "%.2f"|format(r.salary_second) }} ₽
+                                </td>
+                                <td>
+                                    {% if r.is_paid_second %}
+                                        <span class="paid-badge">Выплачено</span>
+                                        {% if r.paid_at_second %}
+                                            <span class="pay-date"><br>{{ r.paid_at_second.strftime('%d.%m.%Y %H:%M') }}</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <form method="POST" action="{{ url_for('admin_salary_mark_paid') }}" style="display:inline;">
+                                            <input type="hidden" name="employee_id" value="{{ r.employee.id }}">
+                                            <input type="hidden" name="year" value="{{ year }}">
+                                            <input type="hidden" name="month" value="{{ month }}">
+                                            <input type="hidden" name="period_type" value="second">
+                                            <button type="submit" class="btn-mark">Отметить выплату</button>
+                                        </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             {% else %}
-                <p>Сотрудники не найдены. <a href="{{ url_for('admin_employees') }}">Добавить сотрудника</a></p>
+                <p>Нет активных сотрудников. <a href="{{ url_for('admin_employees') }}">Добавить сотрудника</a></p>
             {% endif %}
         </div>
     </div>

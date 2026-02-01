@@ -3,7 +3,8 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
+from calendar import monthrange
 import os
 import time
 from dotenv import load_dotenv
@@ -1077,18 +1078,135 @@ def warmup():
 @app.route("/admin/salary")
 @login_required
 def admin_salary():
-    """Страница управления зарплатами - упрощенная версия"""
+    """Расчёт зарплат по периодам: 1–15 и 16–конец месяца. Выплаты: 10 числа — за 16–конец, 25 числа — за 1–15."""
     if current_user.role != "Админ":
         flash("Доступ запрещен", "error")
         return redirect(url_for("dashboard"))
     
     try:
+        now = datetime.now(timezone.utc)
+        year = request.args.get("year", type=int) or now.year
+        month = request.args.get("month", type=int) or now.month
+        if month < 1 or month > 12:
+            month = now.month
+        if year < 2000 or year > 2100:
+            year = now.year
+        
+        last_day = monthrange(year, month)[1]
+        period1_start = date(year, month, 1)
+        period1_end = date(year, month, 15)
+        period2_start = date(year, month, 16)
+        period2_end = date(year, month, last_day)
+        
         employees = Employee.query.filter_by(is_active=True).all()
-        return render_template("admin_salary.html", employees=employees)
+        rows = []
+        for emp in employees:
+            hours_first = db.session.query(db.func.coalesce(db.func.sum(WorkHours.hours), 0)).filter(
+                WorkHours.employee_id == emp.id,
+                WorkHours.date >= period1_start,
+                WorkHours.date <= period1_end,
+            ).scalar() or 0
+            hours_second = db.session.query(db.func.coalesce(db.func.sum(WorkHours.hours), 0)).filter(
+                WorkHours.employee_id == emp.id,
+                WorkHours.date >= period2_start,
+                WorkHours.date <= period2_end,
+            ).scalar() or 0
+            salary_first = round(float(hours_first) * emp.hourly_rate, 2)
+            salary_second = round(float(hours_second) * emp.hourly_rate, 2)
+            sp_first = SalaryPeriod.query.filter_by(
+                employee_id=emp.id, year=year, month=month, period_type="first"
+            ).first()
+            sp_second = SalaryPeriod.query.filter_by(
+                employee_id=emp.id, year=year, month=month, period_type="second"
+            ).first()
+            rows.append({
+                "employee": emp,
+                "hours_first": hours_first,
+                "hours_second": hours_second,
+                "salary_first": salary_first,
+                "salary_second": salary_second,
+                "is_paid_first": sp_first.is_paid if sp_first else False,
+                "is_paid_second": sp_second.is_paid if sp_second else False,
+                "paid_at_first": sp_first.paid_at if sp_first else None,
+                "paid_at_second": sp_second.paid_at if sp_second else None,
+            })
+        
+        month_names = ("", "январь", "февраль", "март", "апрель", "май", "июнь",
+                       "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь")
+        return render_template(
+            "admin_salary.html",
+            employees=employees,
+            rows=rows,
+            year=year,
+            month=month,
+            month_name=month_names[month],
+            period1_start=period1_start,
+            period1_end=period1_end,
+            period2_start=period2_start,
+            period2_end=period2_end,
+        )
     except Exception as e:
         print(f"Ошибка в admin_salary: {e}")
+        import traceback
+        traceback.print_exc()
         flash("Ошибка при загрузке страницы зарплат", "error")
         return redirect(url_for("dashboard"))
+
+
+@app.route("/admin/salary/mark_paid", methods=["POST"])
+@login_required
+def admin_salary_mark_paid():
+    """Отметить период как выплаченный."""
+    if current_user.role != "Админ":
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("admin_salary"))
+    try:
+        employee_id = request.form.get("employee_id", type=int)
+        year = request.form.get("year", type=int)
+        month = request.form.get("month", type=int)
+        period_type = request.form.get("period_type")  # "first" или "second"
+        if not all([employee_id, year, month, period_type]) or period_type not in ("first", "second"):
+            flash("Неверные данные", "error")
+            return redirect(url_for("admin_salary", year=year, month=month))
+        sp = SalaryPeriod.query.filter_by(
+            employee_id=employee_id, year=year, month=month, period_type=period_type
+        ).first()
+        if sp:
+            sp.is_paid = True
+            sp.paid_at = datetime.now(timezone.utc)
+        else:
+            emp = Employee.query.get(employee_id)
+            if not emp:
+                flash("Сотрудник не найден", "error")
+                return redirect(url_for("admin_salary", year=year, month=month))
+            if period_type == "first":
+                hours = db.session.query(db.func.coalesce(db.func.sum(WorkHours.hours), 0)).filter(
+                    WorkHours.employee_id == employee_id,
+                    WorkHours.date >= date(year, month, 1),
+                    WorkHours.date <= date(year, month, 15),
+                ).scalar() or 0
+            else:
+                last_day = monthrange(year, month)[1]
+                hours = db.session.query(db.func.coalesce(db.func.sum(WorkHours.hours), 0)).filter(
+                    WorkHours.employee_id == employee_id,
+                    WorkHours.date >= date(year, month, 16),
+                    WorkHours.date <= date(year, month, last_day),
+                ).scalar() or 0
+            salary = round(float(hours) * emp.hourly_rate, 2)
+            sp = SalaryPeriod(
+                employee_id=employee_id, year=year, month=month, period_type=period_type,
+                total_hours=float(hours), total_salary=salary, is_paid=True,
+                paid_at=datetime.now(timezone.utc),
+            )
+            db.session.add(sp)
+        db.session.commit()
+        flash("Отмечено как выплачено", "success")
+        return redirect(url_for("admin_salary", year=year, month=month))
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Ошибка: {str(e)}", "error")
+        return redirect(url_for("admin_salary", year=request.form.get("year"), month=request.form.get("month")))
+
 
 @app.route("/admin/employees", methods=["GET", "POST"])
 @login_required
@@ -1154,110 +1272,83 @@ def admin_employees():
     return render_template("admin_employees.html", employees=employees)
 
 
-def _week_monday(d):
-    """Понедельник недели для даты d."""
-    if isinstance(d, datetime):
-        d = d.date()
-    return d - timedelta(days=d.weekday())  # weekday(): 0=Mon, 6=Sun
-
-
 @app.route("/admin/work-hours", methods=["GET", "POST"])
 @login_required
 def admin_work_hours():
-    """Страница управления рабочими часами — ввод по каждому рабочему дню."""
+    """Ввод рабочих часов по каждому дню двух периодов: 1–15 и 16–конец месяца."""
     if current_user.role != "Админ":
         flash("Доступ запрещен", "error")
         return redirect(url_for("dashboard"))
-    
     try:
-        if request.method == "POST":
-            employee_id = request.form.get("employee_id")
-            week_start_str = request.form.get("week_start")
-            if not employee_id or not week_start_str:
-                flash("Выберите сотрудника и неделю", "error")
-                return redirect(url_for("admin_work_hours"))
-            try:
-                week_start = datetime.strptime(week_start_str, "%Y-%m-%d").date()
-                employee_id_int = int(employee_id)
-                if employee_id_int <= 0:
-                    raise ValueError("Неверный ID сотрудника")
-            except (ValueError, TypeError):
-                flash("Неверные данные", "error")
-                return redirect(url_for("admin_work_hours"))
-            week_start = _week_monday(week_start)
-            saved_count = 0
-            for key, value in request.form.items():
-                if not key.startswith("hours_"):
-                    continue
-                date_str = key[6:]
+        now = datetime.now(timezone.utc)
+        year = request.args.get("year", type=int) or request.form.get("year", type=int) or now.year
+        month = request.args.get("month", type=int) or request.form.get("month", type=int) or now.month
+        if month < 1 or month > 12:
+            month = now.month
+        if year < 2000 or year > 2100:
+            year = now.year
+        last_day = monthrange(year, month)[1]
+        period1_start = date(year, month, 1)
+        period1_end = date(year, month, 15)
+        period2_start = date(year, month, 16)
+        period2_end = date(year, month, last_day)
+        period1_dates = [date(year, month, d) for d in range(1, 16)]
+        period2_dates = [date(year, month, d) for d in range(16, last_day + 1)]
+        day_names = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+        employees = Employee.query.filter_by(is_active=True).all()
+        selected_employee_id = request.args.get("employee_id", type=int) or request.form.get("employee_id", type=int)
+        existing_by_date = {}
+        if selected_employee_id:
+            for wh in WorkHours.query.filter(
+                WorkHours.employee_id == selected_employee_id,
+                WorkHours.date >= period1_start,
+                WorkHours.date <= period2_end,
+            ).all():
+                existing_by_date[wh.date] = wh
+        if request.method == "POST" and selected_employee_id:
+            all_dates = period1_dates + period2_dates
+            for d in all_dates:
+                key = f"hours_{d.strftime('%Y-%m-%d')}"
+                value = request.form.get(key)
+                notes = request.form.get(f"notes_{d.strftime('%Y-%m-%d')}", "").strip()
                 try:
-                    day_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-                except ValueError:
-                    continue
-                try:
-                    hours_val = float(value.strip()) if value and value.strip() else None
+                    hours_val = float(value.strip().replace(",", ".")) if value and value.strip() else None
                 except (ValueError, TypeError):
-                    continue
+                    hours_val = None
                 if hours_val is not None and hours_val < 0:
                     continue
-                notes = request.form.get(f"notes_{date_str}", "").strip()
+                existing = WorkHours.query.filter_by(
+                    employee_id=selected_employee_id, date=d
+                ).first()
                 if hours_val is None and not notes:
-                    existing = WorkHours.query.filter_by(
-                        employee_id=employee_id_int, date=day_date
-                    ).first()
                     if existing:
                         db.session.delete(existing)
-                        saved_count += 1
                     continue
                 hours_to_save = (hours_val if hours_val is not None else 0.0)
-                existing = WorkHours.query.filter_by(
-                    employee_id=employee_id_int, date=day_date
-                ).first()
                 if existing:
                     existing.hours = hours_to_save
                     existing.notes = notes or None
                 else:
                     db.session.add(WorkHours(
-                        employee_id=employee_id_int,
-                        date=day_date,
+                        employee_id=selected_employee_id,
+                        date=d,
                         hours=hours_to_save,
-                        notes=notes or None
+                        notes=notes or None,
                     ))
-                saved_count += 1
             db.session.commit()
-            flash(f"Сохранено: обработано дней — {saved_count}", "success")
-            return redirect(url_for("admin_work_hours", week_start=week_start.strftime("%Y-%m-%d"), employee_id=employee_id_int))
-        
-        employees = Employee.query.filter_by(is_active=True).all()
-        week_start_str = request.args.get("week_start")
-        employee_id_param = request.args.get("employee_id", type=int)
-        today = datetime.now(timezone.utc).date()
-        if week_start_str:
-            try:
-                week_start = datetime.strptime(week_start_str, "%Y-%m-%d").date()
-                week_start = _week_monday(week_start)
-            except ValueError:
-                week_start = _week_monday(today)
-        else:
-            week_start = _week_monday(today)
-        week_dates = [week_start + timedelta(days=i) for i in range(7)]
-        existing_by_date = {}
-        if employee_id_param:
-            for wh in WorkHours.query.filter(
-                WorkHours.employee_id == employee_id_param,
-                WorkHours.date >= week_start,
-                WorkHours.date < week_start + timedelta(days=7)
-            ).all():
-                existing_by_date[wh.date] = wh
-        day_names = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+            flash("Часы за периоды сохранены", "success")
+            return redirect(url_for("admin_work_hours", year=year, month=month, employee_id=selected_employee_id))
         return render_template(
             "admin_work_hours.html",
             employees=employees,
-            week_dates=week_dates,
-            day_names=day_names,
+            year=year,
+            month=month,
+            selected_employee_id=selected_employee_id,
+            period1_dates=period1_dates,
+            period2_dates=period2_dates,
             existing_by_date=existing_by_date,
-            week_start=week_start,
-            selected_employee_id=employee_id_param,
+            day_names=day_names,
+            last_day=last_day,
         )
     except Exception as e:
         print(f"Ошибка в admin_work_hours: {e}")

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ввод рабочих часов по дням - Админ панель</title>
+    <title>Часы по периодам (по дням) - Админ панель</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -14,7 +14,7 @@
             color: #2c3e50;
             line-height: 1.5;
         }
-        .container { max-width: 720px; margin: 0 auto; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
         .top-bar {
             background: white;
             border-radius: 8px;
@@ -33,7 +33,6 @@
             border-radius: 6px;
             text-decoration: none;
             font-weight: 500;
-            transition: all 0.2s ease;
         }
         .btn-primary { background: #007bff; color: white; }
         .btn-primary:hover { background: #0056b3; }
@@ -49,7 +48,7 @@
         }
         .content-card h3 { margin-top: 0; color: #2c3e50; font-size: 18px; font-weight: 600; }
         .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
-        .form-group { flex: 1; min-width: 140px; }
+        .form-group { flex: 0 0 auto; min-width: 140px; }
         .form-group label { display: block; margin-bottom: 5px; font-weight: 500; color: #2c3e50; font-size: 14px; }
         .form-group input, .form-group select {
             width: 100%;
@@ -57,11 +56,6 @@
             border: 1px solid #ddd;
             border-radius: 6px;
             font-size: 14px;
-        }
-        .form-group input:focus, .form-group select:focus {
-            outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
         }
         .btn-submit {
             background: #28a745;
@@ -72,60 +66,36 @@
             font-size: 15px;
             font-weight: 500;
             cursor: pointer;
-            transition: background-color 0.2s ease;
         }
         .btn-submit:hover { background: #218838; }
-        .hours-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 12px;
+        .period-section {
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
         }
-        .hours-table th, .hours-table td {
-            padding: 10px 12px;
-            text-align: left;
-            border-bottom: 1px solid #eee;
-        }
-        .hours-table th {
-            background: #f8f9fa;
-            font-weight: 600;
-            color: #495057;
-            font-size: 13px;
-        }
-        .hours-table td.day-name { font-weight: 500; width: 48px; }
-        .hours-table td.date-cell { color: #6c757d; font-size: 13px; white-space: nowrap; }
-        .hours-table input[type="number"] {
-            width: 72px;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-        .hours-table input[type="text"] {
-            width: 100%;
-            min-width: 100px;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 13px;
-        }
-        .flash-message {
-            padding: 12px 20px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            font-weight: 500;
-        }
+        .period-section.period-1 { background: #f0f8ff; border: 1px solid #b3d7ff; }
+        .period-section.period-2 { background: #fff8f0; border: 1px solid #ffd9b3; }
+        .period-section h4 { margin: 0 0 4px 0; font-size: 16px; color: #495057; }
+        .period-section .hint { font-size: 12px; color: #6c757d; margin-bottom: 12px; }
+        .hours-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .hours-table th, .hours-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #eee; }
+        .hours-table th { background: rgba(0,0,0,0.05); font-weight: 600; color: #495057; }
+        .hours-table input[type="number"] { width: 64px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; }
+        .hours-table input[type="text"] { width: 100%; min-width: 80px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+        .day-num { font-weight: 500; width: 36px; }
+        .date-cell { white-space: nowrap; color: #6c757d; }
+        .flash-message { padding: 12px 20px; border-radius: 6px; margin-bottom: 20px; font-weight: 500; }
         .flash-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .flash-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .week-form .btn-submit { background: #007bff; }
-        .week-form .btn-submit:hover { background: #0056b3; }
+        .info-box { background: #e7f3ff; border: 1px solid #b3d7ff; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px; color: #004085; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="top-bar">
-            <h1>⏰ Часы по рабочим дням</h1>
+            <h1>⏰ Часы по периодам (по дням)</h1>
             <div class="nav-links">
-                <a href="{{ url_for('admin_salary') }}" class="btn-primary">💰 Зарплаты</a>
+                <a href="{{ url_for('admin_salary') }}" class="btn-primary">💰 Расчёт зарплат</a>
                 <a href="{{ url_for('admin_employees') }}" class="btn-primary">👥 Сотрудники</a>
                 <a href="{{ url_for('dashboard') }}" class="btn-secondary">← Назад</a>
             </div>
@@ -139,9 +109,13 @@
             {% endif %}
         {% endwith %}
 
+        <div class="info-box">
+            Два зарплатных периода с вводом часов по каждому дню. <strong>Период 1 (1–15)</strong> — выплата 25-го. <strong>Период 2 (16–{{ last_day }})</strong> — выплата 10-го числа следующего месяца.
+        </div>
+
         <div class="content-card">
-            <h3>📅 Выберите неделю и сотрудника</h3>
-            <form method="GET" class="week-form">
+            <h3>📅 Сотрудник и месяц</h3>
+            <form method="GET">
                 <div class="form-row">
                     <div class="form-group">
                         <label for="employee_id">Сотрудник</label>
@@ -155,8 +129,22 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="week_start">Неделя с (пн)</label>
-                        <input type="date" id="week_start" name="week_start" value="{{ week_start.strftime('%Y-%m-%d') }}">
+                        <label for="month">Месяц</label>
+                        <select id="month" name="month">
+                            {% for m in range(1, 13) %}
+                                <option value="{{ m }}" {% if month == m %}selected{% endif %}>
+                                    {{ ['январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'][m-1] }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="year">Год</label>
+                        <select id="year" name="year">
+                            {% for y in range(2020, 2031) %}
+                                <option value="{{ y }}" {% if year == y %}selected{% endif %}>{{ y }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="form-group">
                         <button type="submit" class="btn-submit">Показать</button>
@@ -167,53 +155,93 @@
 
         {% if selected_employee_id %}
         <div class="content-card">
-            <h3>📝 Часы по каждому дню</h3>
-            <p style="color: #6c757d; font-size: 14px; margin-bottom: 12px;">
-                Введите количество часов за каждый день. Пустое поле — день не учитывается. Можно указать 0.
-            </p>
             <form method="POST">
                 <input type="hidden" name="employee_id" value="{{ selected_employee_id }}">
-                <input type="hidden" name="week_start" value="{{ week_start.strftime('%Y-%m-%d') }}">
-                <table class="hours-table">
-                    <thead>
-                        <tr>
-                            <th>День</th>
-                            <th>Дата</th>
-                            <th>Часы</th>
-                            <th>Заметки</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for d in week_dates %}
-                            {% set wh = existing_by_date.get(d) %}
+                <input type="hidden" name="year" value="{{ year }}">
+                <input type="hidden" name="month" value="{{ month }}">
+
+                <div class="period-section period-1">
+                    <h4>Период 1: с 1 по 15 число (выплата 25-го)</h4>
+                    <p class="hint">Введите часы за каждый день</p>
+                    <table class="hours-table">
+                        <thead>
                             <tr>
-                                <td class="day-name">{{ day_names[loop.index0] }}</td>
-                                <td class="date-cell">{{ d.strftime('%d.%m.%Y') }}</td>
-                                <td>
-                                    <input type="number" name="hours_{{ d.strftime('%Y-%m-%d') }}"
-                                           step="0.5" min="0" max="24" placeholder="—"
-                                           value="{{ '%.1f'|format(wh.hours) if wh and wh.hours is not none else '' }}">
-                                </td>
-                                <td>
-                                    <input type="text" name="notes_{{ d.strftime('%Y-%m-%d') }}"
-                                           placeholder="необязательно"
-                                           value="{{ wh.notes or '' }}">
-                                </td>
+                                <th class="day-num">День</th>
+                                <th>Дата</th>
+                                <th>День недели</th>
+                                <th>Часы</th>
+                                <th>Заметки</th>
                             </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                <div class="form-row" style="margin-top: 16px;">
-                    <button type="submit" class="btn-submit">✅ Сохранить часы за неделю</button>
+                        </thead>
+                        <tbody>
+                            {% for d in period1_dates %}
+                                {% set wh = existing_by_date.get(d) %}
+                                <tr>
+                                    <td class="day-num">{{ d.day }}</td>
+                                    <td class="date-cell">{{ d.strftime('%d.%m.%Y') }}</td>
+                                    <td>{{ day_names[d.weekday()] }}</td>
+                                    <td>
+                                        <input type="number" name="hours_{{ d.strftime('%Y-%m-%d') }}"
+                                               step="0.5" min="0" max="24" placeholder="—"
+                                               value="{{ '%.1f'|format(wh.hours) if wh and wh.hours is not none else '' }}">
+                                    </td>
+                                    <td>
+                                        <input type="text" name="notes_{{ d.strftime('%Y-%m-%d') }}"
+                                               placeholder="—"
+                                               value="{{ wh.notes or '' }}">
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="period-section period-2">
+                    <h4>Период 2: с 16 по {{ last_day }} число (выплата 10-го след. мес.)</h4>
+                    <p class="hint">Введите часы за каждый день</p>
+                    <table class="hours-table">
+                        <thead>
+                            <tr>
+                                <th class="day-num">День</th>
+                                <th>Дата</th>
+                                <th>День недели</th>
+                                <th>Часы</th>
+                                <th>Заметки</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in period2_dates %}
+                                {% set wh = existing_by_date.get(d) %}
+                                <tr>
+                                    <td class="day-num">{{ d.day }}</td>
+                                    <td class="date-cell">{{ d.strftime('%d.%m.%Y') }}</td>
+                                    <td>{{ day_names[d.weekday()] }}</td>
+                                    <td>
+                                        <input type="number" name="hours_{{ d.strftime('%Y-%m-%d') }}"
+                                               step="0.5" min="0" max="24" placeholder="—"
+                                               value="{{ '%.1f'|format(wh.hours) if wh and wh.hours is not none else '' }}">
+                                    </td>
+                                    <td>
+                                        <input type="text" name="notes_{{ d.strftime('%Y-%m-%d') }}"
+                                               placeholder="—"
+                                               value="{{ wh.notes or '' }}">
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="form-row" style="margin-top: 8px;">
+                    <button type="submit" class="btn-submit">✅ Сохранить часы за оба периода</button>
                 </div>
             </form>
         </div>
         {% else %}
         <div class="content-card">
-            <p style="color: #6c757d; margin: 0;">Выберите сотрудника и неделю выше и нажмите «Показать», чтобы ввести часы по дням.</p>
+            <p style="color: #6c757d; margin: 0;">Выберите сотрудника и месяц выше и нажмите «Показать», чтобы ввести часы по дням в каждом периоде.</p>
         </div>
         {% endif %}
     </div>
-
 </body>
 </html>

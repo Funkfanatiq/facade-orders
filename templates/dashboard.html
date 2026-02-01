@@ -121,6 +121,50 @@
       outline-offset: -2px;
       border-radius: 6px;
     }
+    .tabs {
+      display: flex;
+      background: #fff;
+      border-radius: 12px;
+      padding: 4px;
+      margin: 20px 20px 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      gap: 4px;
+    }
+    .tab {
+      flex: 1;
+      padding: 12px 20px;
+      text-align: center;
+      cursor: pointer;
+      border-radius: 8px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      background: #f2f2f2;
+      color: #555;
+      border: none;
+      font-size: 15px;
+    }
+    .tab:hover { background: #e8e8e8; color: #333; }
+    .tab.active { background: #4CAF50; color: #fff; box-shadow: 0 2px 6px rgba(76, 175, 80, 0.3); }
+    .tab-content { display: none; margin: 0 20px 20px; }
+    .tab-content.active { display: block; }
+    .customers-list {
+      background: #fff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      list-style: none;
+      margin: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .customers-list li {
+      padding: 12px 16px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      border: 1px solid #eee;
+      font-size: 15px;
+    }
   </style>
 </head>
 <body>
@@ -153,6 +197,14 @@
       📋 Показаны заказы, прошедшие фрезеровку и шлифовку. После отметки упаковки или отгрузки заказ перемещается в конец списка.
     </p>
   </div>
+  {% endif %}
+
+  {% if current_user.role == "Менеджер" %}
+  <div class="tabs">
+    <button type="button" class="tab active" onclick="showManagerTab('orders')">📋 Панель заказов</button>
+    <button type="button" class="tab" onclick="showManagerTab('customers')">👥 Заказчики</button>
+  </div>
+  <div id="manager-orders-tab" class="tab-content active">
   {% endif %}
 
   {% if current_user.role == "Менеджер" %}
@@ -239,7 +291,38 @@
     {% endfor %}
   </table>
 
+  {% if current_user.role == "Менеджер" %}
+  </div>
+  <div id="manager-customers-tab" class="tab-content">
+    <div class="form-box">
+      <h3>👥 Заказчики</h3>
+      {% if customers %}
+      <ul class="customers-list">
+        {% for client in customers %}
+        <li>{{ client }}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p style="color: #666; margin: 0;">Пока нет заказчиков. Они появятся после добавления заказов.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
   <script>
+    {% if current_user.role == "Менеджер" %}
+    function showManagerTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(function(el) {
+        el.classList.remove('active');
+      });
+      document.querySelectorAll('.tabs .tab').forEach(function(el) {
+        el.classList.remove('active');
+      });
+      var tabEl = document.getElementById('manager-' + tabName + '-tab');
+      if (tabEl) tabEl.classList.add('active');
+      event.target.classList.add('active');
+    }
+    {% endif %}
     document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
       cb.addEventListener('change', () => {
         const row = cb.closest('tr');

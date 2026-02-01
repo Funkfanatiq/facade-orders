@@ -642,7 +642,12 @@ def dashboard():
         'percentage': round((storage_usage / STORAGE_LIMIT_MB) * 100, 1)
     }
     
-    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info)
+    # Для менеджера — список заказчиков (уникальные клиенты из заказов)
+    customers = []
+    if current_user.role == "Менеджер":
+        customers = [row[0] for row in db.session.query(Order.client).distinct().order_by(Order.client).all()]
+    
+    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers)
 
 def render_admin_dashboard():
     """Рендеринг панели администратора"""

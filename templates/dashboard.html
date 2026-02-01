@@ -221,6 +221,12 @@
     .counterparty-link { text-decoration: none; color: #333; display: block; }
     .counterparty-link:hover { color: #1976D2; }
     .counterparty-link .cp-info { color: #666; font-weight: normal; }
+    .pricelist-table { width: 100%; max-width: 640px; border-collapse: collapse; margin-top: 12px; }
+    .pricelist-table th, .pricelist-table td { padding: 10px 12px; text-align: left; border: 1px solid #ddd; }
+    .pricelist-table th { background: #f5f5f5; font-weight: 600; }
+    .pricelist-table tbody tr:nth-child(even) { background: #fafafa; }
+    .btn-edit-pricelist { padding: 6px 12px; font-size: 13px; cursor: pointer; background: #2196F3; color: #fff; border: none; border-radius: 6px; }
+    .btn-edit-pricelist:hover { background: #1976D2; }
   </style>
 </head>
 <body>
@@ -416,16 +422,15 @@
   <div id="manager-pricelist-tab" class="tab-content">
     <div class="form-box">
       <h3>💰 Прайс лист</h3>
-      <input type="text" id="pricelist-search" placeholder="Поиск по наименованию, ед. изм. или примечанию..." style="width:100%; max-width:320px; margin-bottom:12px; padding:8px;">
-      <button type="button" class="btn-add-counterparty" onclick="togglePricelistForm()">➕ Добавить позицию</button>
+      <input type="text" id="pricelist-search" placeholder="Поиск по наименованию или ед. изм...." style="width:100%; max-width:320px; margin-bottom:12px; padding:8px;">
+      <button type="button" class="btn-add-counterparty" onclick="openPricelistFormForAdd()">➕ Добавить позицию</button>
       <div id="pricelist-form-wrap" class="counterparty-form-wrap" style="display: none;">
-        <form method="POST" action="{{ url_for('pricelist_add') }}" class="counterparty-form">
+        <form id="pricelist-form" method="POST" action="{{ url_for('pricelist_add') }}" class="counterparty-form">
           <div class="counterparty-block">
-            <h4>Позиция прайс-листа</h4>
-            <input type="text" name="pricelist_name" placeholder="Наименование" required>
-            <input type="number" name="pricelist_price" placeholder="Цена (руб.)" step="0.01" min="0" required>
-            <input type="text" name="pricelist_unit" placeholder="Ед. изм. (шт, м², п.м.)">
-            <input type="text" name="pricelist_note" placeholder="Примечание">
+            <h4 id="pricelist-form-title">Позиция прайс-листа</h4>
+            <input type="text" name="pricelist_name" id="pricelist_name" placeholder="Наименование" required>
+            <input type="number" name="pricelist_price" id="pricelist_price" placeholder="Цена (руб.)" step="0.01" min="0" required>
+            <input type="text" name="pricelist_unit" id="pricelist_unit" placeholder="Ед. изм. (шт, м², п.м.)">
           </div>
           <div class="counterparty-form-actions">
             <button type="submit">Сохранить</button>
@@ -434,13 +439,21 @@
         </form>
       </div>
       {% if price_list %}
-      <ul class="customers-list counterparties-list" id="pricelist-list">
+      <table class="pricelist-table" id="pricelist-list">
+        <thead>
+          <tr><th>Наименование</th><th>Цена, ₽</th><th>Ед. изм.</th><th>Действия</th></tr>
+        </thead>
+        <tbody>
         {% for p in price_list %}
-        <li class="pricelist-item" data-search="{{ (p.name or '')|lower }} {{ (p.unit or '')|lower }} {{ (p.note or '')|lower }}">
-          <span class="pricelist-row"><strong>{{ p.name }}</strong> — {{ (p.price|round(2))|string|replace(".", ",") }} ₽{% if p.unit %} / {{ p.unit }}{% endif %}{% if p.note %} <span class="cp-info">· {{ p.note }}</span>{% endif %}</span>
-        </li>
+        <tr class="pricelist-item" data-search="{{ (p.name or '')|lower }} {{ (p.unit or '')|lower }}" data-id="{{ p.id }}" data-name="{{ p.name|e }}" data-price="{{ p.price }}" data-unit="{{ p.unit or '' }}">
+          <td>{{ p.name }}</td>
+          <td>{{ (p.price|round(2))|string|replace(".", ",") }}</td>
+          <td>{{ p.unit or '—' }}</td>
+          <td><button type="button" class="btn-edit-pricelist" onclick="editPricelistRow(this)">Изменить</button></td>
+        </tr>
         {% endfor %}
-      </ul>
+        </tbody>
+      </table>
       {% else %}
       <p style="color: #666; margin: 12px 0 0;">Пока нет позиций. Нажмите «Добавить позицию».</p>
       {% endif %}
@@ -468,6 +481,42 @@
     function togglePricelistForm() {
       var wrap = document.getElementById('pricelist-form-wrap');
       if (wrap) wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+    }
+    function openPricelistFormForAdd() {
+      var form = document.getElementById('pricelist-form');
+      var titleEl = document.getElementById('pricelist-form-title');
+      if (form) {
+        form.action = "{{ url_for('pricelist_add') }}";
+        var nameInp = document.getElementById('pricelist_name');
+        var priceInp = document.getElementById('pricelist_price');
+        var unitInp = document.getElementById('pricelist_unit');
+        if (nameInp) nameInp.value = '';
+        if (priceInp) priceInp.value = '';
+        if (unitInp) unitInp.value = '';
+      }
+      if (titleEl) titleEl.textContent = 'Позиция прайс-листа';
+      togglePricelistForm();
+    }
+    function editPricelistRow(btn) {
+      var tr = btn.closest('tr');
+      if (!tr) return;
+      var id = tr.getAttribute('data-id');
+      var name = tr.getAttribute('data-name') || '';
+      var price = tr.getAttribute('data-price') || '';
+      var unit = tr.getAttribute('data-unit') || '';
+      var form = document.getElementById('pricelist-form');
+      var titleEl = document.getElementById('pricelist-form-title');
+      if (form && id) {
+        form.action = "{{ url_for('pricelist_edit', item_id=0) }}".replace('0', id);
+        var nameInp = document.getElementById('pricelist_name');
+        var priceInp = document.getElementById('pricelist_price');
+        var unitInp = document.getElementById('pricelist_unit');
+        if (nameInp) nameInp.value = name;
+        if (priceInp) priceInp.value = price;
+        if (unitInp) unitInp.value = unit;
+      }
+      if (titleEl) titleEl.textContent = 'Редактировать позицию';
+      togglePricelistForm();
     }
     (function() {
       var clientName = document.getElementById('client_name');

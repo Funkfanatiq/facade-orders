@@ -760,6 +760,31 @@ def pricelist_add():
     return redirect(url_for("dashboard"))
 
 
+@app.route("/pricelist/<int:item_id>/edit", methods=["POST"])
+@login_required
+def pricelist_edit(item_id):
+    """Редактирование позиции прайс-листа (только менеджер)."""
+    if current_user.role != "Менеджер":
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    item = PriceListItem.query.get_or_404(item_id)
+    name = (request.form.get("pricelist_name") or "").strip()
+    if not name:
+        flash("Укажите наименование позиции", "error")
+        return redirect(url_for("dashboard"))
+    try:
+        price = float(request.form.get("pricelist_price") or "0")
+    except (TypeError, ValueError):
+        flash("Укажите корректную цену", "error")
+        return redirect(url_for("dashboard"))
+    item.name = name
+    item.price = price
+    item.unit = request.form.get("pricelist_unit") or None
+    db.session.commit()
+    flash("Позиция прайс-листа изменена", "success")
+    return redirect(url_for("dashboard"))
+
+
 @app.route("/counterparty/<int:counterparty_id>")
 @login_required
 def counterparty_card(counterparty_id):

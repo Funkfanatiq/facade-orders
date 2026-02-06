@@ -111,7 +111,7 @@ class Counterparty(db.Model):
 
 
 # Категории прайс-листа (как типы фасадов)
-PRICE_CATEGORIES = ["плоский", "фрезерованный", "шпон"]
+PRICE_CATEGORIES = ["плоский", "фрезерованный", "шпон", "услуги по покраске", "Доп услуги"]
 
 
 class PriceListItem(db.Model):
@@ -121,6 +121,7 @@ class PriceListItem(db.Model):
     price = db.Column(db.Float, nullable=False)       # Цена
     unit = db.Column(db.String(32), nullable=True)     # Ед. изм. (шт, м², п.м. и т.д.)
     category = db.Column(db.String(32), nullable=True)  # плоский / фрезерованный / шпон
+    sort_order = db.Column(db.Integer, default=0)      # Порядок отображения внутри категории
     note = db.Column(db.String(512), nullable=True)    # Примечание
     created_at = db.Column(db.DateTime, default=db.func.now())
 

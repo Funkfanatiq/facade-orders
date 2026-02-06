@@ -221,14 +221,21 @@
     .counterparty-link { text-decoration: none; color: #333; display: block; }
     .counterparty-link:hover { color: #1976D2; }
     .counterparty-link .cp-info { color: #666; font-weight: normal; }
-    .pricelist-table { width: 100%; max-width: 640px; border-collapse: collapse; margin-top: 12px; }
+    .pricelist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; }
+    @media (max-width: 900px) { .pricelist-grid { grid-template-columns: 1fr; } }
+    .pricelist-grid-cell { min-width: 0; }
+    .pricelist-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
     .pricelist-table th, .pricelist-table td { padding: 10px 12px; text-align: left; border: 1px solid #ddd; }
     .pricelist-table th { background: #f5f5f5; font-weight: 600; }
     .pricelist-table tbody tr:nth-child(even) { background: #fafafa; }
+    .pricelist-table tbody tr.dragging { opacity: 0.5; }
+    .pricelist-table tbody tr.drag-over { border-top: 2px solid #2196F3; }
     .pricelist-category-title { margin: 20px 0 8px 0; font-size: 17px; color: #333; }
-    .pricelist-category-title:first-of-type { margin-top: 12px; }
+    .pricelist-category-title:first-of-type { margin-top: 0; }
     .btn-edit-pricelist { padding: 6px 12px; font-size: 13px; cursor: pointer; background: #2196F3; color: #fff; border: none; border-radius: 6px; }
     .btn-edit-pricelist:hover { background: #1976D2; }
+    .pricelist-drag-handle { cursor: grab; color: #999; padding: 0 6px; user-select: none; }
+    .pricelist-drag-handle:active { cursor: grabbing; }
   </style>
 </head>
 <body>
@@ -435,6 +442,8 @@
               <option value="плоский">Плоские</option>
               <option value="фрезерованный">Фрезерованные</option>
               <option value="шпон">Шпон</option>
+              <option value="услуги по покраске">Услуги по покраске</option>
+              <option value="Доп услуги">Доп услуги</option>
             </select>
             <input type="text" name="pricelist_name" id="pricelist_name" placeholder="Наименование" required>
             <input type="number" name="pricelist_price" id="pricelist_price" placeholder="Цена (руб.)" step="0.01" min="0" required>
@@ -447,18 +456,22 @@
         </form>
       </div>
       {% if price_list %}
-      <div id="pricelist-list">
-      {% for cat in price_categories %}
+      {% set grid_cats = [('плоский', 'Плоские'), ('фрезерованный', 'Фрезерованные'), ('шпон', 'Шпон'), ('услуги по покраске', 'Услуги по покраске'), ('Доп услуги', 'Доп услуги')] %}
+      {% set other_items = price_list|selectattr('category', 'none')|list %}
+      <div id="pricelist-list" class="pricelist-grid">
+      {% for cat, label in grid_cats %}
       {% set cat_items = price_list|selectattr('category', 'equalto', cat)|list %}
+      <div class="pricelist-grid-cell">
+      <h4 class="pricelist-category-title">{{ label }}</h4>
       {% if cat_items %}
-      <h4 class="pricelist-category-title">{% if cat == 'плоский' %}Плоские{% elif cat == 'фрезерованный' %}Фрезерованные{% else %}Шпон{% endif %}</h4>
       <table class="pricelist-table pricelist-list" data-category="{{ cat }}">
         <thead>
-          <tr><th>Наименование</th><th>Цена, ₽</th><th>Ед. изм.</th><th>Действия</th></tr>
+          <tr><th style="width:28px;"></th><th>Наименование</th><th>Цена, ₽</th><th>Ед. изм.</th><th>Действия</th></tr>
         </thead>
         <tbody>
         {% for p in cat_items %}
-        <tr class="pricelist-item" data-search="{{ (p.name or '')|lower }} {{ (p.unit or '')|lower }}" data-id="{{ p.id }}" data-name="{{ p.name|e }}" data-price="{{ p.price }}" data-unit="{{ p.unit or '' }}" data-category="{{ p.category or '' }}">
+        <tr class="pricelist-item" draggable="true" data-search="{{ (p.name or '')|lower }} {{ (p.unit or '')|lower }}" data-id="{{ p.id }}" data-name="{{ p.name|e }}" data-price="{{ p.price }}" data-unit="{{ p.unit or '' }}" data-category="{{ p.category or '' }}" ondragstart="pricelistDragStart(event)" ondragover="pricelistDragOver(event)" ondragleave="pricelistDragLeave(event)" ondrop="pricelistDrop(event)" ondragend="pricelistDragEnd(event)">
+          <td><span class="pricelist-drag-handle" title="Перетащите для изменения порядка">⋮⋮</span></td>
           <td>{{ p.name }}</td>
           <td>{{ (p.price|round(2))|string|replace(".", ",") }}</td>
           <td>{{ p.unit or '—' }}</td>
@@ -467,18 +480,22 @@
         {% endfor %}
         </tbody>
       </table>
+      {% else %}
+      <p style="color:#999; font-size:14px; margin:8px 0;">Нет позиций</p>
       {% endif %}
+      </div>
       {% endfor %}
-      {% set other_items = price_list|selectattr('category', 'none')|list %}
-      {% if other_items %}
+      <div class="pricelist-grid-cell">
       <h4 class="pricelist-category-title">Прочее</h4>
+      {% if other_items %}
       <table class="pricelist-table pricelist-list" data-category="">
         <thead>
-          <tr><th>Наименование</th><th>Цена, ₽</th><th>Ед. изм.</th><th>Действия</th></tr>
+          <tr><th style="width:28px;"></th><th>Наименование</th><th>Цена, ₽</th><th>Ед. изм.</th><th>Действия</th></tr>
         </thead>
         <tbody>
         {% for p in other_items %}
-        <tr class="pricelist-item" data-search="{{ (p.name or '')|lower }} {{ (p.unit or '')|lower }}" data-id="{{ p.id }}" data-name="{{ p.name|e }}" data-price="{{ p.price }}" data-unit="{{ p.unit or '' }}" data-category="">
+        <tr class="pricelist-item" draggable="true" data-search="{{ (p.name or '')|lower }} {{ (p.unit or '')|lower }}" data-id="{{ p.id }}" data-name="{{ p.name|e }}" data-price="{{ p.price }}" data-unit="{{ p.unit or '' }}" data-category="" ondragstart="pricelistDragStart(event)" ondragover="pricelistDragOver(event)" ondragleave="pricelistDragLeave(event)" ondrop="pricelistDrop(event)" ondragend="pricelistDragEnd(event)">
+          <td><span class="pricelist-drag-handle" title="Перетащите для изменения порядка">⋮⋮</span></td>
           <td>{{ p.name }}</td>
           <td>{{ (p.price|round(2))|string|replace(".", ",") }}</td>
           <td>{{ p.unit or '—' }}</td>
@@ -487,7 +504,10 @@
         {% endfor %}
         </tbody>
       </table>
+      {% else %}
+      <p style="color:#999; font-size:14px; margin:8px 0;">Нет позиций</p>
       {% endif %}
+      </div>
       </div>
       {% else %}
       <p style="color: #666; margin: 12px 0 0;">Пока нет позиций. Нажмите «Добавить позицию».</p>
@@ -557,6 +577,52 @@
       }
       if (titleEl) titleEl.textContent = 'Редактировать позицию';
       togglePricelistForm();
+    }
+    var pricelistDraggedRow = null;
+    function pricelistDragStart(ev) {
+      pricelistDraggedRow = ev.target.closest('tr');
+      if (pricelistDraggedRow) {
+        pricelistDraggedRow.classList.add('dragging');
+        ev.dataTransfer.effectAllowed = 'move';
+        ev.dataTransfer.setData('text/plain', pricelistDraggedRow.getAttribute('data-id'));
+      }
+    }
+    function pricelistDragOver(ev) {
+      ev.preventDefault();
+      var row = ev.target.closest('tr.pricelist-item');
+      if (!row || row === pricelistDraggedRow) return;
+      var tbody = row.closest('tbody');
+      if (pricelistDraggedRow && tbody && tbody.contains(pricelistDraggedRow)) {
+        ev.dataTransfer.dropEffect = 'move';
+        row.classList.add('drag-over');
+      }
+    }
+    function pricelistDragLeave(ev) {
+      var row = ev.target.closest('tr.pricelist-item');
+      if (row) row.classList.remove('drag-over');
+    }
+    function pricelistDrop(ev) {
+      ev.preventDefault();
+      var dropRow = ev.target.closest('tr.pricelist-item');
+      if (!dropRow || !pricelistDraggedRow || dropRow === pricelistDraggedRow) return;
+      var tbody = dropRow.closest('tbody');
+      if (!tbody || !tbody.contains(pricelistDraggedRow)) return;
+      dropRow.classList.remove('drag-over');
+      tbody.insertBefore(pricelistDraggedRow, dropRow);
+      var ids = [];
+      tbody.querySelectorAll('tr.pricelist-item').forEach(function(r) { ids.push(parseInt(r.getAttribute('data-id'), 10)); });
+      fetch("{{ url_for('pricelist_reorder') }}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_ids: ids })
+      }).then(function(r) {
+        if (!r.ok) console.warn('Не удалось сохранить порядок');
+      });
+    }
+    function pricelistDragEnd(ev) {
+      if (pricelistDraggedRow) pricelistDraggedRow.classList.remove('dragging');
+      pricelistDraggedRow = null;
+      document.querySelectorAll('.pricelist-item.drag-over').forEach(function(r) { r.classList.remove('drag-over'); });
     }
     (function() {
       var clientName = document.getElementById('client_name');

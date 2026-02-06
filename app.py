@@ -98,6 +98,33 @@ def _ensure_pricelist_category_column():
         print(f"⚠️ Проверка/добавление category в прайс-лист: {e}")
 
 
+def _ensure_pricelist_sort_order_column():
+    """Добавляет колонку sort_order в таблицу price_list_item, если её ещё нет."""
+    try:
+        with db.engine.connect() as conn:
+            backend = db.engine.url.get_backend_name()
+            if backend == "postgresql":
+                r = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'price_list_item' AND column_name = 'sort_order'
+                """))
+                if r.fetchone() is None:
+                    conn.execute(text("ALTER TABLE price_list_item ADD COLUMN sort_order INTEGER DEFAULT 0"))
+                    conn.commit()
+                    print("✅ Колонка price_list_item.sort_order добавлена")
+                else:
+                    conn.commit()
+            else:
+                r = conn.execute(text('PRAGMA table_info(price_list_item)'))
+                cols = [row[1] for row in r.fetchall()]
+                if "sort_order" not in cols:
+                    conn.execute(text("ALTER TABLE price_list_item ADD COLUMN sort_order INTEGER DEFAULT 0"))
+                    conn.commit()
+                    print("✅ Колонка price_list_item.sort_order добавлена")
+    except Exception as e:
+        print(f"⚠️ Проверка/добавление sort_order в прайс-лист: {e}")
+
+
 # Инициализация базы данных при запуске (с retry для Render PostgreSQL)
 def init_database():
     """Инициализация базы данных. Retry при SSL/сетевых ошибках (Render)."""
@@ -117,6 +144,8 @@ def init_database():
                 _ensure_counterparty_column()
                 # Добавляем колонку category в price_list_item, если её ещё нет
                 _ensure_pricelist_category_column()
+                # Добавляем колонку sort_order в price_list_item, если её ещё нет
+                _ensure_pricelist_sort_order_column()
 
                 # Проверяем количество пользователей
                 user_count = User.query.count()
@@ -721,7 +750,9 @@ def dashboard():
         customers = [row[0] for row in db.session.query(Order.client).distinct().order_by(Order.client).all()]
         counterparties = Counterparty.query.order_by(Counterparty.name).all()
         counterparties_json = [{"name": c.name, "id": c.id} for c in counterparties]
-        price_list = PriceListItem.query.order_by(PriceListItem.category, PriceListItem.name).all()
+        price_list = PriceListItem.query.order_by(
+            PriceListItem.category, PriceListItem.sort_order, PriceListItem.name
+        ).all()
 
     return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers, counterparties=counterparties, counterparties_json=counterparties_json, price_list=price_list, price_categories=PRICE_CATEGORIES)
 
@@ -777,11 +808,21 @@ def pricelist_add():
     except (TypeError, ValueError):
         flash("Укажите корректную цену", "error")
         return redirect(url_for("dashboard"))
+    category = request.form.get("pricelist_category") or None
+    # sort_order = max+1 в данной категории
+    from sqlalchemy import func
+    q = db.session.query(func.coalesce(func.max(PriceListItem.sort_order), -1))
+    if category:
+        q = q.filter(PriceListItem.category == category)
+    else:
+        q = q.filter(PriceListItem.category.is_(None))
+    max_order = q.scalar() or -1
     item = PriceListItem(
         name=name,
         price=price,
         unit=request.form.get("pricelist_unit") or None,
-        category=request.form.get("pricelist_category") or None,
+        category=category,
+        sort_order=max_order + 1,
         note=request.form.get("pricelist_note") or None,
     )
     db.session.add(item)
@@ -814,6 +855,24 @@ def pricelist_edit(item_id):
     db.session.commit()
     flash("Позиция прайс-листа изменена", "success")
     return redirect(url_for("dashboard"))
+
+
+@app.route("/pricelist/reorder", methods=["POST"])
+@login_required
+def pricelist_reorder():
+    """Изменение порядка позиций прайс-листа (только менеджер)."""
+    if current_user.role != "Менеджер":
+        return jsonify({"ok": False, "error": "Доступ запрещен"}), 403
+    data = request.get_json()
+    if not data or "item_ids" not in data:
+        return jsonify({"ok": False, "error": "Нужен массив item_ids"}), 400
+    item_ids = data.get("item_ids", [])
+    for idx, iid in enumerate(item_ids):
+        item = PriceListItem.query.get(iid)
+        if item:
+            item.sort_order = idx
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/counterparty/<int:counterparty_id>")

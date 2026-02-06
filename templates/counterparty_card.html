@@ -204,6 +204,7 @@
   <div class="container">
     <div class="cp-tabs">
       <button type="button" class="cp-tab active" onclick="showCpTab('card', this)">Карточка</button>
+      <button type="button" class="cp-tab" onclick="showCpTab('orders', this)">Текущие заказы</button>
       <button type="button" class="cp-tab" onclick="showCpTab('invoices', this)">Счета и оплаты</button>
     </div>
 
@@ -235,7 +236,9 @@
         <dt>Расчётный счёт</dt><dd>{{ counterparty.payment_account or '—' }}</dd>
       </dl>
     </div>
+    </div>
 
+    <div id="cp-tab-orders" class="cp-tab-content">
     <div class="card-block">
       <h3>Текущие заказы</h3>
       {% if orders %}

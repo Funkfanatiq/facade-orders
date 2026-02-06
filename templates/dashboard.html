@@ -335,7 +335,7 @@
       {% endif %}
       <tr data-order-id="{{ o.id }}" class="{{ base_class }} {% if highlight_class %}{{ highlight_class }}{% endif %}">
         <td>{{ o.order_id }}</td>
-        <td>{{ o.client }}</td>
+        <td>{% set cp_id = o.counterparty_id or cp_id_for_client.get(o.client) %}{% if cp_id %}<a href="{{ url_for('counterparty_card', counterparty_id=cp_id) }}" style="color:#1976D2;text-decoration:none;">{{ o.client }}</a>{% else %}{{ o.client }}{% endif %}</td>
         <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
         {% if current_user.role in ["Менеджер", "Производство"] %}
         <td><label class="switch"><input type="checkbox" name="milling" {% if o.milling %}checked{% endif %}><span class="slider"></span></label></td>

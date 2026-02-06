@@ -775,6 +775,12 @@ def dashboard():
     counterparties = []
     counterparties_json = []
     price_list = []
+    cp_id_for_client = {}
+    all_cp = Counterparty.query.all()
+    for c in all_cp:
+        cp_id_for_client[c.name] = c.id
+        if c.full_name:
+            cp_id_for_client[c.full_name] = c.id
     if current_user.role == "Менеджер":
         customers = [row[0] for row in db.session.query(Order.client).distinct().order_by(Order.client).all()]
         counterparties = Counterparty.query.order_by(Counterparty.name).all()
@@ -783,7 +789,7 @@ def dashboard():
             PriceListItem.category, PriceListItem.sort_order, PriceListItem.name
         ).all()
 
-    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers, counterparties=counterparties, counterparties_json=counterparties_json, price_list=price_list, price_categories=PRICE_CATEGORIES)
+    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers, counterparties=counterparties, counterparties_json=counterparties_json, price_list=price_list, price_categories=PRICE_CATEGORIES, cp_id_for_client=cp_id_for_client)
 
 
 @app.route("/counterparty/add", methods=["POST"])
@@ -819,6 +825,67 @@ def counterparty_add():
     db.session.commit()
     flash("Контрагент добавлен", "success")
     return redirect(url_for("dashboard"))
+
+
+@app.route("/counterparty/<int:counterparty_id>/edit", methods=["POST"])
+@login_required
+def counterparty_edit(counterparty_id):
+    """Редактирование контрагента (менеджер и админ)."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    c = Counterparty.query.get_or_404(counterparty_id)
+    name = (request.form.get("counterparty_name") or "").strip()
+    if not name:
+        flash("Укажите имя контрагента", "error")
+        return redirect(url_for("counterparty_card", counterparty_id=counterparty_id))
+    c.name = name
+    c.phone = request.form.get("counterparty_phone") or None
+    c.email = request.form.get("counterparty_email") or None
+    c.counterparty_type = request.form.get("counterparty_type") or None
+    c.inn = request.form.get("counterparty_inn") or None
+    c.full_name = request.form.get("counterparty_full_name") or None
+    c.legal_address = request.form.get("counterparty_legal_address") or None
+    c.fias_code = request.form.get("counterparty_fias_code") or None
+    c.kpp = request.form.get("counterparty_kpp") or None
+    c.ogrn = request.form.get("counterparty_ogrn") or None
+    c.okpo = request.form.get("counterparty_okpo") or None
+    c.bik = request.form.get("counterparty_bik") or None
+    c.bank = request.form.get("counterparty_bank") or None
+    c.address = request.form.get("counterparty_address") or None
+    c.corr_account = request.form.get("counterparty_corr_account") or None
+    c.payment_account = request.form.get("counterparty_payment_account") or None
+    db.session.commit()
+    flash("Контрагент изменён", "success")
+    return redirect(url_for("counterparty_card", counterparty_id=counterparty_id))
+
+
+@app.route("/payment/<int:payment_id>/delete", methods=["POST"])
+@login_required
+def payment_delete(payment_id):
+    """Удаление оплаты (менеджер и админ)."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return jsonify({"ok": False, "error": "Доступ запрещен"}), 403
+    p = Payment.query.get_or_404(payment_id)
+    cp_id = p.counterparty_id
+    db.session.delete(p)
+    db.session.commit()
+    return jsonify({"ok": True, "redirect": url_for("counterparty_card", counterparty_id=cp_id)})
+
+
+@app.route("/invoice/<int:invoice_id>/delete", methods=["POST"])
+@login_required
+def invoice_delete(invoice_id):
+    """Удаление счёта (менеджер и админ). Оплаты, привязанные к счёту, станут общими."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return jsonify({"ok": False, "error": "Доступ запрещен"}), 403
+    inv = Invoice.query.get_or_404(invoice_id)
+    cp_id = inv.counterparty_id
+    for p in inv.payments:
+        p.invoice_id = None
+    db.session.delete(inv)
+    db.session.commit()
+    return jsonify({"ok": True, "redirect": url_for("counterparty_card", counterparty_id=cp_id)})
 
 
 @app.route("/pricelist/add", methods=["POST"])
@@ -1102,7 +1169,6 @@ def invoice_pdf(invoice_id):
     top_data = [
         [seller_name, f"СЧЕТ № {esc(inv.invoice_number)} от {inv.invoice_date.strftime('%d.%m.%Y')}"],
         [seller_addr, ""],
-        ["Образец заполнения платежного поручения", ""],
         [f"ИНН {seller_inn} КПП {seller_kpp}", ""],
         ["Получатель", ""],
         [f"Сч. № {seller_account}", ""],

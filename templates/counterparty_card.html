@@ -95,8 +95,51 @@
 <body>
   <div class="top-bar">
     <h1>👤 {{ counterparty.name }}</h1>
-    <a href="{{ url_for('dashboard') }}" class="back-link">← Назад к панели заказов</a>
+    <div style="display:flex; gap:12px; align-items:center;">
+      {% if current_user.role in ["Менеджер", "Админ"] %}
+      <button type="button" class="btn-payment" onclick="openEditModal()">✏️ Редактировать</button>
+      {% endif %}
+      <a href="{{ url_for('dashboard') }}" class="back-link">← Назад к панели заказов</a>
+    </div>
   </div>
+
+  {% if current_user.role in ["Менеджер", "Админ"] %}
+  <div id="edit-modal-overlay" class="payment-modal-overlay">
+    <div class="payment-modal" style="max-width:520px;">
+      <h3>Редактировать контрагента</h3>
+      <form method="POST" action="{{ url_for('counterparty_edit', counterparty_id=counterparty.id) }}" class="counterparty-form" style="margin:0;">
+        <div class="counterparty-block" style="margin-bottom:12px;">
+          <input type="text" name="counterparty_name" value="{{ counterparty.name }}" placeholder="Имя" required style="width:100%; padding:10px; margin:4px 0;">
+          <input type="text" name="counterparty_phone" value="{{ counterparty.phone or '' }}" placeholder="Телефон" style="width:100%; padding:10px; margin:4px 0;">
+          <input type="text" name="counterparty_email" value="{{ counterparty.email or '' }}" placeholder="Электронный адрес" style="width:100%; padding:10px; margin:4px 0;">
+        </div>
+        <div class="counterparty-block" style="margin-bottom:12px;">
+          <select name="counterparty_type" style="width:100%; padding:10px; margin:4px 0;">
+            <option value="">— Тип —</option>
+            <option value="юр лицо" {{ 'selected' if counterparty.counterparty_type == 'юр лицо' else '' }}>Юр. лицо</option>
+            <option value="физ лицо" {{ 'selected' if counterparty.counterparty_type == 'физ лицо' else '' }}>Физ. лицо</option>
+          </select>
+          <input type="text" name="counterparty_inn" value="{{ counterparty.inn or '' }}" placeholder="ИНН" style="width:100%; padding:10px; margin:4px 0;">
+          <input type="text" name="counterparty_full_name" value="{{ counterparty.full_name or '' }}" placeholder="Полное наименование" style="width:100%; padding:10px; margin:4px 0;">
+          <input type="text" name="counterparty_legal_address" value="{{ counterparty.legal_address or '' }}" placeholder="Юридический адрес" style="width:100%; padding:10px; margin:4px 0;">
+          <input type="text" name="counterparty_fias_code" value="{{ counterparty.fias_code or '' }}" placeholder="Код ФИАС" style="width:100%; padding:10px; margin:4px 0;">
+          <input type="text" name="counterparty_kpp" value="{{ counterparty.kpp or '' }}" placeholder="КПП" style="width:100%; padding:10px; margin:4px 0;">
+          <input type="text" name="counterparty_ogrn" value="{{ counterparty.ogrn or '' }}" placeholder="ОГРН" style="width:100%; padding:10px; margin:4px 0;">
+          <input type="text" name="counterparty_okpo" value="{{ counterparty.okpo or '' }}" placeholder="ОКПО" style="width:100%; padding:10px; margin:4px 0;">
+          <input type="text" name="counterparty_bik" value="{{ counterparty.bik or '' }}" placeholder="БИК" style="width:100%; padding:10px; margin:4px 0;">
+          <input type="text" name="counterparty_bank" value="{{ counterparty.bank or '' }}" placeholder="Банк" style="width:100%; padding:10px; margin:4px 0;">
+          <input type="text" name="counterparty_address" value="{{ counterparty.address or '' }}" placeholder="Адрес" style="width:100%; padding:10px; margin:4px 0;">
+          <input type="text" name="counterparty_corr_account" value="{{ counterparty.corr_account or '' }}" placeholder="Корр. счёт" style="width:100%; padding:10px; margin:4px 0;">
+          <input type="text" name="counterparty_payment_account" value="{{ counterparty.payment_account or '' }}" placeholder="Расчётный счёт" style="width:100%; padding:10px; margin:4px 0;">
+        </div>
+        <div style="display:flex; gap:10px; margin-top:16px;">
+          <button type="submit" class="btn-create-invoice">Сохранить</button>
+          <button type="button" class="btn-cancel-invoice" onclick="closeEditModal()">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
 
   <div id="invoice-modal-overlay" class="invoice-modal-overlay">
     <div class="invoice-modal">
@@ -270,7 +313,12 @@
           <td class="amount">{{ "%.2f"|format(inv.total)|replace(".", ",") }} ₽</td>
           <td class="amount">{{ "%.2f"|format(inv.paid_amount)|replace(".", ",") }} ₽</td>
           <td class="amount {% if inv.balance > 0 %}balance-owed{% elif inv.balance < 0 %}balance-over{% else %}balance-zero{% endif %}">{{ "%.2f"|format(inv.balance)|replace(".", ",") }} ₽</td>
-          <td><a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" target="_blank">PDF</a></td>
+          <td>
+            <a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" target="_blank">PDF</a>
+            {% if current_user.role in ["Менеджер", "Админ"] %}
+            <button type="button" class="btn-remove-item" onclick="deleteInvoice({{ inv.id }})" title="Удалить">🗑️</button>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
         </tbody>
@@ -281,7 +329,7 @@
       {% if payments %}
       <h3 style="margin-top:20px;">История оплат</h3>
       <table class="invoices-table">
-        <thead><tr><th>Дата</th><th>Сумма</th><th>К счёту</th><th>Примечание</th></tr></thead>
+        <thead><tr><th>Дата</th><th>Сумма</th><th>К счёту</th><th>Примечание</th><th></th></tr></thead>
         <tbody>
         {% for p in payments %}
         <tr>
@@ -289,6 +337,7 @@
           <td class="amount">{{ "%.2f"|format(p.amount)|replace(".", ",") }} ₽</td>
           <td>{% if p.invoice %}№ {{ p.invoice.invoice_number }}{% else %}—{% endif %}</td>
           <td>{{ p.note or '—' }}</td>
+          <td>{% if current_user.role in ["Менеджер", "Админ"] %}<button type="button" class="btn-remove-item" onclick="deletePayment({{ p.id }})" title="Удалить">🗑️</button>{% endif %}</td>
         </tr>
         {% endfor %}
         </tbody>
@@ -308,6 +357,26 @@
       var content = document.getElementById('cp-tab-' + tabName);
       if (content) content.classList.add('active');
       if (btn) btn.classList.add('active');
+    }
+    function openEditModal() {
+      document.getElementById('edit-modal-overlay').classList.add('show');
+    }
+    function closeEditModal() {
+      document.getElementById('edit-modal-overlay').classList.remove('show');
+    }
+    function deleteInvoice(id) {
+      if (!confirm('Удалить счёт? Оплаты, привязанные к нему, станут общими.')) return;
+      fetch('/invoice/' + id + '/delete', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.ok) window.location.reload();
+        else alert(data.error || 'Ошибка');
+      }).catch(function() { alert('Ошибка'); });
+    }
+    function deletePayment(id) {
+      if (!confirm('Удалить оплату?')) return;
+      fetch('/payment/' + id + '/delete', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.ok) window.location.reload();
+        else alert(data.error || 'Ошибка');
+      }).catch(function() { alert('Ошибка'); });
     }
 
     function openInvoiceModal() {

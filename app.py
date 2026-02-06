@@ -1084,11 +1084,12 @@ def invoice_create(counterparty_id):
     if not items_data:
         return jsonify({"ok": False, "error": "Добавьте хотя бы одну позицию"}), 400
     order_ids = (data.get("order_ids") or "").strip()
-    inv = Invoice(counterparty_id=counterparty_id, invoice_number="", invoice_date=date.today(), order_ids=order_ids or None)
+    invoice_number = (data.get("invoice_number") or "").strip()
+    if not invoice_number:
+        return jsonify({"ok": False, "error": "Укажите номер счёта"}), 400
+    inv = Invoice(counterparty_id=counterparty_id, invoice_number=invoice_number, invoice_date=date.today(), order_ids=order_ids or None)
     db.session.add(inv)
     db.session.flush()
-    invoice_number = f"{inv.id:05d}"
-    inv.invoice_number = invoice_number
     for it in items_data:
         name = (it.get("name") or "").strip()
         if not name:
@@ -1104,7 +1105,7 @@ def invoice_create(counterparty_id):
         unit = (it.get("unit") or "").strip() or "шт"
         db.session.add(InvoiceItem(invoice_id=inv.id, name=name, unit=unit, quantity=qty, price=price, price_list_item_id=it.get("price_list_item_id")))
     db.session.commit()
-    return jsonify({"ok": True, "invoice_id": inv.id, "invoice_number": invoice_number})
+    return jsonify({"ok": True, "invoice_id": inv.id, "invoice_number": inv.invoice_number})
 
 
 def _amount_to_words_rub(amount):
@@ -1169,10 +1170,14 @@ def invoice_pdf(invoice_id):
     top_data = [
         [seller_name, f"СЧЕТ № {esc(inv.invoice_number)} от {inv.invoice_date.strftime('%d.%m.%Y')}"],
         [seller_addr, ""],
-        [f"ИНН {seller_inn} КПП {seller_kpp}", ""],
+        [f"ИНН {seller_inn}", ""],
+        [f"КПП {seller_kpp or ''}", ""],
         ["Получатель", ""],
+        [seller_name, ""],
         [f"Сч. № {seller_account}", ""],
-        [f"Банк получателя БИК {seller_bik}", ""],
+        ["Банк получателя", ""],
+        [seller_bank, ""],
+        [f"БИК {seller_bik}", ""],
         [f"Сч. № {seller_corr}", ""],
     ]
     top_table = Table(top_data, colWidths=[95*mm, 75*mm])
@@ -1190,16 +1195,16 @@ def invoice_pdf(invoice_id):
     flow.append(Spacer(1, 4*mm))
 
     payer_data = [
-        ["Плательщик", buyer_name],
-        ["Грузополучатель", buyer_name],
+        [f"Плательщик {buyer_name}"],
+        [f"Грузополучатель {buyer_name}"],
     ]
-    payer_table = Table(payer_data, colWidths=[35*mm, 135*mm])
+    payer_table = Table(payer_data, colWidths=[170*mm])
     payer_table.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
         ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (0, -1), 0),
-        ("RIGHTPADDING", (0, 0), (0, -1), 6),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
     ]))
     flow.append(payer_table)

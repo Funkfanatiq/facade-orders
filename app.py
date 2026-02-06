@@ -904,24 +904,41 @@ def pricelist_export_pdf():
         return redirect(url_for("dashboard"))
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
+    from xml.sax.saxutils import escape
+
+    def esc(s):
+        return escape(str(s or "—"))
 
     items = PriceListItem.query.order_by(
         PriceListItem.category, PriceListItem.sort_order, PriceListItem.name
     ).all()
     font_name = _get_pdf_font()
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=15*mm, bottomMargin=15*mm)
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=15*mm, bottomMargin=15*mm, leftMargin=15*mm, rightMargin=15*mm)
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle("Title", parent=styles["Heading1"], fontName=font_name)
     cat_style = ParagraphStyle("Cat", parent=styles["Heading2"], fontName=font_name, fontSize=12)
+    cell_style = ParagraphStyle("Cell", parent=styles["Normal"], fontName=font_name, fontSize=9)
     flow = []
     flow.append(Paragraph("Прайс-лист", title_style))
     flow.append(Spacer(1, 8*mm))
     flow.append(Paragraph(f"Дата: {date.today().strftime('%d.%m.%Y')}", cat_style))
     flow.append(Spacer(1, 6*mm))
+
+    # Ширины: № 12mm, Наименование 110mm (с переносом), Цена 28mm, Ед.изм 22mm = 172mm (умещается в A4)
+    col_widths = [12*mm, 110*mm, 28*mm, 22*mm]
+    tbl_style = [
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e0e0e0")),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+    ]
 
     grid_cats = [
         ("плоский", "Плоские"), ("фрезерованный", "Фрезерованные"), ("шпон", "Шпон"),
@@ -934,15 +951,10 @@ def pricelist_export_pdf():
             data = [["№", "Наименование", "Цена, ₽", "Ед. изм."]]
             for i, p in enumerate(cat_items, 1):
                 price_str = f"{p.price:.2f}".replace(".", ",") if p.price is not None else "—"
-                data.append([str(i), p.name or "—", price_str, p.unit or "—"])
-            t = Table(data, colWidths=[15*mm, 90*mm, 30*mm, 25*mm])
-            t.setStyle(TableStyle([
-                ("FONTNAME", (0, 0), (-1, -1), font_name),
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e0e0e0")),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ]))
+                name_para = Paragraph(esc(p.name), cell_style)
+                data.append([str(i), name_para, price_str, p.unit or "—"])
+            t = Table(data, colWidths=col_widths)
+            t.setStyle(TableStyle(tbl_style))
             flow.append(t)
             flow.append(Spacer(1, 6*mm))
     other_items = [p for p in items if p.category is None]
@@ -951,15 +963,10 @@ def pricelist_export_pdf():
         data = [["№", "Наименование", "Цена, ₽", "Ед. изм."]]
         for i, p in enumerate(other_items, 1):
             price_str = f"{p.price:.2f}".replace(".", ",") if p.price is not None else "—"
-            data.append([str(i), p.name or "—", price_str, p.unit or "—"])
-        t = Table(data, colWidths=[15*mm, 90*mm, 30*mm, 25*mm])
-        t.setStyle(TableStyle([
-            ("FONTNAME", (0, 0), (-1, -1), font_name),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e0e0e0")),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ]))
+            name_para = Paragraph(esc(p.name), cell_style)
+            data.append([str(i), name_para, price_str, p.unit or "—"])
+        t = Table(data, colWidths=col_widths)
+        t.setStyle(TableStyle(tbl_style))
         flow.append(t)
 
     doc.build(flow)

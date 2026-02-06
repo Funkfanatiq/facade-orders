@@ -1167,31 +1167,39 @@ def invoice_pdf(invoice_id):
 
     flow = []
 
-    top_data = [
-        [seller_name, f"СЧЕТ № {esc(inv.invoice_number)} от {inv.invoice_date.strftime('%d.%m.%Y')}"],
-        [seller_addr, ""],
-        [f"ИНН {seller_inn}", ""],
-        [f"КПП {seller_kpp or ''}", ""],
-        ["Получатель", ""],
-        [seller_name, ""],
-        [f"Сч. № {seller_account}", ""],
-        ["Банк получателя", ""],
-        [seller_bank, ""],
-        [f"БИК {seller_bik}", ""],
-        [f"Сч. № {seller_corr}", ""],
+    flow.append(Paragraph(seller_name, p_style))
+    flow.append(Paragraph(seller_addr, p_style))
+    flow.append(Spacer(1, 4*mm))
+
+    req_rows = [
+        ["Образец заполнения платежного поручения"],
+        [f"ИНН {seller_inn}"],
+        [f"КПП {seller_kpp or ''}"],
+        ["Получатель"],
+        [seller_name],
+        [f"Сч. № {seller_account}"],
+        ["Банк получателя"],
+        [seller_bank],
+        [f"БИК {seller_bik}"],
+        [f"Сч. № {seller_corr}"],
     ]
-    top_table = Table(top_data, colWidths=[95*mm, 75*mm])
-    top_table.setStyle(TableStyle([
+    req_table = Table(req_rows, colWidths=[170*mm])
+    req_table.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
         ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (1, 0), (1, 0), "CENTER"),
-        ("FONTSIZE", (1, 0), (1, 0), 12),
-        ("LEFTPADDING", (0, 0), (0, -1), 0),
-        ("RIGHTPADDING", (0, 0), (0, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.grey),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
     ]))
-    flow.append(top_table)
+    flow.append(req_table)
+    flow.append(Spacer(1, 6*mm))
+
+    from reportlab.lib.enums import TA_CENTER
+    invoice_title_style = ParagraphStyle("InvoiceTitle", parent=styles["Normal"], fontName=font_name, fontSize=12, alignment=TA_CENTER, fontWeight='bold')
+    flow.append(Paragraph(f"СЧЕТ № {esc(inv.invoice_number)} от {inv.invoice_date.strftime('%d.%m.%Y')}", invoice_title_style))
     flow.append(Spacer(1, 4*mm))
 
     payer_data = [
@@ -1248,9 +1256,8 @@ def invoice_pdf(invoice_id):
     flow.append(Spacer(1, 8*mm))
 
     sig_data = [
-        ["Главный бухгалтер ()", "Индивидуальный предприниматель"],
+        ["Главный бухгалтер ()", "Руководитель организации или иное уполномоченное лицо ()"],
         ["", seller_name],
-        ["", "Руководитель организации или иное уполномоченное лицо"],
     ]
     sig_table = Table(sig_data, colWidths=[85*mm, 85*mm])
     sig_table.setStyle(TableStyle([
@@ -1260,8 +1267,6 @@ def invoice_pdf(invoice_id):
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
     ]))
     flow.append(sig_table)
-    flow.append(Spacer(1, 4*mm))
-    flow.append(Paragraph(f"{seller_bank}", small_style))
     doc.build(flow)
     buf.seek(0)
     return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=f"invoice_{inv.invoice_number}.pdf")

@@ -29,14 +29,14 @@ class Config:
     SQLALCHEMY_DATABASE_URI = _make_database_uri()
 
     # Реквизиты организации (продавца) для счёта на оплату
-    COMPANY_NAME = os.environ.get('COMPANY_NAME') or 'Организация'
-    COMPANY_INN = os.environ.get('COMPANY_INN') or ''
+    COMPANY_NAME = os.environ.get('COMPANY_NAME') or 'Индивидуальный предприниматель Урядников Ярослав Юрьевич'
+    COMPANY_INN = os.environ.get('COMPANY_INN') or '781136464040'
     COMPANY_KPP = os.environ.get('COMPANY_KPP') or ''
-    COMPANY_ADDRESS = os.environ.get('COMPANY_ADDRESS') or ''
-    COMPANY_BANK = os.environ.get('COMPANY_BANK') or ''
-    COMPANY_BIK = os.environ.get('COMPANY_BIK') or ''
-    COMPANY_ACCOUNT = os.environ.get('COMPANY_ACCOUNT') or ''
-    COMPANY_CORR_ACCOUNT = os.environ.get('COMPANY_CORR_ACCOUNT') or ''
+    COMPANY_ADDRESS = os.environ.get('COMPANY_ADDRESS') or '190000, Россия, г Санкт-Петербург, тел.'
+    COMPANY_BANK = os.environ.get('COMPANY_BANK') or 'ФИЛИАЛ "САНКТ-ПЕТЕРБУРГСКИЙ" АО "АЛЬФА-БАНК", г Санкт-Петербург'
+    COMPANY_BIK = os.environ.get('COMPANY_BIK') or '044030786'
+    COMPANY_ACCOUNT = os.environ.get('COMPANY_ACCOUNT') or '40802810932390000451'
+    COMPANY_CORR_ACCOUNT = os.environ.get('COMPANY_CORR_ACCOUNT') or '30101810600000000786'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 

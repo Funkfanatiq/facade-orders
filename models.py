@@ -125,3 +125,43 @@ class PriceListItem(db.Model):
     note = db.Column(db.String(512), nullable=True)    # Примечание
     created_at = db.Column(db.DateTime, default=db.func.now())
 
+
+class Invoice(db.Model):
+    """Счёт на оплату."""
+    id = db.Column(db.Integer, primary_key=True)
+    counterparty_id = db.Column(db.Integer, db.ForeignKey('counterparty.id'), nullable=False)
+    invoice_number = db.Column(db.String(32), nullable=False)  # Номер счёта
+    invoice_date = db.Column(db.Date, nullable=False)
+    order_ids = db.Column(db.String(256), nullable=True)  # Номера заказов через запятую (для отображения "по каким заказам")
+    created_at = db.Column(db.DateTime, default=db.func.now())
+    counterparty = db.relationship('Counterparty', backref=db.backref('invoices', lazy=True))
+
+    @property
+    def total(self):
+        return sum(it.quantity * it.price for it in self.items)
+
+
+class Payment(db.Model):
+    """Оплата от контрагента."""
+    id = db.Column(db.Integer, primary_key=True)
+    counterparty_id = db.Column(db.Integer, db.ForeignKey('counterparty.id'), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    payment_date = db.Column(db.Date, nullable=False)
+    invoice_id = db.Column(db.Integer, db.ForeignKey('invoice.id'), nullable=True)  # Привязка к счёту (если указан)
+    note = db.Column(db.String(512), nullable=True)
+    created_at = db.Column(db.DateTime, default=db.func.now())
+    counterparty = db.relationship('Counterparty', backref=db.backref('payments', lazy=True))
+    invoice = db.relationship('Invoice', backref=db.backref('payments', lazy=True))
+
+
+class InvoiceItem(db.Model):
+    """Позиция счёта (из прайса или вручную)."""
+    id = db.Column(db.Integer, primary_key=True)
+    invoice_id = db.Column(db.Integer, db.ForeignKey('invoice.id'), nullable=False)
+    name = db.Column(db.String(512), nullable=False)   # Наименование
+    unit = db.Column(db.String(32), nullable=True)     # Ед. изм.
+    quantity = db.Column(db.Float, nullable=False, default=1.0)
+    price = db.Column(db.Float, nullable=False)       # Цена за ед.
+    price_list_item_id = db.Column(db.Integer, db.ForeignKey('price_list_item.id'), nullable=True)  # Ссылка на прайс или NULL для ручных
+    invoice = db.relationship('Invoice', backref=db.backref('items', lazy=True, cascade='all, delete-orphan'))
+

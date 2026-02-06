@@ -27,6 +27,16 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'super-secret-key-change-in-production'
 
     SQLALCHEMY_DATABASE_URI = _make_database_uri()
+
+    # Реквизиты организации (продавца) для счёта на оплату
+    COMPANY_NAME = os.environ.get('COMPANY_NAME') or 'Организация'
+    COMPANY_INN = os.environ.get('COMPANY_INN') or ''
+    COMPANY_KPP = os.environ.get('COMPANY_KPP') or ''
+    COMPANY_ADDRESS = os.environ.get('COMPANY_ADDRESS') or ''
+    COMPANY_BANK = os.environ.get('COMPANY_BANK') or ''
+    COMPANY_BIK = os.environ.get('COMPANY_BIK') or ''
+    COMPANY_ACCOUNT = os.environ.get('COMPANY_ACCOUNT') or ''
+    COMPANY_CORR_ACCOUNT = os.environ.get('COMPANY_CORR_ACCOUNT') or ''
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 

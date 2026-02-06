@@ -33,7 +33,7 @@ app.config.from_object('config.Config')
 
 
 # Импортируем модели после инициализации Flask
-from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty, PriceListItem, PRICE_CATEGORIES
+from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty, PriceListItem, Invoice, InvoiceItem, Payment, PRICE_CATEGORIES
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -126,6 +126,33 @@ def _ensure_pricelist_sort_order_column():
         print(f"⚠️ Проверка/добавление sort_order в прайс-лист: {e}")
 
 
+def _ensure_invoice_order_ids_column():
+    """Добавляет колонку order_ids в таблицу invoice, если её ещё нет."""
+    try:
+        with db.engine.connect() as conn:
+            backend = db.engine.url.get_backend_name()
+            if backend == "postgresql":
+                r = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'invoice' AND column_name = 'order_ids'
+                """))
+                if r.fetchone() is None:
+                    conn.execute(text("ALTER TABLE invoice ADD COLUMN order_ids VARCHAR(256)"))
+                    conn.commit()
+                    print("✅ Колонка invoice.order_ids добавлена")
+                else:
+                    conn.commit()
+            else:
+                r = conn.execute(text('PRAGMA table_info(invoice)'))
+                cols = [row[1] for row in r.fetchall()]
+                if "order_ids" not in cols:
+                    conn.execute(text("ALTER TABLE invoice ADD COLUMN order_ids VARCHAR(256)"))
+                    conn.commit()
+                    print("✅ Колонка invoice.order_ids добавлена")
+    except Exception as e:
+        print(f"⚠️ Проверка/добавление order_ids в invoice: {e}")
+
+
 # Инициализация базы данных при запуске (с retry для Render PostgreSQL)
 def init_database():
     """Инициализация базы данных. Retry при SSL/сетевых ошибках (Render)."""
@@ -147,6 +174,7 @@ def init_database():
                 _ensure_pricelist_category_column()
                 # Добавляем колонку sort_order в price_list_item, если её ещё нет
                 _ensure_pricelist_sort_order_column()
+                _ensure_invoice_order_ids_column()
 
                 # Проверяем количество пользователей
                 user_count = User.query.count()
@@ -975,6 +1003,162 @@ def pricelist_export_pdf():
     return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=filename)
 
 
+@app.route("/counterparty/<int:counterparty_id>/invoice/create", methods=["POST"])
+@login_required
+def invoice_create(counterparty_id):
+    """Создание счёта на оплату для контрагента."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return jsonify({"ok": False, "error": "Доступ запрещен"}), 403
+    cp = Counterparty.query.get_or_404(counterparty_id)
+    data = request.get_json()
+    if not data or "items" not in data:
+        return jsonify({"ok": False, "error": "Добавьте хотя бы одну позицию"}), 400
+    items_data = data.get("items", [])
+    if not items_data:
+        return jsonify({"ok": False, "error": "Добавьте хотя бы одну позицию"}), 400
+    order_ids = (data.get("order_ids") or "").strip()
+    inv = Invoice(counterparty_id=counterparty_id, invoice_number="", invoice_date=date.today(), order_ids=order_ids or None)
+    db.session.add(inv)
+    db.session.flush()
+    invoice_number = f"{inv.id:05d}"
+    inv.invoice_number = invoice_number
+    for it in items_data:
+        name = (it.get("name") or "").strip()
+        if not name:
+            continue
+        try:
+            qty = float(it.get("quantity") or 1)
+        except (TypeError, ValueError):
+            qty = 1.0
+        try:
+            price = float(it.get("price") or 0)
+        except (TypeError, ValueError):
+            price = 0.0
+        unit = (it.get("unit") or "").strip() or "шт"
+        db.session.add(InvoiceItem(invoice_id=inv.id, name=name, unit=unit, quantity=qty, price=price, price_list_item_id=it.get("price_list_item_id")))
+    db.session.commit()
+    return jsonify({"ok": True, "invoice_id": inv.id, "invoice_number": invoice_number})
+
+
+@app.route("/invoice/<int:invoice_id>/pdf")
+@login_required
+def invoice_pdf(invoice_id):
+    """Скачивание счёта на оплату в PDF."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    inv = Invoice.query.get_or_404(invoice_id)
+    cp = inv.counterparty
+    cfg = app.config
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from xml.sax.saxutils import escape
+    font_name = _get_pdf_font()
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=12*mm, bottomMargin=12*mm, leftMargin=15*mm, rightMargin=15*mm)
+    styles = getSampleStyleSheet()
+    p_style = ParagraphStyle("P", parent=styles["Normal"], fontName=font_name, fontSize=9)
+    cell_style = ParagraphStyle("Cell", parent=styles["Normal"], fontName=font_name, fontSize=9)
+
+    def esc(s):
+        return escape(str(s or ""))
+
+    flow = []
+    flow.append(Paragraph("СЧЁТ НА ОПЛАТУ № " + esc(inv.invoice_number), ParagraphStyle("H", parent=styles["Heading1"], fontName=font_name, fontSize=14)))
+    flow.append(Paragraph("от " + inv.invoice_date.strftime("%d.%m.%Y"), p_style))
+    flow.append(Spacer(1, 6*mm))
+
+    seller = f"""<b>Продавец:</b><br/>
+    {esc(cfg.get('COMPANY_NAME'))}<br/>
+    ИНН {esc(cfg.get('COMPANY_INN'))} КПП {esc(cfg.get('COMPANY_KPP'))}<br/>
+    {esc(cfg.get('COMPANY_ADDRESS'))}<br/>
+    Банк: {esc(cfg.get('COMPANY_BANK'))}<br/>
+    БИК {esc(cfg.get('COMPANY_BIK'))}<br/>
+    р/с {esc(cfg.get('COMPANY_ACCOUNT'))}<br/>
+    к/с {esc(cfg.get('COMPANY_CORR_ACCOUNT'))}"""
+    flow.append(Paragraph(seller, p_style))
+    flow.append(Spacer(1, 4*mm))
+
+    buyer_name = cp.full_name or cp.name
+    buyer = f"""<b>Покупатель:</b><br/>
+    {esc(buyer_name)}<br/>
+    ИНН {esc(cp.inn or '')} КПП {esc(cp.kpp or '')}<br/>
+    {esc(cp.legal_address or cp.address or '')}<br/>
+    Банк: {esc(cp.bank or '')}<br/>
+    БИК {esc(cp.bik or '')}<br/>
+    р/с {esc(cp.payment_account or '')}<br/>
+    к/с {esc(cp.corr_account or '')}"""
+    flow.append(Paragraph(buyer, p_style))
+    flow.append(Spacer(1, 6*mm))
+
+    data = [["№", "Наименование", "Ед. изм.", "Кол-во", "Цена, ₽", "Сумма, ₽"]]
+    total_sum = 0.0
+    for i, it in enumerate(inv.items, 1):
+        s = round(it.quantity * it.price, 2)
+        total_sum += s
+        price_str = f"{it.price:.2f}".replace(".", ",")
+        sum_str = f"{s:.2f}".replace(".", ",")
+        data.append([str(i), Paragraph(esc(it.name), cell_style), it.unit or "шт", f"{it.quantity:.2f}".replace(".", ","), price_str, sum_str])
+    total_str = f"{total_sum:.2f}".replace(".", ",")
+    data.append(["", "", "", "", "Итого:", total_str])
+
+    col_widths = [10*mm, 75*mm, 18*mm, 18*mm, 28*mm, 30*mm]
+    t = Table(data, colWidths=col_widths)
+    t.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e0e0e0")),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f5f5f5")),
+        ("FONTSIZE", (4, -1), (5, -1), 10),
+    ]))
+    flow.append(t)
+    flow.append(Spacer(1, 10*mm))
+    flow.append(Paragraph("Руководитель _____________________ / _____________________", p_style))
+    doc.build(flow)
+    buf.seek(0)
+    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=f"invoice_{inv.invoice_number}.pdf")
+
+
+@app.route("/counterparty/<int:counterparty_id>/payment/create", methods=["POST"])
+@login_required
+def payment_create(counterparty_id):
+    """Внесение оплаты от контрагента."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return jsonify({"ok": False, "error": "Доступ запрещен"}), 403
+    Counterparty.query.get_or_404(counterparty_id)
+    data = request.get_json()
+    if not data:
+        return jsonify({"ok": False, "error": "Укажите сумму"}), 400
+    try:
+        amount = float(data.get("amount") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Некорректная сумма"}), 400
+    if amount <= 0:
+        return jsonify({"ok": False, "error": "Сумма должна быть больше 0"}), 400
+    payment_date_str = data.get("payment_date") or date.today().isoformat()
+    try:
+        payment_date = datetime.strptime(payment_date_str[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        payment_date = date.today()
+    invoice_id = data.get("invoice_id")
+    if invoice_id is not None:
+        try:
+            invoice_id = int(invoice_id)
+        except (TypeError, ValueError):
+            invoice_id = None
+    p = Payment(counterparty_id=counterparty_id, amount=amount, payment_date=payment_date, invoice_id=invoice_id, note=(data.get("note") or "").strip() or None)
+    db.session.add(p)
+    db.session.commit()
+    return jsonify({"ok": True, "payment_id": p.id})
+
+
 @app.route("/counterparty/<int:counterparty_id>")
 @login_required
 def counterparty_card(counterparty_id):
@@ -986,7 +1170,18 @@ def counterparty_card(counterparty_id):
     orders = Order.query.filter(
         or_(Order.counterparty_id == counterparty_id, Order.client == cp.name)
     ).order_by(Order.due_date.asc()).all()
-    return render_template("counterparty_card.html", counterparty=cp, orders=orders, datetime=datetime)
+    price_list = PriceListItem.query.order_by(
+        PriceListItem.category, PriceListItem.sort_order, PriceListItem.name
+    ).all()
+    invoices = Invoice.query.filter(Invoice.counterparty_id == counterparty_id).order_by(Invoice.invoice_date.desc()).all()
+    payments = Payment.query.filter(Payment.counterparty_id == counterparty_id).order_by(Payment.payment_date.desc()).all()
+    total_invoiced = sum(inv.total for inv in invoices)
+    total_paid = sum(p.amount for p in payments)
+    balance = total_invoiced - total_paid
+    for inv in invoices:
+        inv.paid_amount = sum(p.amount for p in inv.payments)
+        inv.balance = inv.total - inv.paid_amount
+    return render_template("counterparty_card.html", counterparty=cp, orders=orders, price_list=price_list, invoices=invoices, payments=payments, total_invoiced=total_invoiced, total_paid=total_paid, balance=balance, datetime=datetime)
 
 
 def render_admin_dashboard():

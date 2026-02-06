@@ -16,6 +16,53 @@
     .top-bar h1 { margin: 0; font-size: 22px; font-weight: 600; }
     .back-link { color: #1976D2; text-decoration: none; font-weight: 500; }
     .back-link:hover { text-decoration: underline; }
+    .btn-invoice { padding: 10px 20px; background: #4CAF50; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 500; }
+    .btn-invoice:hover { background: #45A049; }
+    .invoice-modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 1000; justify-content: center; align-items: center; }
+    .invoice-modal-overlay.show { display: flex; }
+    .invoice-modal { background: #fff; border-radius: 12px; padding: 24px; max-width: 640px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+    .invoice-modal h3 { margin: 0 0 16px 0; font-size: 18px; }
+    .invoice-add-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: flex-end; }
+    .invoice-add-row input, .invoice-add-row select { padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+    .invoice-add-row input[type="number"] { width: 70px; }
+    .invoice-add-row .name-input { flex: 1; min-width: 180px; }
+    .invoice-add-row .unit-input { width: 70px; }
+    .invoice-add-row .price-input { width: 90px; }
+    .btn-add-item { padding: 8px 16px; background: #4CAF50; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    .btn-add-item:hover { background: #45A049; }
+    .invoice-items-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+    .invoice-items-table th, .invoice-items-table td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+    .invoice-items-table th { background: #f5f5f5; font-weight: 600; }
+    .btn-remove-item { background: #f44336; color: #fff; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .btn-remove-item:hover { background: #d32f2f; }
+    .invoice-modal-actions { display: flex; gap: 12px; margin-top: 20px; }
+    .invoice-modal-actions button { padding: 10px 24px; border-radius: 8px; font-size: 15px; cursor: pointer; border: none; }
+    .btn-create-invoice { background: #4CAF50; color: #fff; }
+    .btn-create-invoice:hover { background: #45A049; }
+    .btn-cancel-invoice { background: #9e9e9e; color: #fff; }
+    .btn-cancel-invoice:hover { background: #757575; }
+    .invoice-empty-msg { color: #999; padding: 12px 0; font-size: 14px; }
+    .invoices-list { margin-top: 12px; }
+    .invoices-list a { color: #1976D2; text-decoration: none; }
+    .invoices-list a:hover { text-decoration: underline; }
+    .balance-block { display: flex; gap: 24px; flex-wrap: wrap; padding: 16px; background: #f5f5f5; border-radius: 8px; margin-bottom: 16px; }
+    .balance-item { font-size: 15px; }
+    .balance-item strong { color: #333; }
+    .balance-item .label { color: #666; }
+    .balance-owed { color: #d32f2f; font-weight: 600; }
+    .balance-zero { color: #2e7d32; }
+    .balance-over { color: #1976d2; }
+    .btn-payment { padding: 8px 16px; background: #4CAF50; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    .btn-payment:hover { background: #45A049; }
+    .payment-modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 1000; justify-content: center; align-items: center; }
+    .payment-modal-overlay.show { display: flex; }
+    .payment-modal { background: #fff; border-radius: 12px; padding: 24px; max-width: 420px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+    .payment-modal h3 { margin: 0 0 16px 0; }
+    .payment-modal input, .payment-modal select { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; }
+    .invoices-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .invoices-table th, .invoices-table td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+    .invoices-table th { background: #f5f5f5; font-weight: 600; }
+    .invoices-table .amount { white-space: nowrap; }
     .container { max-width: 900px; margin: 0 auto; padding: 20px; }
     .card-block {
       background: #fff;
@@ -41,7 +88,69 @@
 <body>
   <div class="top-bar">
     <h1>👤 {{ counterparty.name }}</h1>
-    <a href="{{ url_for('dashboard') }}" class="back-link">← Назад к панели заказов</a>
+    <div style="display:flex; gap:12px; align-items:center;">
+      <button type="button" class="btn-invoice" onclick="openInvoiceModal()">📄 Выставить счёт</button>
+      <button type="button" class="btn-payment" onclick="openPaymentModal()">💰 Внести оплату</button>
+      <a href="{{ url_for('dashboard') }}" class="back-link">← Назад к панели заказов</a>
+    </div>
+  </div>
+
+  <div id="invoice-modal-overlay" class="invoice-modal-overlay">
+    <div class="invoice-modal">
+      <h3>Создать счёт на оплату</h3>
+      <p style="margin:0 0 8px 0; color:#666; font-size:14px;">Заказы (номера через запятую, необязательно):</p>
+      <input type="text" id="invoice-order-ids" placeholder="Напр. 001, 002" style="width:100%; margin-bottom:12px; padding:8px;">
+      <p style="margin:0 0 12px 0; color:#666; font-size:14px;">Добавьте позиции из прайса или введите вручную:</p>
+      <div class="invoice-add-row">
+        <select id="invoice-pricelist-select" style="min-width:200px;">
+          <option value="">— Выбрать из прайса —</option>
+          {% for p in price_list %}
+          <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-price="{{ p.price }}" data-unit="{{ p.unit or 'шт' }}">{{ p.name }} — {{ (p.price|round(2))|string|replace(".", ",") }} ₽/{{ p.unit or 'шт' }}</option>
+          {% endfor %}
+        </select>
+        <input type="number" id="invoice-qty-pricelist" placeholder="Кол-во" step="0.01" min="0.01" value="1" style="width:70px;">
+        <button type="button" class="btn-add-item" onclick="addFromPricelist()">Добавить</button>
+      </div>
+      <div class="invoice-add-row" style="border-top:1px solid #eee; padding-top:12px; margin-top:8px;">
+        <input type="text" id="invoice-manual-name" class="name-input" placeholder="Наименование (вручную)">
+        <input type="text" id="invoice-manual-unit" class="unit-input" placeholder="Ед." value="шт">
+        <input type="number" id="invoice-manual-qty" placeholder="Кол-во" step="0.01" min="0.01" value="1" style="width:70px;">
+        <input type="number" id="invoice-manual-price" class="price-input" placeholder="Цена" step="0.01" min="0">
+        <button type="button" class="btn-add-item" onclick="addManualItem()">Добавить вручную</button>
+      </div>
+      <table class="invoice-items-table" id="invoice-items-table">
+        <thead><tr><th>№</th><th>Наименование</th><th>Ед.</th><th>Кол-во</th><th>Цена, ₽</th><th>Сумма, ₽</th><th></th></tr></thead>
+        <tbody id="invoice-items-tbody"></tbody>
+      </table>
+      <p class="invoice-empty-msg" id="invoice-empty-msg">Позиций пока нет</p>
+      <div class="invoice-modal-actions">
+        <button type="button" class="btn-create-invoice" onclick="createInvoice()">Создать счёт</button>
+        <button type="button" class="btn-cancel-invoice" onclick="closeInvoiceModal()">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="payment-modal-overlay" class="payment-modal-overlay">
+    <div class="payment-modal">
+      <h3>Внести оплату</h3>
+      <label>Сумма, ₽</label>
+      <input type="number" id="payment-amount" step="0.01" min="0.01" placeholder="Сумма">
+      <label>Дата</label>
+      <input type="date" id="payment-date">
+      <label>К счёту (необязательно)</label>
+      <select id="payment-invoice">
+        <option value="">— Общая оплата —</option>
+        {% for inv in invoices %}
+        <option value="{{ inv.id }}">Счёт № {{ inv.invoice_number }} — {{ "%.2f"|format(inv.total)|replace(".", ",") }} ₽</option>
+        {% endfor %}
+      </select>
+      <label>Примечание</label>
+      <input type="text" id="payment-note" placeholder="Примечание">
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button type="button" class="btn-create-invoice" onclick="createPayment()">Сохранить</button>
+        <button type="button" class="btn-cancel-invoice" onclick="closePaymentModal()">Отмена</button>
+      </div>
+    </div>
   </div>
 
   <div class="container">
@@ -71,6 +180,52 @@
         <dt>Корр. счёт</dt><dd>{{ counterparty.corr_account or '—' }}</dd>
         <dt>Расчётный счёт</dt><dd>{{ counterparty.payment_account or '—' }}</dd>
       </dl>
+    </div>
+
+    <div class="card-block">
+      <h3>Баланс и расчёты</h3>
+      <div class="balance-block">
+        <div class="balance-item"><span class="label">Выставлено (счета):</span> <strong>{{ "%.2f"|format(total_invoiced)|replace(".", ",") }} ₽</strong></div>
+        <div class="balance-item"><span class="label">Оплачено:</span> <strong>{{ "%.2f"|format(total_paid)|replace(".", ",") }} ₽</strong></div>
+        <div class="balance-item"><span class="label">Остаток к оплате:</span> <strong class="{% if balance > 0 %}balance-owed{% elif balance < 0 %}balance-over{% else %}balance-zero{% endif %}">{{ "%.2f"|format(balance)|replace(".", ",") }} ₽</strong></div>
+      </div>
+      <h3>Счета</h3>
+      {% if invoices %}
+      <table class="invoices-table">
+        <thead><tr><th>№ счёта</th><th>Дата</th><th>Заказы</th><th>Сумма</th><th>Оплачено</th><th>Остаток</th><th></th></tr></thead>
+        <tbody>
+        {% for inv in invoices %}
+        <tr>
+          <td><a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" target="_blank">№ {{ inv.invoice_number }}</a></td>
+          <td>{{ inv.invoice_date.strftime('%d.%m.%Y') }}</td>
+          <td>{{ inv.order_ids or '—' }}</td>
+          <td class="amount">{{ "%.2f"|format(inv.total)|replace(".", ",") }} ₽</td>
+          <td class="amount">{{ "%.2f"|format(inv.paid_amount)|replace(".", ",") }} ₽</td>
+          <td class="amount {% if inv.balance > 0 %}balance-owed{% elif inv.balance < 0 %}balance-over{% else %}balance-zero{% endif %}">{{ "%.2f"|format(inv.balance)|replace(".", ",") }} ₽</td>
+          <td><a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" target="_blank">PDF</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="invoice-empty-msg">Счётов пока нет</p>
+      {% endif %}
+      {% if payments %}
+      <h3 style="margin-top:20px;">История оплат</h3>
+      <table class="invoices-table">
+        <thead><tr><th>Дата</th><th>Сумма</th><th>К счёту</th><th>Примечание</th></tr></thead>
+        <tbody>
+        {% for p in payments %}
+        <tr>
+          <td>{{ p.payment_date.strftime('%d.%m.%Y') }}</td>
+          <td class="amount">{{ "%.2f"|format(p.amount)|replace(".", ",") }} ₽</td>
+          <td>{% if p.invoice %}№ {{ p.invoice.invoice_number }}{% else %}—{% endif %}</td>
+          <td>{{ p.note or '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
     </div>
 
     <div class="card-block">
@@ -126,5 +281,120 @@
       {% endif %}
     </div>
   </div>
+
+  <script>
+    var invoiceItems = [];
+    var counterpartyId = {{ counterparty.id }};
+
+    function openInvoiceModal() {
+      invoiceItems = [];
+      document.getElementById('invoice-order-ids').value = '';
+      renderInvoiceItems();
+      document.getElementById('invoice-modal-overlay').classList.add('show');
+    }
+    function closeInvoiceModal() {
+      document.getElementById('invoice-modal-overlay').classList.remove('show');
+    }
+    function addFromPricelist() {
+      var sel = document.getElementById('invoice-pricelist-select');
+      var opt = sel.options[sel.selectedIndex];
+      if (!opt || !opt.value) return;
+      var qty = parseFloat(document.getElementById('invoice-qty-pricelist').value) || 1;
+      var name = opt.getAttribute('data-name');
+      var price = parseFloat(opt.getAttribute('data-price')) || 0;
+      var unit = opt.getAttribute('data-unit') || 'шт';
+      invoiceItems.push({ name: name, unit: unit, quantity: qty, price: price, price_list_item_id: parseInt(opt.value, 10) });
+      renderInvoiceItems();
+    }
+    function addManualItem() {
+      var name = document.getElementById('invoice-manual-name').value.trim();
+      if (!name) return;
+      var unit = document.getElementById('invoice-manual-unit').value.trim() || 'шт';
+      var qty = parseFloat(document.getElementById('invoice-manual-qty').value) || 1;
+      var price = parseFloat(document.getElementById('invoice-manual-price').value) || 0;
+      invoiceItems.push({ name: name, unit: unit, quantity: qty, price: price, price_list_item_id: null });
+      renderInvoiceItems();
+      document.getElementById('invoice-manual-name').value = '';
+      document.getElementById('invoice-manual-price').value = '';
+    }
+    function removeInvoiceItem(idx) {
+      invoiceItems.splice(idx, 1);
+      renderInvoiceItems();
+    }
+    function renderInvoiceItems() {
+      var tbody = document.getElementById('invoice-items-tbody');
+      var empty = document.getElementById('invoice-empty-msg');
+      tbody.innerHTML = '';
+      if (invoiceItems.length === 0) {
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+      invoiceItems.forEach(function(it, i) {
+        var sum = (it.quantity * it.price).toFixed(2).replace('.', ',');
+        var priceStr = (it.price || 0).toFixed(2).replace('.', ',');
+        var qtyStr = (it.quantity || 0).toString().replace('.', ',');
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + (i + 1) + '</td><td>' + (it.name || '') + '</td><td>' + (it.unit || 'шт') + '</td><td>' + qtyStr + '</td><td>' + priceStr + '</td><td>' + sum + '</td><td><button type="button" class="btn-remove-item" onclick="removeInvoiceItem(' + i + ')">Удалить</button></td>';
+        tbody.appendChild(tr);
+      });
+    }
+    function createInvoice() {
+      if (invoiceItems.length === 0) {
+        alert('Добавьте хотя бы одну позицию');
+        return;
+      }
+      var orderIds = document.getElementById('invoice-order-ids').value.trim();
+      fetch('/counterparty/' + counterpartyId + '/invoice/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: invoiceItems, order_ids: orderIds })
+      }).then(function(r) {
+        return r.json();
+      }).then(function(data) {
+        if (data.ok) {
+          closeInvoiceModal();
+          window.location.reload();
+        } else {
+          alert(data.error || 'Ошибка при создании счёта');
+        }
+      }).catch(function() {
+        alert('Ошибка при создании счёта');
+      });
+    }
+
+    function openPaymentModal() {
+      document.getElementById('payment-amount').value = '';
+      document.getElementById('payment-date').value = new Date().toISOString().slice(0, 10);
+      document.getElementById('payment-modal-overlay').classList.add('show');
+    }
+    function closePaymentModal() {
+      document.getElementById('payment-modal-overlay').classList.remove('show');
+    }
+    function createPayment() {
+      var amount = parseFloat(document.getElementById('payment-amount').value);
+      if (!amount || amount <= 0) {
+        alert('Укажите сумму');
+        return;
+      }
+      var paymentDate = document.getElementById('payment-date').value;
+      var invoiceId = document.getElementById('payment-invoice').value;
+      var note = document.getElementById('payment-note').value;
+      var body = { amount: amount, payment_date: paymentDate, note: note };
+      if (invoiceId) body.invoice_id = parseInt(invoiceId, 10);
+      fetch('/counterparty/' + counterpartyId + '/payment/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.ok) {
+          closePaymentModal();
+          window.location.reload();
+        } else {
+          alert(data.error || 'Ошибка');
+        }
+      }).catch(function() { alert('Ошибка'); });
+    }
+  </script>
 </body>
 </html>

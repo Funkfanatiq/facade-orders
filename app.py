@@ -284,8 +284,8 @@ def _set_setting(key, value):
 def get_orders_upload_folder():
     """Путь для сохранения файлов заказов."""
     path = _get_setting("orders_path")
-    if path and os.path.isdir(path):
-        return path
+    if path and path.strip():
+        return path.strip()
     return app.config["UPLOAD_FOLDER"]
 
 def get_invoices_save_path():

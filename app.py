@@ -828,7 +828,7 @@ def pricelist_add():
     db.session.add(item)
     db.session.commit()
     flash("Позиция прайс-листа добавлена", "success")
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("dashboard", tab="pricelist"))
 
 
 @app.route("/pricelist/<int:item_id>/edit", methods=["POST"])
@@ -854,7 +854,7 @@ def pricelist_edit(item_id):
     item.category = request.form.get("pricelist_category") or None
     db.session.commit()
     flash("Позиция прайс-листа изменена", "success")
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("dashboard", tab="pricelist"))
 
 
 @app.route("/pricelist/reorder", methods=["POST"])

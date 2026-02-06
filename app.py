@@ -1336,9 +1336,10 @@ def invoice_pdf(invoice_id):
     doc.build(flow)
     buf.seek(0)
     pdf_bytes = buf.read()
-    invoices_path = get_invoices_save_path()
-    if invoices_path and os.path.isdir(invoices_path):
+    invoices_path = (get_invoices_save_path() or "").strip()
+    if invoices_path:
         try:
+            os.makedirs(invoices_path, exist_ok=True)
             save_name = f"invoice_{inv.invoice_number}_{inv.invoice_date.strftime('%Y-%m-%d')}.pdf"
             save_full = os.path.join(invoices_path, save_name)
             with open(save_full, "wb") as out:

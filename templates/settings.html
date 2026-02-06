@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Настройки</title>
+  <style>
+    body { margin: 0; background: #f9f9f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #333; }
+    .top-bar {
+      background: #fff;
+      padding: 16px 20px;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .top-bar h1 { margin: 0; font-size: 22px; font-weight: 600; }
+    .back-link { color: #1976D2; text-decoration: none; font-weight: 500; }
+    .back-link:hover { text-decoration: underline; }
+    .container { max-width: 560px; margin: 0 auto; padding: 24px; }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      border: 1px solid #eee;
+    }
+    .card h3 { margin: 0 0 20px 0; font-size: 18px; color: #555; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; margin-bottom: 8px; font-weight: 500; color: #555; font-size: 14px; }
+    .form-group input { width: 100%; padding: 10px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
+    .form-group input:focus { outline: none; border-color: #4CAF50; }
+    .form-hint { font-size: 12px; color: #888; margin-top: 4px; }
+    .btn-save { padding: 12px 24px; background: #4CAF50; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; }
+    .btn-save:hover { background: #45A049; }
+    .flash { padding: 12px; margin-bottom: 16px; border-radius: 8px; }
+    .flash.success { background: #e8f5e9; color: #2e7d32; }
+    .flash.error { background: #ffebee; color: #c62828; }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <h1>⚙️ Настройки</h1>
+    <a href="{{ url_for('dashboard') }}" class="back-link">← Назад к панели</a>
+  </div>
+  <div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          <div class="flash {{ category or 'success' }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <div class="card">
+      <h3>Пути сохранения файлов</h3>
+      <form method="POST" action="{{ url_for('settings') }}">
+        <div class="form-group">
+          <label for="orders_path">Папка для файлов заказов</label>
+          <input type="text" id="orders_path" name="orders_path" value="{{ orders_path }}" placeholder="{{ default_upload }}">
+          <p class="form-hint">Оставьте пустым для использования папки по умолчанию ({{ default_upload }})</p>
+        </div>
+        <div class="form-group">
+          <label for="invoices_path">Папка для сохранения копий счетов (PDF)</label>
+          <input type="text" id="invoices_path" name="invoices_path" value="{{ invoices_path }}" placeholder="">
+          <p class="form-hint">При скачивании счёта его копия сохранится в эту папку. Оставьте пустым, чтобы не сохранять.</p>
+        </div>
+        <button type="submit" class="btn-save">Сохранить</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

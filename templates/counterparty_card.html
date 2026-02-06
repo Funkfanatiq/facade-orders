@@ -99,7 +99,10 @@
       {% if current_user.role in ["Менеджер", "Админ"] %}
       <button type="button" class="btn-payment" onclick="openEditModal()">✏️ Редактировать</button>
       {% endif %}
-      <a href="{{ url_for('dashboard') }}" class="back-link">← Назад к панели заказов</a>
+      <span style="display:flex; align-items:center; gap:12px;">
+        {% if current_user.role in ["Админ", "Менеджер", "Фрезеровка"] %}<a href="{{ url_for('settings') }}" title="Настройки" style="text-decoration:none; color:#666; font-size:18px;">⚙️</a>{% endif %}
+        <a href="{{ url_for('dashboard') }}" class="back-link">← Назад к панели заказов</a>
+      </span>
     </div>
   </div>
 

@@ -355,7 +355,7 @@
     <div class="top-bar">
         <h1>🏢 Панель администратора</h1>
         <div class="user-info">
-            <span>👤 {{ current_user.username }} ({{ current_user.role }})</span>
+            <span>👤 {{ current_user.username }} ({{ current_user.role }}) {% if current_user.role in ["Админ", "Менеджер", "Фрезеровка"] %}<a href="{{ url_for('settings') }}" title="Настройки" style="margin-left:6px; text-decoration:none; color:#666; font-size:18px;">⚙️</a>{% endif %}</span>
             <a href="{{ url_for('logout') }}" class="logout-btn">Выйти</a>
         </div>
     </div>

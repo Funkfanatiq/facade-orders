@@ -165,3 +165,10 @@ class InvoiceItem(db.Model):
     price_list_item_id = db.Column(db.Integer, db.ForeignKey('price_list_item.id'), nullable=True)  # Ссылка на прайс или NULL для ручных
     invoice = db.relationship('Invoice', backref=db.backref('items', lazy=True, cascade='all, delete-orphan'))
 
+
+class Setting(db.Model):
+    """Настройки приложения (ключ-значение)."""
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(64), unique=True, nullable=False)
+    value = db.Column(db.Text, nullable=True)
+

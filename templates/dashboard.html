@@ -248,7 +248,9 @@
     <h2>Панель заказов</h2>
     {% endif %}
     <div>
-      {{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a>
+      {{ current_user.username }} ({{ current_user.role }})
+      {% if current_user.role in ["Админ", "Менеджер", "Фрезеровка"] %}<a href="{{ url_for('settings') }}" title="Настройки" style="margin-left:8px; text-decoration:none; color:#666; font-size:18px;">⚙️</a>{% endif %}
+      | <a href="{{ url_for('logout') }}">Выход</a>
     </div>
   </div>
 

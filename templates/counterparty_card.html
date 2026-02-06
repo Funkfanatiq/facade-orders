@@ -83,16 +83,19 @@
     .row-warning { background-color: #fff8e1; }
     .row-danger { background-color: #ffebee; }
     .empty-orders { color: #666; padding: 20px; text-align: center; background: #fff; border-radius: 8px; border: 1px dashed #ddd; }
+    .cp-tabs { display: flex; background: #fff; border-radius: 8px; padding: 4px; gap: 4px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .cp-tab { padding: 10px 20px; cursor: pointer; border-radius: 6px; font-weight: 500; border: none; background: #f2f2f2; color: #555; font-size: 15px; }
+    .cp-tab:hover { background: #e8e8e8; color: #333; }
+    .cp-tab.active { background: #757575; color: #fff; }
+    .cp-tab-content { display: none; }
+    .cp-tab-content.active { display: block; }
+    .cp-buttons-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
   </style>
 </head>
 <body>
   <div class="top-bar">
     <h1>👤 {{ counterparty.name }}</h1>
-    <div style="display:flex; gap:12px; align-items:center;">
-      <button type="button" class="btn-invoice" onclick="openInvoiceModal()">📄 Выставить счёт</button>
-      <button type="button" class="btn-payment" onclick="openPaymentModal()">💰 Внести оплату</button>
-      <a href="{{ url_for('dashboard') }}" class="back-link">← Назад к панели заказов</a>
-    </div>
+    <a href="{{ url_for('dashboard') }}" class="back-link">← Назад к панели заказов</a>
   </div>
 
   <div id="invoice-modal-overlay" class="invoice-modal-overlay">
@@ -154,6 +157,12 @@
   </div>
 
   <div class="container">
+    <div class="cp-tabs">
+      <button type="button" class="cp-tab active" onclick="showCpTab('card', this)">Карточка</button>
+      <button type="button" class="cp-tab" onclick="showCpTab('invoices', this)">Счета и оплаты</button>
+    </div>
+
+    <div id="cp-tab-card" class="cp-tab-content active">
     <div class="card-block">
       <h3>О контрагенте</h3>
       <dl>
@@ -180,52 +189,6 @@
         <dt>Корр. счёт</dt><dd>{{ counterparty.corr_account or '—' }}</dd>
         <dt>Расчётный счёт</dt><dd>{{ counterparty.payment_account or '—' }}</dd>
       </dl>
-    </div>
-
-    <div class="card-block">
-      <h3>Баланс и расчёты</h3>
-      <div class="balance-block">
-        <div class="balance-item"><span class="label">Выставлено (счета):</span> <strong>{{ "%.2f"|format(total_invoiced)|replace(".", ",") }} ₽</strong></div>
-        <div class="balance-item"><span class="label">Оплачено:</span> <strong>{{ "%.2f"|format(total_paid)|replace(".", ",") }} ₽</strong></div>
-        <div class="balance-item"><span class="label">Остаток к оплате:</span> <strong class="{% if balance > 0 %}balance-owed{% elif balance < 0 %}balance-over{% else %}balance-zero{% endif %}">{{ "%.2f"|format(balance)|replace(".", ",") }} ₽</strong></div>
-      </div>
-      <h3>Счета</h3>
-      {% if invoices %}
-      <table class="invoices-table">
-        <thead><tr><th>№ счёта</th><th>Дата</th><th>Заказы</th><th>Сумма</th><th>Оплачено</th><th>Остаток</th><th></th></tr></thead>
-        <tbody>
-        {% for inv in invoices %}
-        <tr>
-          <td><a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" target="_blank">№ {{ inv.invoice_number }}</a></td>
-          <td>{{ inv.invoice_date.strftime('%d.%m.%Y') }}</td>
-          <td>{{ inv.order_ids or '—' }}</td>
-          <td class="amount">{{ "%.2f"|format(inv.total)|replace(".", ",") }} ₽</td>
-          <td class="amount">{{ "%.2f"|format(inv.paid_amount)|replace(".", ",") }} ₽</td>
-          <td class="amount {% if inv.balance > 0 %}balance-owed{% elif inv.balance < 0 %}balance-over{% else %}balance-zero{% endif %}">{{ "%.2f"|format(inv.balance)|replace(".", ",") }} ₽</td>
-          <td><a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" target="_blank">PDF</a></td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <p class="invoice-empty-msg">Счётов пока нет</p>
-      {% endif %}
-      {% if payments %}
-      <h3 style="margin-top:20px;">История оплат</h3>
-      <table class="invoices-table">
-        <thead><tr><th>Дата</th><th>Сумма</th><th>К счёту</th><th>Примечание</th></tr></thead>
-        <tbody>
-        {% for p in payments %}
-        <tr>
-          <td>{{ p.payment_date.strftime('%d.%m.%Y') }}</td>
-          <td class="amount">{{ "%.2f"|format(p.amount)|replace(".", ",") }} ₽</td>
-          <td>{% if p.invoice %}№ {{ p.invoice.invoice_number }}{% else %}—{% endif %}</td>
-          <td>{{ p.note or '—' }}</td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      {% endif %}
     </div>
 
     <div class="card-block">
@@ -280,11 +243,72 @@
       <p class="empty-orders">Нет заказов по этому контрагенту.</p>
       {% endif %}
     </div>
+    </div>
+
+    <div id="cp-tab-invoices" class="cp-tab-content">
+    <div class="card-block">
+    <div class="cp-buttons-row">
+      <button type="button" class="btn-invoice" onclick="openInvoiceModal()">📄 Выставить счёт</button>
+      <button type="button" class="btn-payment" onclick="openPaymentModal()">💰 Внести оплату</button>
+    </div>
+      <h3>Баланс и расчёты</h3>
+      <div class="balance-block">
+        <div class="balance-item"><span class="label">Выставлено (счета):</span> <strong>{{ "%.2f"|format(total_invoiced)|replace(".", ",") }} ₽</strong></div>
+        <div class="balance-item"><span class="label">Оплачено:</span> <strong>{{ "%.2f"|format(total_paid)|replace(".", ",") }} ₽</strong></div>
+        <div class="balance-item"><span class="label">Остаток к оплате:</span> <strong class="{% if balance > 0 %}balance-owed{% elif balance < 0 %}balance-over{% else %}balance-zero{% endif %}">{{ "%.2f"|format(balance)|replace(".", ",") }} ₽</strong></div>
+      </div>
+      <h3>Счета</h3>
+      {% if invoices %}
+      <table class="invoices-table">
+        <thead><tr><th>№ счёта</th><th>Дата</th><th>Заказы</th><th>Сумма</th><th>Оплачено</th><th>Остаток</th><th></th></tr></thead>
+        <tbody>
+        {% for inv in invoices %}
+        <tr>
+          <td><a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" target="_blank">№ {{ inv.invoice_number }}</a></td>
+          <td>{{ inv.invoice_date.strftime('%d.%m.%Y') }}</td>
+          <td>{{ inv.order_ids or '—' }}</td>
+          <td class="amount">{{ "%.2f"|format(inv.total)|replace(".", ",") }} ₽</td>
+          <td class="amount">{{ "%.2f"|format(inv.paid_amount)|replace(".", ",") }} ₽</td>
+          <td class="amount {% if inv.balance > 0 %}balance-owed{% elif inv.balance < 0 %}balance-over{% else %}balance-zero{% endif %}">{{ "%.2f"|format(inv.balance)|replace(".", ",") }} ₽</td>
+          <td><a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" target="_blank">PDF</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="invoice-empty-msg">Счётов пока нет</p>
+      {% endif %}
+      {% if payments %}
+      <h3 style="margin-top:20px;">История оплат</h3>
+      <table class="invoices-table">
+        <thead><tr><th>Дата</th><th>Сумма</th><th>К счёту</th><th>Примечание</th></tr></thead>
+        <tbody>
+        {% for p in payments %}
+        <tr>
+          <td>{{ p.payment_date.strftime('%d.%m.%Y') }}</td>
+          <td class="amount">{{ "%.2f"|format(p.amount)|replace(".", ",") }} ₽</td>
+          <td>{% if p.invoice %}№ {{ p.invoice.invoice_number }}{% else %}—{% endif %}</td>
+          <td>{{ p.note or '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+    </div>
   </div>
 
   <script>
     var invoiceItems = [];
     var counterpartyId = {{ counterparty.id }};
+
+    function showCpTab(tabName, btn) {
+      document.querySelectorAll('.cp-tab-content').forEach(function(el) { el.classList.remove('active'); });
+      document.querySelectorAll('.cp-tab').forEach(function(el) { el.classList.remove('active'); });
+      var content = document.getElementById('cp-tab-' + tabName);
+      if (content) content.classList.add('active');
+      if (btn) btn.classList.add('active');
+    }
 
     function openInvoiceModal() {
       invoiceItems = [];

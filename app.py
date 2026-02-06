@@ -1040,10 +1040,27 @@ def invoice_create(counterparty_id):
     return jsonify({"ok": True, "invoice_id": inv.id, "invoice_number": invoice_number})
 
 
+def _amount_to_words_rub(amount):
+    """Сумма прописью: 75661.50 -> Семьдесят пять тысяч шестьсот шестьдесят один рубль 50 копеек."""
+    try:
+        from num2words import num2words
+        s = num2words(amount, lang='ru', to='currency', currency='RUB')
+        return s[0].upper() + s[1:] if s else f"{amount:.2f}".replace(".", ",")
+    except Exception:
+        try:
+            rub = int(amount)
+            kop = round((amount - rub) * 100)
+            w = num2words(rub, lang='ru')
+            w = w[0].upper() + w[1:] if w else str(rub)
+            return f"{w} руб. {kop:02d} коп."
+        except Exception:
+            return f"{amount:.2f}".replace(".", ",")
+
+
 @app.route("/invoice/<int:invoice_id>/pdf")
 @login_required
 def invoice_pdf(invoice_id):
-    """Скачивание счёта-фактуры в PDF (форма по Постановлению Правительства РФ №1137)."""
+    """Скачивание счёта в PDF (форма как в образце)."""
     if current_user.role not in ["Менеджер", "Админ"]:
         flash("Доступ запрещен", "error")
         return redirect(url_for("dashboard"))
@@ -1058,11 +1075,11 @@ def invoice_pdf(invoice_id):
     from xml.sax.saxutils import escape
     font_name = _get_pdf_font()
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=10*mm, bottomMargin=10*mm, leftMargin=12*mm, rightMargin=12*mm)
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=12*mm, bottomMargin=12*mm, leftMargin=12*mm, rightMargin=12*mm)
     styles = getSampleStyleSheet()
-    p_style = ParagraphStyle("P", parent=styles["Normal"], fontName=font_name, fontSize=8)
-    cell_style = ParagraphStyle("Cell", parent=styles["Normal"], fontName=font_name, fontSize=8)
-    small_style = ParagraphStyle("Small", parent=styles["Normal"], fontName=font_name, fontSize=7)
+    p_style = ParagraphStyle("P", parent=styles["Normal"], fontName=font_name, fontSize=9)
+    cell_style = ParagraphStyle("Cell", parent=styles["Normal"], fontName=font_name, fontSize=9)
+    small_style = ParagraphStyle("Small", parent=styles["Normal"], fontName=font_name, fontSize=8)
 
     def esc(s):
         return escape(str(s or ""))
@@ -1070,79 +1087,110 @@ def invoice_pdf(invoice_id):
     def fmt_num(x):
         return f"{x:.2f}".replace(".", ",")
 
-    flow = []
-    flow.append(Paragraph("ПРИЛОЖЕНИЕ № 1", small_style))
-    flow.append(Paragraph("к постановлению Правительства РФ от 26.12.2011 г. № 1137", small_style))
-    flow.append(Spacer(1, 2*mm))
-    date_str = inv.invoice_date.strftime("%d.%m.%Y")
-    flow.append(Paragraph(f"СЧЕТ-ФАКТУРА № {esc(inv.invoice_number)} от {date_str}", ParagraphStyle("H", parent=styles["Heading1"], fontName=font_name, fontSize=11)))
-    flow.append(Paragraph("ИСПРАВЛЕНИЕ № --- от ---", p_style))
-    flow.append(Spacer(1, 3*mm))
-
     seller_name = esc(cfg.get('COMPANY_NAME'))
     seller_addr = esc(cfg.get('COMPANY_ADDRESS'))
     seller_inn = esc(cfg.get('COMPANY_INN'))
     seller_kpp = esc(cfg.get('COMPANY_KPP'))
-    flow.append(Paragraph(f"<b>Продавец:</b> {seller_name}", p_style))
-    flow.append(Paragraph(f"Адрес: {seller_addr}", p_style))
-    flow.append(Paragraph(f"ИНН/КПП продавца: {seller_inn}/{seller_kpp}", p_style))
-    flow.append(Paragraph("Грузоотправитель и его адрес: Он же", p_style))
+    seller_bank = esc(cfg.get('COMPANY_BANK'))
+    seller_bik = esc(cfg.get('COMPANY_BIK'))
+    seller_account = esc(cfg.get('COMPANY_ACCOUNT'))
+    seller_corr = esc(cfg.get('COMPANY_CORR_ACCOUNT'))
     buyer_name = esc(cp.full_name or cp.name)
-    buyer_addr = esc(cp.legal_address or cp.address or "")
-    flow.append(Paragraph(f"Грузополучатель и его адрес: {buyer_name}, Адрес: {buyer_addr}", p_style))
-    if inv.order_ids:
-        flow.append(Paragraph(f"Документ об отгрузке: № {esc(inv.order_ids)}", p_style))
-    flow.append(Spacer(1, 2*mm))
 
-    flow.append(Paragraph(f"<b>Покупатель:</b> {buyer_name}", p_style))
-    flow.append(Paragraph(f"Адрес: {buyer_addr}", p_style))
-    flow.append(Paragraph(f"ИНН/КПП покупателя: {esc(cp.inn or '')}/{esc(cp.kpp or '')}", p_style))
-    flow.append(Paragraph("Валюта: наименование, код: Российский рубль, 643", p_style))
+    flow = []
+
+    top_data = [
+        [seller_name, f"СЧЕТ № {esc(inv.invoice_number)} от {inv.invoice_date.strftime('%d.%m.%Y')}"],
+        [seller_addr, ""],
+        ["Образец заполнения платежного поручения", ""],
+        [f"ИНН {seller_inn} КПП {seller_kpp}", ""],
+        ["Получатель", ""],
+        [f"Сч. № {seller_account}", ""],
+        [f"Банк получателя БИК {seller_bik}", ""],
+        [f"Сч. № {seller_corr}", ""],
+    ]
+    top_table = Table(top_data, colWidths=[95*mm, 75*mm])
+    top_table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (1, 0), (1, 0), "CENTER"),
+        ("FONTSIZE", (1, 0), (1, 0), 12),
+        ("LEFTPADDING", (0, 0), (0, -1), 0),
+        ("RIGHTPADDING", (0, 0), (0, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+    ]))
+    flow.append(top_table)
     flow.append(Spacer(1, 4*mm))
 
-    headers = ["№ п/п", "Наименование товара (описание работ, услуг)", "Код", "Ед. изм.", "Кол-во", "Цена за ед.", "Стоимость без налога", "В т.ч. акциз", "Налоговая ставка", "Сумма налога", "Стоимость с налогом", "Страна"]
-    col_widths = [8*mm, 45*mm, 8*mm, 12*mm, 12*mm, 14*mm, 18*mm, 12*mm, 12*mm, 12*mm, 18*mm, 12*mm]
+    payer_data = [
+        ["Плательщик", buyer_name],
+        ["Грузополучатель", buyer_name],
+    ]
+    payer_table = Table(payer_data, colWidths=[35*mm, 135*mm])
+    payer_table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (0, -1), 0),
+        ("RIGHTPADDING", (0, 0), (0, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    flow.append(payer_table)
+    flow.append(Spacer(1, 4*mm))
+
+    headers = ["№", "Наименование товара", "Цена", "Кол-во", "Ед. изм.", "Сумма"]
+    col_widths = [12*mm, 80*mm, 22*mm, 18*mm, 18*mm, 30*mm]
     data = [headers]
     total_sum = 0.0
     for i, it in enumerate(inv.items, 1):
         s = round(it.quantity * it.price, 2)
         total_sum += s
-        row = [
+        data.append([
             str(i),
             Paragraph(esc(it.name), cell_style),
-            "---",
-            it.unit or "шт",
-            fmt_num(it.quantity),
             fmt_num(it.price),
+            fmt_num(it.quantity),
+            it.unit or "шт",
             fmt_num(s),
-            "Без акциза",
-            "—",
-            "—",
-            fmt_num(s),
-            "---"
-        ]
-        data.append(row)
-    total_str = fmt_num(total_sum)
-    data.append(["", "Всего к оплате", "", "", "", "", total_str, "Х", "", "", total_str, ""])
-
+        ])
     t = Table(data, colWidths=col_widths)
     t.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
-        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8e8e8")),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-        ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f0f0f0")),
-        ("FONTSIZE", (0, -1), (-1, -1), 8),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
     ]))
     flow.append(t)
-    flow.append(Spacer(1, 8*mm))
-    flow.append(Paragraph("Руководитель организации или иное уполномоченное лицо _____________________ (подпись) _____________________ (ф.и.о.)", p_style))
-    flow.append(Paragraph("Главный бухгалтер или иное уполномоченное лицо _____________________ (подпись) _____________________ (ф.и.о.)", p_style))
     flow.append(Spacer(1, 4*mm))
-    flow.append(Paragraph("Реквизиты продавца для оплаты: Банк " + esc(cfg.get('COMPANY_BANK')) + ", БИК " + esc(cfg.get('COMPANY_BIK')) + ", р/с " + esc(cfg.get('COMPANY_ACCOUNT')) + ", к/с " + esc(cfg.get('COMPANY_CORR_ACCOUNT')), small_style))
+
+    total_str = fmt_num(total_sum)
+    flow.append(Paragraph(f"Итого: {total_str}", p_style))
+    flow.append(Paragraph("В том числе НДС: 0,00", p_style))
+    amount_words = _amount_to_words_rub(total_sum)
+    flow.append(Paragraph(f"Итого к оплате: {amount_words}", p_style))
+    flow.append(Spacer(1, 8*mm))
+
+    sig_data = [
+        ["Главный бухгалтер ()", "Индивидуальный предприниматель"],
+        ["", seller_name],
+        ["", "Руководитель организации или иное уполномоченное лицо"],
+    ]
+    sig_table = Table(sig_data, colWidths=[85*mm, 85*mm])
+    sig_table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+    ]))
+    flow.append(sig_table)
+    flow.append(Spacer(1, 4*mm))
+    flow.append(Paragraph(f"{seller_bank}", small_style))
     doc.build(flow)
     buf.seek(0)
     return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=f"invoice_{inv.invoice_number}.pdf")

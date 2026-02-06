@@ -433,7 +433,10 @@
     <div class="form-box">
       <h3>💰 Прайс лист</h3>
       <input type="text" id="pricelist-search" placeholder="Поиск по наименованию или ед. изм...." style="width:100%; max-width:320px; margin-bottom:12px; padding:8px;">
-      <button type="button" class="btn-add-counterparty" onclick="openPricelistFormForAdd()">➕ Добавить позицию</button>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+        <button type="button" class="btn-add-counterparty" onclick="openPricelistFormForAdd()">➕ Добавить позицию</button>
+        <a href="{{ url_for('pricelist_export_pdf') }}" class="btn-add-counterparty" style="text-decoration:none; display:inline-flex; align-items:center; width:auto;">📄 Скачать PDF</a>
+      </div>
       <div id="pricelist-form-wrap" class="counterparty-form-wrap" style="display: none;">
         <form id="pricelist-form" method="POST" action="{{ url_for('pricelist_add') }}" class="counterparty-form">
           <div class="counterparty-block">

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, request, flash, session, jsonify, send_from_directory 
+from flask import Flask, render_template, redirect, url_for, request, flash, session, jsonify, send_from_directory, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone, date
 from calendar import monthrange
 import os
 import time
+import io
 from dotenv import load_dotenv
 
 # Константы приложения
@@ -873,6 +874,98 @@ def pricelist_reorder():
             item.sort_order = idx
     db.session.commit()
     return jsonify({"ok": True})
+
+
+def _get_pdf_font():
+    """Регистрирует шрифт с поддержкой кириллицы и возвращает его имя."""
+    try:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        font_paths = [
+            "C:/Windows/Fonts/arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        ]
+        for path in font_paths:
+            if os.path.isfile(path):
+                pdfmetrics.registerFont(TTFont("PricelistFont", path))
+                return "PricelistFont"
+    except Exception:
+        pass
+    return "Helvetica"
+
+
+@app.route("/pricelist/export/pdf")
+@login_required
+def pricelist_export_pdf():
+    """Выгрузка прайс-листа в PDF (менеджер и админ)."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+
+    items = PriceListItem.query.order_by(
+        PriceListItem.category, PriceListItem.sort_order, PriceListItem.name
+    ).all()
+    font_name = _get_pdf_font()
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=15*mm, bottomMargin=15*mm)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("Title", parent=styles["Heading1"], fontName=font_name)
+    cat_style = ParagraphStyle("Cat", parent=styles["Heading2"], fontName=font_name, fontSize=12)
+    flow = []
+    flow.append(Paragraph("Прайс-лист", title_style))
+    flow.append(Spacer(1, 8*mm))
+    flow.append(Paragraph(f"Дата: {date.today().strftime('%d.%m.%Y')}", cat_style))
+    flow.append(Spacer(1, 6*mm))
+
+    grid_cats = [
+        ("плоский", "Плоские"), ("фрезерованный", "Фрезерованные"), ("шпон", "Шпон"),
+        ("услуги по покраске", "Услуги по покраске"), ("Доп услуги", "Доп услуги")
+    ]
+    for cat, label in grid_cats:
+        cat_items = [p for p in items if p.category == cat]
+        if cat_items:
+            flow.append(Paragraph(label, cat_style))
+            data = [["№", "Наименование", "Цена, ₽", "Ед. изм."]]
+            for i, p in enumerate(cat_items, 1):
+                price_str = f"{p.price:.2f}".replace(".", ",") if p.price is not None else "—"
+                data.append([str(i), p.name or "—", price_str, p.unit or "—"])
+            t = Table(data, colWidths=[15*mm, 90*mm, 30*mm, 25*mm])
+            t.setStyle(TableStyle([
+                ("FONTNAME", (0, 0), (-1, -1), font_name),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e0e0e0")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]))
+            flow.append(t)
+            flow.append(Spacer(1, 6*mm))
+    other_items = [p for p in items if p.category is None]
+    if other_items:
+        flow.append(Paragraph("Прочее", cat_style))
+        data = [["№", "Наименование", "Цена, ₽", "Ед. изм."]]
+        for i, p in enumerate(other_items, 1):
+            price_str = f"{p.price:.2f}".replace(".", ",") if p.price is not None else "—"
+            data.append([str(i), p.name or "—", price_str, p.unit or "—"])
+        t = Table(data, colWidths=[15*mm, 90*mm, 30*mm, 25*mm])
+        t.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), font_name),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e0e0e0")),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        flow.append(t)
+
+    doc.build(flow)
+    buf.seek(0)
+    filename = f"pricelist_{date.today().strftime('%Y-%m-%d')}.pdf"
+    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=filename)
 
 
 @app.route("/counterparty/<int:counterparty_id>")

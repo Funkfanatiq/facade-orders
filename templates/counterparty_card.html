@@ -146,8 +146,6 @@
       <h3>Создать счёт на оплату</h3>
       <p style="margin:0 0 8px 0; color:#666; font-size:14px;">Номер счёта (обязательно):</p>
       <input type="text" id="invoice-number" placeholder="Напр. 00044" style="width:120px; margin-bottom:12px; padding:8px;" required>
-      <p style="margin:0 0 8px 0; color:#666; font-size:14px;">Заказы (номера через запятую, необязательно):</p>
-      <input type="text" id="invoice-order-ids" placeholder="Напр. 001, 002" style="width:100%; margin-bottom:12px; padding:8px;">
       <p style="margin:0 0 12px 0; color:#666; font-size:14px;">Добавьте позиции из прайса или введите вручную:</p>
       <div class="invoice-add-row">
         <select id="invoice-pricelist-select" style="min-width:200px;">
@@ -161,7 +159,7 @@
       </div>
       <div class="invoice-add-row" style="border-top:1px solid #eee; padding-top:12px; margin-top:8px;">
         <input type="text" id="invoice-manual-name" class="name-input" placeholder="Наименование (вручную)">
-        <input type="text" id="invoice-manual-unit" class="unit-input" placeholder="Ед." value="шт">
+        <input type="text" id="invoice-manual-unit" class="unit-input" placeholder="Ед." value="м²">
         <input type="number" id="invoice-manual-qty" placeholder="Кол-во" step="0.01" min="0.01" value="1" style="width:70px;">
         <input type="number" id="invoice-manual-price" class="price-input" placeholder="Цена" step="0.01" min="0">
         <button type="button" class="btn-add-item" onclick="addManualItem()">Добавить вручную</button>
@@ -356,6 +354,18 @@
     var invoiceItems = [];
     var counterpartyId = {{ counterparty.id }};
 
+    (function initTab() {
+      var params = new URLSearchParams(window.location.search);
+      var tab = params.get('tab');
+      if (tab === 'invoices') {
+        var btn = document.querySelector('.cp-tab[onclick*="invoices"]');
+        if (btn) showCpTab('invoices', btn);
+      } else if (tab === 'orders') {
+        var btn = document.querySelector('.cp-tab[onclick*="orders"]');
+        if (btn) showCpTab('orders', btn);
+      }
+    })();
+
     function showCpTab(tabName, btn) {
       document.querySelectorAll('.cp-tab-content').forEach(function(el) { el.classList.remove('active'); });
       document.querySelectorAll('.cp-tab').forEach(function(el) { el.classList.remove('active'); });
@@ -387,7 +397,6 @@
     function openInvoiceModal() {
       invoiceItems = [];
       document.getElementById('invoice-number').value = '';
-      document.getElementById('invoice-order-ids').value = '';
       renderInvoiceItems();
       document.getElementById('invoice-modal-overlay').classList.add('show');
     }
@@ -408,7 +417,7 @@
     function addManualItem() {
       var name = document.getElementById('invoice-manual-name').value.trim();
       if (!name) return;
-      var unit = document.getElementById('invoice-manual-unit').value.trim() || 'шт';
+      var unit = document.getElementById('invoice-manual-unit').value.trim() || 'м²';
       var qty = parseFloat(document.getElementById('invoice-manual-qty').value) || 1;
       var price = parseFloat(document.getElementById('invoice-manual-price').value) || 0;
       invoiceItems.push({ name: name, unit: unit, quantity: qty, price: price, price_list_item_id: null });
@@ -448,17 +457,16 @@
         alert('Добавьте хотя бы одну позицию');
         return;
       }
-      var orderIds = document.getElementById('invoice-order-ids').value.trim();
       fetch('/counterparty/' + counterpartyId + '/invoice/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: invoiceItems, invoice_number: invoiceNum, order_ids: orderIds })
+        body: JSON.stringify({ items: invoiceItems, invoice_number: invoiceNum })
       }).then(function(r) {
         return r.json();
       }).then(function(data) {
         if (data.ok) {
           closeInvoiceModal();
-          window.location.reload();
+          window.location.href = window.location.pathname + '?tab=invoices';
         } else {
           alert(data.error || 'Ошибка при создании счёта');
         }

@@ -310,14 +310,14 @@
         <tbody>
         {% for inv in invoices %}
         <tr>
-          <td><a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" target="_blank">№ {{ inv.invoice_number }}</a></td>
+          <td><a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" download="invoice_{{ inv.invoice_number }}.pdf">№ {{ inv.invoice_number }}</a></td>
           <td>{{ inv.invoice_date.strftime('%d.%m.%Y') }}</td>
           <td>{{ inv.order_ids or '—' }}</td>
           <td class="amount">{{ "%.2f"|format(inv.total)|replace(".", ",") }} ₽</td>
           <td class="amount">{{ "%.2f"|format(inv.paid_amount)|replace(".", ",") }} ₽</td>
           <td class="amount {% if inv.balance > 0 %}balance-owed{% elif inv.balance < 0 %}balance-over{% else %}balance-zero{% endif %}">{{ "%.2f"|format(inv.balance)|replace(".", ",") }} ₽</td>
           <td>
-            <a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" target="_blank">PDF</a>
+            <a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" download="invoice_{{ inv.invoice_number }}.pdf">PDF</a>
             {% if current_user.role in ["Менеджер", "Админ"] %}
             <button type="button" class="btn-remove-item" onclick="deleteInvoice({{ inv.id }})" title="Удалить">🗑️</button>
             {% endif %}

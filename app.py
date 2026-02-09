@@ -1412,7 +1412,7 @@ def invoice_torg12(invoice_id):
         total_qty += it.quantity
         unit = it.unit or "шт"
         okei = _unit_to_okei(unit)
-        data.append([str(i), Paragraph(esc(it.name), fs7), "", unit, okei, "", "", "", "", "", fmt_num(it.quantity), fmt_num(it.price), fmt_num(s), "0%, 0,00", fmt_num(s)])
+        data.append([str(i), Paragraph(esc(it.name), fs7), "", unit, okei, "", "", "", "", "", "", fmt_num(it.quantity), fmt_num(it.price), fmt_num(s), "0%, 0,00", fmt_num(s)])
     total_row = ["Всего по накладной", "", "", "", "", "", "", "", "", "0", fmt_num(total_qty), "х", fmt_num(total_sum), "0%, 0,00", fmt_num(total_sum)]
     data.append(total_row)
     goods_tbl = Table(data, colWidths=col_w, repeatRows=1)

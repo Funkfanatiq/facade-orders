@@ -33,7 +33,7 @@ app.config.from_object('config.Config')
 
 
 # Импортируем модели после инициализации Flask
-from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty, PriceListItem, Invoice, InvoiceItem, Payment, Setting, PRICE_CATEGORIES
+from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty, PriceListItem, Invoice, InvoiceItem, Payment, PRICE_CATEGORIES
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -260,42 +260,10 @@ def secure_filename_custom(filename):
         filename = name[:95] + ext
     return filename
 
-def _get_setting(key):
-    """Возвращает значение настройки по ключу."""
-    try:
-        s = Setting.query.filter_by(key=key).first()
-        return (s.value or "").strip() if s else ""
-    except Exception:
-        return ""
-
-def _set_setting(key, value):
-    """Сохраняет настройку."""
-    try:
-        s = Setting.query.filter_by(key=key).first()
-        if s:
-            s.value = (value or "").strip() or None
-        else:
-            db.session.add(Setting(key=key, value=(value or "").strip() or None))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-        raise
-
-def get_orders_upload_folder():
-    """Путь для сохранения файлов заказов."""
-    path = _get_setting("orders_path")
-    if path and path.strip():
-        return path.strip()
-    return app.config["UPLOAD_FOLDER"]
-
-def get_invoices_save_path():
-    """Путь для сохранения PDF счётов (пустая строка = не сохранять)."""
-    return _get_setting("invoices_path")
-
 def get_storage_usage_mb():
     """Получает текущее использование хранилища в МБ"""
     try:
-        upload_folder = get_orders_upload_folder()
+        upload_folder = app.config["UPLOAD_FOLDER"]
         total_size = 0
         
         for dirpath, dirnames, filenames in os.walk(upload_folder):
@@ -328,18 +296,14 @@ def cleanup_old_orders():
                     if order.filepaths:
                         file_paths = order.filepaths.split(';')
                         for file_path in file_paths:
-                            fp = file_path.strip()
-                            if not fp:
-                                continue
-                            for base in (get_orders_upload_folder(), app.config["UPLOAD_FOLDER"]):
-                                full_path = os.path.join(base, fp)
-                                if os.path.isfile(full_path):
+                            if file_path.strip():
+                                full_path = os.path.join(app.config["UPLOAD_FOLDER"], file_path.strip())
+                                if os.path.exists(full_path):
                                     try:
                                         os.remove(full_path)
-                                        print(f"🗑️ Удален файл: {fp}")
+                                        print(f"🗑️ Удален файл: {file_path}")
                                     except Exception as e:
-                                        print(f"Ошибка при удалении файла {fp}: {e}")
-                                    break
+                                        print(f"Ошибка при удалении файла {file_path}: {e}")
                     
                     # Удаляем запись заказа из базы данных
                     db.session.delete(order)
@@ -661,26 +625,6 @@ def logout():
     return redirect(url_for("login"))
 
 
-@app.route("/settings", methods=["GET", "POST"])
-@login_required
-def settings():
-    """Настройки приложения (Админ, Менеджер, Фрезеровка)."""
-    if current_user.role not in ["Админ", "Менеджер", "Фрезеровка"]:
-        flash("Доступ запрещен", "error")
-        return redirect(url_for("dashboard"))
-    if request.method == "POST":
-        orders_path = (request.form.get("orders_path") or "").strip()
-        invoices_path = (request.form.get("invoices_path") or "").strip()
-        _set_setting("orders_path", orders_path)
-        _set_setting("invoices_path", invoices_path)
-        flash("Настройки сохранены", "success")
-        return redirect(url_for("settings"))
-    orders_path = _get_setting("orders_path")
-    invoices_path = _get_setting("invoices_path")
-    default_upload = app.config.get("UPLOAD_FOLDER", "uploads")
-    return render_template("settings.html", orders_path=orders_path, invoices_path=invoices_path, default_upload=default_upload)
-
-
 @app.route("/", methods=["GET", "POST"])
 @login_required
 def dashboard():
@@ -701,17 +645,10 @@ def dashboard():
     for o in expired:
         if o.filepaths:
             for path in o.filepaths.split(";"):
-                path = path.strip()
-                if not path:
-                    continue
-                for base in (get_orders_upload_folder(), app.config["UPLOAD_FOLDER"]):
-                    try:
-                        full = os.path.join(base, path)
-                        if os.path.isfile(full):
-                            os.remove(full)
-                            break
-                    except (FileNotFoundError, OSError) as e:
-                        pass
+                try:
+                    os.remove(os.path.join(app.config["UPLOAD_FOLDER"], path))
+                except (FileNotFoundError, OSError) as e:
+                    print(f"⚠️ Не удалось удалить файл {path}: {e}")
         db.session.delete(o)
 
     if expired:
@@ -774,9 +711,7 @@ def dashboard():
                 
                 # Создаем безопасное имя файла
                 safe_filename = secure_filename_custom(f.filename)
-                upload_dir = get_orders_upload_folder()
-                os.makedirs(upload_dir, exist_ok=True)
-                path = os.path.join(upload_dir, safe_filename)
+                path = os.path.join(app.config["UPLOAD_FOLDER"], safe_filename)
                 try:
                     f.save(path)
                     # Храним относительный путь как имя файла для обслуживания через /uploads/<filename>
@@ -1335,18 +1270,7 @@ def invoice_pdf(invoice_id):
     flow.append(sig_table)
     doc.build(flow)
     buf.seek(0)
-    pdf_bytes = buf.read()
-    invoices_path = (get_invoices_save_path() or "").strip()
-    if invoices_path:
-        try:
-            os.makedirs(invoices_path, exist_ok=True)
-            save_name = f"invoice_{inv.invoice_number}_{inv.invoice_date.strftime('%Y-%m-%d')}.pdf"
-            save_full = os.path.join(invoices_path, save_name)
-            with open(save_full, "wb") as out:
-                out.write(pdf_bytes)
-        except Exception as e:
-            print(f"Не удалось сохранить копию счёта: {e}")
-    return send_file(io.BytesIO(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name=f"invoice_{inv.invoice_number}.pdf")
+    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=f"invoice_{inv.invoice_number}.pdf")
 
 
 @app.route("/counterparty/<int:counterparty_id>/payment/create", methods=["POST"])
@@ -1480,17 +1404,10 @@ def delete_order(order_id):
         # Удаляем файлы, если они есть
         if order.filepaths:
             for path in order.filepaths.split(";"):
-                path = path.strip()
-                if not path:
-                    continue
-                for base in (get_orders_upload_folder(), app.config["UPLOAD_FOLDER"]):
-                    try:
-                        full = os.path.join(base, path)
-                        if os.path.isfile(full):
-                            os.remove(full)
-                            break
-                    except (FileNotFoundError, OSError):
-                        pass
+                try:
+                    os.remove(os.path.join(app.config["UPLOAD_FOLDER"], path))
+                except (FileNotFoundError, OSError) as e:
+                    print(f"⚠️ Не удалось удалить файл {path}: {e}")
         
         db.session.delete(order)
         db.session.commit()
@@ -1828,10 +1745,6 @@ def polishing_station():
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     """Маршрут для обслуживания загруженных файлов"""
-    orders_dir = get_orders_upload_folder()
-    path = os.path.join(orders_dir, filename)
-    if os.path.isfile(path):
-        return send_from_directory(orders_dir, filename)
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route("/health")

@@ -78,7 +78,7 @@
     <div>
       <a href="{{ url_for('milling_pool') }}" style="margin-right: 20px; color: #4CAF50;">📋 Пул заказов</a>
       <a href="{{ url_for('milling_orders') }}" style="margin-right: 20px; color: #4CAF50;">📋 Управление заказами</a>
-      {{ current_user.username }} ({{ current_user.role }}) {% if current_user.role in ["Админ", "Менеджер", "Фрезеровка"] %}<a href="{{ url_for('settings') }}" title="Настройки" style="margin-left:8px; text-decoration:none; color:#666; font-size:18px;">⚙️</a>{% endif %} | <a href="{{ url_for('logout') }}">Выход</a>
+      {{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a>
     </div>
   </div>
 

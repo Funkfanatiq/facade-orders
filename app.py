@@ -1275,6 +1275,130 @@ def invoice_pdf(invoice_id):
     return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=f"invoice_{inv.invoice_number}.pdf")
 
 
+@app.route("/invoice/<int:invoice_id>/torg12")
+@login_required
+def invoice_torg12(invoice_id):
+    """Скачивание товарной накладной ТОРГ-12 (закрывающий документ по счёту)."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    inv = Invoice.query.get_or_404(invoice_id)
+    cp = inv.counterparty
+    cfg = app.config
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.lib.enums import TA_CENTER
+    from xml.sax.saxutils import escape
+    font_name = _get_pdf_font()
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=10*mm, bottomMargin=10*mm, leftMargin=12*mm, rightMargin=12*mm)
+    styles = getSampleStyleSheet()
+    p_style = ParagraphStyle("P", parent=styles["Normal"], fontName=font_name, fontSize=9)
+    cell_style = ParagraphStyle("Cell", parent=styles["Normal"], fontName=font_name, fontSize=9)
+
+    def esc(s):
+        return escape(str(s or ""))
+
+    def fmt_num(x):
+        return f"{x:.2f}".replace(".", ",")
+
+    seller_name = esc(cfg.get('COMPANY_NAME'))
+    seller_addr = esc(cfg.get('COMPANY_ADDRESS'))
+    seller_inn = esc(cfg.get('COMPANY_INN'))
+    seller_kpp = esc(cfg.get('COMPANY_KPP'))
+    buyer_name = esc(cp.full_name or cp.name)
+    buyer_addr = esc(cp.address or cp.legal_address or "")
+    buyer_inn = esc(cp.inn or "")
+    buyer_kpp = esc(cp.kpp or "")
+
+    flow = []
+    title_style = ParagraphStyle("Title", parent=styles["Normal"], fontName=font_name, fontSize=11, alignment=TA_CENTER, fontWeight='bold')
+    flow.append(Paragraph("Товарная накладная (ТОРГ-12)", title_style))
+    flow.append(Spacer(1, 4*mm))
+
+    header_table = [
+        ["Организация-грузоотправитель", seller_name],
+        ["", seller_addr],
+        ["", f"ИНН {seller_inn}" + (f" КПП {seller_kpp}" if seller_kpp else "")],
+        ["Структурное подразделение", ""],
+        ["Грузополучатель", buyer_name],
+        ["", buyer_addr or ""],
+        ["", f"ИНН {buyer_inn}" + (f" КПП {buyer_kpp}" if buyer_kpp else "") if buyer_inn else ""],
+        ["Поставщик", seller_name],
+        ["Плательщик", buyer_name],
+        ["Основание", f"Счёт № {esc(inv.invoice_number)} от {inv.invoice_date.strftime('%d.%m.%Y')}"],
+    ]
+    ht = Table(header_table, colWidths=[55*mm, 115*mm])
+    ht.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f0f0")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    flow.append(ht)
+    flow.append(Spacer(1, 4*mm))
+
+    headers = ["№", "Наименование товара (работ, услуг)", "Ед. изм.", "Вид упаковки", "Кол-во мест", "Количество", "Цена, руб.", "Сумма без НДС, руб."]
+    col_widths = [10*mm, 70*mm, 18*mm, 22*mm, 18*mm, 20*mm, 22*mm, 30*mm]
+    data = [headers]
+    total_sum = 0.0
+    for i, it in enumerate(inv.items, 1):
+        s = round(it.quantity * it.price, 2)
+        total_sum += s
+        data.append([
+            str(i),
+            Paragraph(esc(it.name), cell_style),
+            it.unit or "шт",
+            "—",
+            "—",
+            fmt_num(it.quantity),
+            fmt_num(it.price),
+            fmt_num(s),
+        ])
+    t = Table(data, colWidths=col_widths)
+    t.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8e8e8")),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("ALIGN", (5, 0), (-1, -1), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    flow.append(t)
+    flow.append(Spacer(1, 4*mm))
+
+    flow.append(Paragraph(f"Всего по накладной: {fmt_num(total_sum)} руб. (в т.ч. НДС: 0,00 руб.)", p_style))
+    flow.append(Spacer(1, 8*mm))
+
+    sig_data = [
+        ["Отпуск груза разрешил", "", "Груз принял"],
+        ["должность", "", "должность"],
+        ["подпись", "", "подпись"],
+        ["расшифровка", "", "расшифровка"],
+    ]
+    sig_table = Table(sig_data, colWidths=[55*mm, 60*mm, 55*mm])
+    sig_table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (0, 0), (0, -1), "LEFT"),
+        ("ALIGN", (2, 0), (2, -1), "RIGHT"),
+    ]))
+    flow.append(sig_table)
+    doc.build(flow)
+    buf.seek(0)
+    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=f"torg12_{inv.invoice_number}.pdf")
+
+
 @app.route("/counterparty/<int:counterparty_id>/payment/create", methods=["POST"])
 @login_required
 def payment_create(counterparty_id):

@@ -148,10 +148,18 @@
       <input type="text" id="invoice-number" placeholder="Напр. 00044" style="width:120px; margin-bottom:12px; padding:8px;" required>
       <p style="margin:0 0 12px 0; color:#666; font-size:14px;">Добавьте позиции из прайса или введите вручную:</p>
       <div class="invoice-add-row">
-        <select id="invoice-pricelist-select" style="min-width:200px;">
+        <select id="invoice-pricelist-select" style="min-width:260px;">
           <option value="">— Выбрать из прайса —</option>
-          {% for p in price_list %}
-          <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-price="{{ p.price }}" data-unit="{{ p.unit or 'шт' }}">{{ p.name }} — {{ (p.price|round(2))|string|replace(".", ",") }} ₽/{{ p.unit or 'шт' }}</option>
+          {% set grid_cats = [('плоский', 'Плоские'), ('фрезерованный', 'Фрезерованные'), ('шпон', 'Шпон'), ('услуги по покраске', 'Услуги по покраске'), ('Доп услуги', 'Доп услуги')] %}
+          {% for cat, label in grid_cats %}
+          {% set cat_items = price_list|selectattr('category', 'equalto', cat)|list %}
+          {% if cat_items %}
+          <optgroup label="{{ label }}">
+            {% for p in cat_items %}
+            <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-price="{{ p.price }}" data-unit="{{ p.unit or 'шт' }}">{{ p.name }} — {{ (p.price|round(2))|string|replace(".", ",") }} ₽/{{ p.unit or 'шт' }}</option>
+            {% endfor %}
+          </optgroup>
+          {% endif %}
           {% endfor %}
         </select>
         <input type="number" id="invoice-qty-pricelist" placeholder="Кол-во" step="0.01" min="0.01" value="1" style="width:70px;">

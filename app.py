@@ -1330,7 +1330,7 @@ def counterparty_card(counterparty_id):
     for inv in invoices:
         inv.paid_amount = sum(p.amount for p in inv.payments)
         inv.balance = inv.total - inv.paid_amount
-    return render_template("counterparty_card.html", counterparty=cp, orders=orders, price_list=price_list, invoices=invoices, payments=payments, total_invoiced=total_invoiced, total_paid=total_paid, balance=balance, datetime=datetime)
+    return render_template("counterparty_card.html", counterparty=cp, orders=orders, price_list=price_list, price_categories=PRICE_CATEGORIES, invoices=invoices, payments=payments, total_invoiced=total_invoiced, total_paid=total_paid, balance=balance, datetime=datetime)
 
 
 def render_admin_dashboard():

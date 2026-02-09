@@ -782,6 +782,7 @@ def dashboard():
         cp_id_for_client[c.name] = c.id
         if c.full_name:
             cp_id_for_client[c.full_name] = c.id
+    debtors = []
     if current_user.role == "Менеджер":
         customers = [row[0] for row in db.session.query(Order.client).distinct().order_by(Order.client).all()]
         counterparties = Counterparty.query.order_by(Counterparty.name).all()
@@ -789,8 +790,20 @@ def dashboard():
         price_list = PriceListItem.query.order_by(
             PriceListItem.category, PriceListItem.sort_order, PriceListItem.name
         ).all()
+        for cp in counterparties:
+            invoices = Invoice.query.filter(Invoice.counterparty_id == cp.id).all()
+            total_invoiced = sum(inv.total for inv in invoices)
+            total_paid = sum(p.amount for p in Payment.query.filter(Payment.counterparty_id == cp.id).all())
+            balance = total_invoiced - total_paid
+            if balance > 0:
+                unpaid_nums = []
+                for inv in invoices:
+                    paid_amt = sum(p.amount for p in inv.payments)
+                    if inv.total - paid_amt > 0:
+                        unpaid_nums.append(inv.invoice_number)
+                debtors.append({"counterparty": cp, "unpaid_invoices": unpaid_nums, "balance": balance})
 
-    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers, counterparties=counterparties, counterparties_json=counterparties_json, price_list=price_list, price_categories=PRICE_CATEGORIES, cp_id_for_client=cp_id_for_client)
+    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers, counterparties=counterparties, counterparties_json=counterparties_json, price_list=price_list, price_categories=PRICE_CATEGORIES, cp_id_for_client=cp_id_for_client, debtors=debtors)
 
 
 @app.route("/counterparty/add", methods=["POST"])
@@ -1053,17 +1066,6 @@ def pricelist_export_pdf():
             t.setStyle(TableStyle(tbl_style))
             flow.append(t)
             flow.append(Spacer(1, 6*mm))
-    other_items = [p for p in items if p.category is None]
-    if other_items:
-        flow.append(Paragraph("Прочее", cat_style))
-        data = [["№", "Наименование", "Цена, ₽", "Ед. изм."]]
-        for i, p in enumerate(other_items, 1):
-            price_str = f"{p.price:.2f}".replace(".", ",") if p.price is not None else "—"
-            name_para = Paragraph(esc(p.name), cell_style)
-            data.append([str(i), name_para, price_str, p.unit or "—"])
-        t = Table(data, colWidths=col_widths)
-        t.setStyle(TableStyle(tbl_style))
-        flow.append(t)
 
     doc.build(flow)
     buf.seek(0)
@@ -1317,9 +1319,9 @@ def counterparty_card(counterparty_id):
     orders = Order.query.filter(
         or_(Order.counterparty_id == counterparty_id, Order.client == cp.name)
     ).order_by(Order.due_date.asc()).all()
-    price_list = PriceListItem.query.order_by(
-        PriceListItem.category, PriceListItem.sort_order, PriceListItem.name
-    ).all()
+    _price_raw = PriceListItem.query.filter(PriceListItem.category.in_(PRICE_CATEGORIES)).order_by(PriceListItem.sort_order, PriceListItem.name).all()
+    cat_order = {c: i for i, c in enumerate(PRICE_CATEGORIES)}
+    price_list = sorted(_price_raw, key=lambda p: (cat_order.get(p.category, 0), p.sort_order or 0, p.name or ""))
     invoices = Invoice.query.filter(Invoice.counterparty_id == counterparty_id).order_by(Invoice.invoice_date.desc()).all()
     payments = Payment.query.filter(Payment.counterparty_id == counterparty_id).order_by(Payment.payment_date.desc()).all()
     total_invoiced = sum(inv.total for inv in invoices)

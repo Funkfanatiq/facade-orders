@@ -275,6 +275,7 @@
   <div class="tabs">
     <button type="button" class="tab {{ 'active' if active_tab == 'orders' else '' }}" onclick="showManagerTab('orders')">📋 Панель заказов</button>
     <button type="button" class="tab {{ 'active' if active_tab == 'counterparties' else '' }}" onclick="showManagerTab('counterparties')">👥 Контрагенты</button>
+    <button type="button" class="tab {{ 'active' if active_tab == 'debts' else '' }}" onclick="showManagerTab('debts')">💸 Долги</button>
     <button type="button" class="tab {{ 'active' if active_tab == 'pricelist' else '' }}" onclick="showManagerTab('pricelist')">💰 Прайс лист</button>
   </div>
   <div id="manager-orders-tab" class="tab-content {{ 'active' if active_tab == 'orders' else '' }}">
@@ -429,6 +430,30 @@
       {% endif %}
     </div>
   </div>
+  <div id="manager-debts-tab" class="tab-content {{ 'active' if active_tab == 'debts' else '' }}">
+    <div class="form-box">
+      <h3>💸 Долги</h3>
+      <p style="color:#666; margin:0 0 12px 0; font-size:14px;">Контрагенты с неоплаченными счетами</p>
+      {% if debtors %}
+      <table class="invoices-table" style="max-width:600px;">
+        <thead>
+          <tr><th>Контрагент</th><th>Неоплаченные счета</th><th>Задолженность, ₽</th></tr>
+        </thead>
+        <tbody>
+        {% for d in debtors %}
+        <tr>
+          <td><a href="{{ url_for('counterparty_card', counterparty_id=d.counterparty.id) }}" style="color:inherit;text-decoration:none;">{{ d.counterparty.name }}</a></td>
+          <td>{{ d.unpaid_invoices|join(', ') if d.unpaid_invoices else '—' }}</td>
+          <td style="white-space:nowrap;">{{ "%.2f"|format(d.balance)|replace(".", ",") }} ₽</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color: #666; margin: 12px 0 0;">Нет контрагентов с задолженностью.</p>
+      {% endif %}
+    </div>
+  </div>
   <div id="manager-pricelist-tab" class="tab-content {{ 'active' if active_tab == 'pricelist' else '' }}">
     <div class="form-box">
       <h3>💰 Прайс лист</h3>
@@ -461,7 +486,6 @@
       </div>
       {% if price_list %}
       {% set grid_cats = [('плоский', 'Плоские'), ('фрезерованный', 'Фрезерованные'), ('шпон', 'Шпон'), ('услуги по покраске', 'Услуги по покраске'), ('Доп услуги', 'Доп услуги')] %}
-      {% set other_items = price_list|selectattr('category', 'none')|list %}
       <div id="pricelist-list" class="pricelist-grid">
       {% for cat, label in grid_cats %}
       {% set cat_items = price_list|selectattr('category', 'equalto', cat)|list %}
@@ -489,29 +513,6 @@
       {% endif %}
       </div>
       {% endfor %}
-      <div class="pricelist-grid-cell">
-      <h4 class="pricelist-category-title">Прочее</h4>
-      {% if other_items %}
-      <table class="pricelist-table pricelist-list" data-category="">
-        <thead>
-          <tr><th style="width:28px;"></th><th>Наименование</th><th>Цена, ₽</th><th>Ед. изм.</th><th>Действия</th></tr>
-        </thead>
-        <tbody>
-        {% for p in other_items %}
-        <tr class="pricelist-item" draggable="true" data-search="{{ (p.name or '')|lower }} {{ (p.unit or '')|lower }}" data-id="{{ p.id }}" data-name="{{ p.name|e }}" data-price="{{ p.price }}" data-unit="{{ p.unit or '' }}" data-category="" ondragstart="pricelistDragStart(event)" ondragover="pricelistDragOver(event)" ondragleave="pricelistDragLeave(event)" ondrop="pricelistDrop(event)" ondragend="pricelistDragEnd(event)">
-          <td><span class="pricelist-drag-handle" title="Перетащите для изменения порядка">⋮⋮</span></td>
-          <td>{{ p.name }}</td>
-          <td>{{ (p.price|round(2))|string|replace(".", ",") }}</td>
-          <td>{{ p.unit or '—' }}</td>
-          <td><button type="button" class="btn-edit-pricelist" onclick="editPricelistRow(this)">Изменить</button></td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <p style="color:#999; font-size:14px; margin:8px 0;">Нет позиций</p>
-      {% endif %}
-      </div>
       </div>
       {% else %}
       <p style="color: #666; margin: 12px 0 0;">Пока нет позиций. Нажмите «Добавить позицию».</p>

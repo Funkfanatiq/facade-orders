@@ -1287,7 +1287,7 @@ def _unit_to_okei(unit):
 @app.route("/invoice/<int:invoice_id>/torg12")
 @login_required
 def invoice_torg12(invoice_id):
-    """Скачивание товарной накладной ТОРГ-12. Строго по образцу Госкомстата."""
+    """Скачивание товарной накладной ТОРГ-12. Точная копия формы по образцу."""
     if current_user.role not in ["Менеджер", "Админ"]:
         flash("Доступ запрещен", "error")
         return redirect(url_for("dashboard"))
@@ -1303,11 +1303,11 @@ def invoice_torg12(invoice_id):
     from xml.sax.saxutils import escape
     font_name = _get_pdf_font()
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=10*mm, bottomMargin=10*mm, leftMargin=10*mm, rightMargin=10*mm)
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=8*mm, bottomMargin=8*mm, leftMargin=10*mm, rightMargin=10*mm)
     styles = getSampleStyleSheet()
-    p_style = ParagraphStyle("P", parent=styles["Normal"], fontName=font_name, fontSize=9)
-    cell_style = ParagraphStyle("Cell", parent=styles["Normal"], fontName=font_name, fontSize=8)
-    small_style = ParagraphStyle("Small", parent=styles["Normal"], fontName=font_name, fontSize=8)
+    fs6 = ParagraphStyle("FS6", parent=styles["Normal"], fontName=font_name, fontSize=6)
+    fs7 = ParagraphStyle("FS7", parent=styles["Normal"], fontName=font_name, fontSize=7)
+    fs8 = ParagraphStyle("FS8", parent=styles["Normal"], fontName=font_name, fontSize=8)
 
     def esc(s):
         return escape(str(s or ""))
@@ -1341,88 +1341,69 @@ def invoice_torg12(invoice_id):
     basis = f"Счет на оплату № {esc(inv.invoice_number)} от {inv.invoice_date.strftime('%d.%m.%Y')}"
 
     flow = []
-    header_right_style = ParagraphStyle("HdrR", parent=styles["Normal"], fontName=font_name, fontSize=8, alignment=TA_RIGHT)
-    flow.append(Paragraph("Унифицированная форма № ТОРГ-12", header_right_style))
-    flow.append(Paragraph("Утверждена постановлением Госкомстата России от 25.12.98 № 132", header_right_style))
-    codes_tbl = Table([
-        ["Форма по ОКУД", "0330212", "Код", ""],
-        ["Вид деятельности по ОКДП", "", "по ОКПО", seller_okpo or "—"],
-    ], colWidths=[38*mm, 22*mm, 22*mm, 22*mm])
-    codes_tbl.setStyle(TableStyle([
+    tbl_style = lambda t: t.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f5f5f5")),
-        ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#f5f5f5")),
-    ]))
-    codes_wrapper = Table([["", codes_tbl]], colWidths=[170*mm, 104*mm])
-    codes_wrapper.setStyle(TableStyle([("ALIGN", (1, 0), (1, -1), "RIGHT")]))
-    flow.append(codes_wrapper)
-    flow.append(Spacer(1, 4*mm))
-
-    participant_rows = [
-        ["организация - грузоотправитель, адрес, номер телефона, факса, банковские реквизиты", org_str],
-        ["структурное подразделение", ""],
-        ["Грузополучатель" + (f" по ОКПО {buyer_okpo}" if buyer_okpo else ""), consignee_str],
-        ["Поставщик", org_str],
-        ["Плательщик", consignee_str],
-        ["Основание", basis],
-        ["", "наименование документа (договор, контракт, заказ-наряд)"],
-    ]
-    pt = Table(participant_rows, colWidths=[55*mm, 200*mm])
-    pt.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (-1, -1), font_name),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f5f5f5")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
     ]))
-    flow.append(pt)
-    flow.append(Spacer(1, 4*mm))
 
-    title_style = ParagraphStyle("Title", parent=styles["Normal"], fontName=font_name, fontSize=12, alignment=TA_CENTER, fontWeight='bold')
-    flow.append(Paragraph("ТОВАРНАЯ НАКЛАДНАЯ", title_style))
+    header_title = ParagraphStyle("H", parent=styles["Normal"], fontName=font_name, fontSize=9, alignment=TA_CENTER)
+    flow.append(Paragraph("Унифицированная форма № ТОРГ-12", header_title))
+    flow.append(Paragraph("Утверждена постановлением Госкомстата России от 25.12.98 № 132", fs7))
+    flow.append(Spacer(1, 1*mm))
+
+    left_block = Table([
+        [org_str, ""],
+        ["организация – грузоотправитель, адрес, номер телефона, факса, банковские реквизиты", ""],
+        ["структурное подразделение", ""],
+        [consignee_str, f"по ОКПО {buyer_okpo}" if buyer_okpo else ""],
+        [org_str, f"по ОКПО {seller_okpo}" if seller_okpo else ""],
+        [consignee_str, f"по ОКПО {buyer_okpo}" if buyer_okpo else ""],
+        [basis, ""],
+        ["наименование документа (договор, контракт, заказ-наряд)", ""],
+    ], colWidths=[165*mm, 35*mm])
+    left_block.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2),
+    ]))
+
+    right_block = Table([
+        ["Форма по ОКУД", "0330212"],
+        ["Код", ""],
+        ["Вид деятельности по ОКДП", ""],
+        ["по ОКПО", seller_okpo or "—"],
+        ["Транспортная накладная", ""],
+        ["номер", "дата"],
+        ["", ""],
+        ["Вид операции", ""],
+        ["Номер документа", esc(inv.invoice_number)],
+        ["Дата составления", doc_date.strftime('%d.%m.%Y')],
+        ["Страница 1", ""],
+    ], colWidths=[35*mm, 45*mm])
+    right_block.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f8f8f8")),
+    ]) + [("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 2)])
+
+    top_section = Table([[left_block, right_block]], colWidths=[200*mm, 70*mm])
+    top_section.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    flow.append(top_section)
     flow.append(Spacer(1, 2*mm))
 
-    doc_info = [
-        ["Номер документа", esc(inv.invoice_number), "Дата", doc_date.strftime('%d.%m.%Y'), "Вид операции", "", "Страница 1"],
-        ["Транспортная накладная", "номер", "", "дата", "", "", ""],
-    ]
-    dit = Table(doc_info, colWidths=[22*mm, 18*mm, 6*mm, 20*mm, 22*mm, 18*mm, 20*mm])
-    dit.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (-1, -1), font_name),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f5f5f5")),
-        ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#f5f5f5")),
-        ("BACKGROUND", (4, 0), (4, -1), colors.HexColor("#f5f5f5")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 3),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-    ]))
-    flow.append(dit)
-    flow.append(Spacer(1, 4*mm))
+    title_style = ParagraphStyle("Title", parent=styles["Normal"], fontName=font_name, fontSize=10, alignment=TA_CENTER, fontWeight='bold')
+    flow.append(Paragraph("ТОВАРНАЯ НАКЛАДНАЯ", title_style))
+    flow.append(Spacer(1, 1*mm))
 
-    headers = [
-        "Номер\nпо порядку",
-        "Наименование, характеристика, сорт, артикул товара",
-        "Код",
-        "Ед. изм.\nнаименование",
-        "Ед. изм.\nКод по ОКЕИ",
-        "Вид\nупаковки",
-        "в одном\nместе",
-        "мест\nштук",
-        "Масса\nбрутто",
-        "Количество\n(масса нетто)",
-        "Цена,\nруб. коп.",
-        "Сумма без учета НДС,\nруб. коп.",
-        "НДС\nставка,%",
-        "НДС\nсумма, руб. коп.",
-        "Сумма с учетом НДС,\nруб. коп.",
-    ]
-    col_widths = [10*mm, 45*mm, 12*mm, 14*mm, 12*mm, 12*mm, 12*mm, 12*mm, 12*mm, 16*mm, 18*mm, 20*mm, 12*mm, 16*mm, 20*mm]
-    data = [headers]
+    data = [["№", "Наименование, характеристика, сорт, артикул", "Код", "Ед.изм.", "Код ОКЕИ", "Вид упак.", "в 1 месте", "штук", "Масса брутто", "Кол-во (масса нетто)", "Цена", "Сумма без НДС", "НДС ставка, сумма", "Сумма с НДС"]]
+    col_w = [5*mm, 20*mm, 5*mm, 7*mm, 5*mm, 5*mm, 5*mm, 5*mm, 7*mm, 7*mm, 9*mm, 11*mm, 5*mm, 9*mm, 9*mm, 11*mm]
     total_sum = 0.0
     total_qty = 0.0
     for i, it in enumerate(inv.items, 1):
@@ -1431,87 +1412,56 @@ def invoice_torg12(invoice_id):
         total_qty += it.quantity
         unit = it.unit or "шт"
         okei = _unit_to_okei(unit)
-        data.append([
-            str(i),
-            Paragraph(esc(it.name), cell_style),
-            "",
-            unit,
-            okei,
-            "",
-            "",
-            "",
-            "",
-            fmt_num(it.quantity),
-            fmt_num(it.price),
-            fmt_num(s),
-            "0%",
-            "0,00",
-            fmt_num(s),
-        ])
-    total_row = ["Всего по накладной", "", "", "", "", "", "0", "", "", fmt_num(total_qty), "х", fmt_num(total_sum), "х", "0,00", fmt_num(total_sum)]
+        data.append([str(i), Paragraph(esc(it.name), fs7), "", unit, okei, "", "", "", "", "", fmt_num(it.quantity), fmt_num(it.price), fmt_num(s), "0%, 0,00", fmt_num(s)])
+    total_row = ["Всего по накладной", "", "", "", "", "", "", "", "", "0", fmt_num(total_qty), "х", fmt_num(total_sum), "0%, 0,00", fmt_num(total_sum)]
     data.append(total_row)
-    t = Table(data, colWidths=col_widths, repeatRows=1)
-    t.setStyle(TableStyle([
+    goods_tbl = Table(data, colWidths=col_w, repeatRows=1)
+    goods_tbl.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e0e0e0")),
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8e8e8")),
         ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f0f0f0")),
         ("SPAN", (0, -1), (8, -1)),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ALIGN", (0, 0), (0, -1), "CENTER"),
         ("ALIGN", (9, 0), (-1, -1), "RIGHT"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-    ]))
-    flow.append(t)
-    flow.append(Spacer(1, 4*mm))
+    ]) + [("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 2)])
+    flow.append(goods_tbl)
+    flow.append(Spacer(1, 1*mm))
 
     n_items = len(inv.items)
     records_word = "записей" if n_items >= 5 or (10 <= n_items % 100 <= 20) else "записи" if 2 <= n_items % 10 <= 4 else "запись"
-    flow.append(Paragraph(
-        f"Товарная накладная имеет приложение на ___ листах и содержит {n_items} порядковых номера {records_word}",
-        small_style
-    ))
-    flow.append(Paragraph("Всего мест _________________ прописью", small_style))
-    flow.append(Paragraph("Масса груза (нетто) _________________ прописью", small_style))
-    flow.append(Paragraph("Масса груза (брутто) _________________ прописью", small_style))
-    flow.append(Paragraph("Приложение (паспорта, сертификаты, и т.л.) на ___ листах", small_style))
-    flow.append(Paragraph("По доверенности № ___ выданной ___", small_style))
+    flow.append(Paragraph(f"Товарная накладная имеет приложение на ___ листах и содержит {n_items} порядковых номера {records_word}", fs7))
+    flow.append(Paragraph("Масса груза (нетто) ___ прописью   Масса груза (брутто) ___ прописью   Всего мест ___ прописью", fs7))
+    flow.append(Paragraph("Приложение (паспорта, сертификаты, и т.л.) на ___ листах   По доверенности № ___ выданной ___", fs7))
     amount_words = _amount_to_words_rub(total_sum)
-    flow.append(Paragraph(f"Всего отпущено на сумму {amount_words}", p_style))
-    flow.append(Spacer(1, 6*mm))
-
-    sig_labels = [
-        ("Отпуск груза разрешил", "Руководитель организац."),
-        ("", "должность"),
-        ("", "подпись"),
-        ("", "расшифровка подписи"),
-        ("Главный (старший) бухгалтер", ""),
-        ("", "должность"),
-        ("", "подпись"),
-        ("", "расшифровка подписи"),
-        ("Груз принял", ""),
-        ("", "должность"),
-        ("", "подпись"),
-        ("", "расшифровка подписи"),
-        ("Груз получил грузополучатель", ""),
-        ("", "должность"),
-        ("", "подпись"),
-        ("", "расшифровка подписи"),
-    ]
-    sig_data = [[left, right] for left, right in sig_labels]
-    sig_table = Table(sig_data, colWidths=[70*mm, 120*mm])
-    sig_table.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (-1, -1), font_name),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-    ]))
-    flow.append(sig_table)
+    flow.append(Paragraph(f"Всего отпущено на сумму {amount_words}", fs8))
     flow.append(Spacer(1, 2*mm))
-    flow.append(Paragraph(f"Отпуск груза произвел ___ {doc_date.strftime('%d.%m.%Y')} г.", small_style))
+
+    sig_left = Table([
+        ["Отпуск груза разрешил", "Руководитель организац.", ""],
+        ["должность", "подпись", "расшифровка подписи"],
+        ["Главный (старший) бухгалтер", "", ""],
+        ["должность", "подпись", "расшифровка подписи"],
+    ], colWidths=[50*mm, 35*mm, 35*mm])
+    sig_right = Table([
+        ["Груз принял", "", ""],
+        ["должность", "подпись", "расшифровка подписи"],
+        ["Груз получил грузополучатель", "", ""],
+        ["должность", "подпись", "расшифровка подписи"],
+    ], colWidths=[50*mm, 35*mm, 35*mm])
+    for st in [sig_left, sig_right]:
+        st.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), font_name),
+            ("FONTSIZE", (0, 0), (-1, -1), 7),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+    sig_combined = Table([[sig_left, sig_right]], colWidths=[120*mm, 120*mm])
+    sig_combined.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    flow.append(sig_combined)
+    flow.append(Paragraph(f"Отпуск груза произвел ___ {doc_date.strftime('%d.%m.%Y')} г.   м.п.", fs7))
     doc.build(flow)
     buf.seek(0)
     return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=f"torg12_{inv.invoice_number}.pdf")

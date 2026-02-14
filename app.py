@@ -1313,7 +1313,7 @@ def invoice_torg12(invoice_id):
         flash("Контрагент по счёту не найден", "error")
         return redirect(url_for("dashboard"))
     font_name = _get_pdf_font()
-    from torg12_pdf_canvas import generate_torg12_pdf
+    from torg12_pdf_platypus import generate_torg12_pdf
     buf = generate_torg12_pdf(
         inv, cp, app.config, font_name,
         amount_to_words=_amount_to_words_rub,

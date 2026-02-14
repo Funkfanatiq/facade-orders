@@ -1320,6 +1320,10 @@ def invoice_torg12(invoice_id):
     from reportlab.lib.units import mm
     from reportlab.lib.enums import TA_CENTER, TA_RIGHT
     from xml.sax.saxutils import escape
+    from torg12_excel_dims import (
+        LEFT_BLOCK_MM, CODES_LABEL_MM, CODES_VAL_MM,
+        GOODS_TABLE_COLS_MM, _COL_WIDTHS_MM,
+    )
     font_name = _get_pdf_font()
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=5*mm, bottomMargin=5*mm, leftMargin=5*mm, rightMargin=5*mm)
@@ -1372,14 +1376,22 @@ def invoice_torg12(invoice_id):
     flow.append(Paragraph(header_text, ParagraphStyle("H", parent=styles["Normal"], fontName=font_name, fontSize=8, alignment=TA_CENTER)))
     flow.append(Spacer(1, 2*mm))
 
-    # === Строки 2-18: Левая часть + правая колонка Коды (как в Excel) ===
+    # Размеры из Excel (масштаб под A4). B-AC = левая часть, AK-AM = коды.
+    left_w = LEFT_BLOCK_MM * mm
+    codes_label_w = CODES_LABEL_MM * mm
+    codes_val_w = CODES_VAL_MM * mm
+    label_w = _COL_WIDTHS_MM[3] * mm   # D: подпись (Грузополучатель и т.д.)
+    data_w = sum(_COL_WIDTHS_MM[4:29]) * mm  # E-AC: данные
+
+    # === Строки 2-18: Левая часть + правая колонка Коды (размеры как в Excel) ===
     def block_row(label, data_cell, descriptor):
         if label:
-            t = Table([[label, data_cell], [Paragraph(descriptor, desc_style), ""]], colWidths=[30*mm, 118*mm])
+            t = Table([[label, data_cell], [Paragraph(descriptor, desc_style), ""]], colWidths=[label_w, data_w])
             t.setStyle(TableStyle([
                 ("FONTNAME", (0, 0), (-1, -1), font_name),
                 ("FONTSIZE", (0, 0), (1, 0), 7),
                 ("LINEBELOW", (1, 0), (1, 0), 0.5, colors.black),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("LEFTPADDING", (0, 0), (0, -1), 2),
                 ("RIGHTPADDING", (0, 0), (0, -1), 8),
@@ -1387,11 +1399,12 @@ def invoice_torg12(invoice_id):
                 ("SPAN", (0, 1), (1, 1)),
             ]))
         else:
-            t = Table([[data_cell], [Paragraph(descriptor, desc_style)]], colWidths=[148*mm])
+            t = Table([[data_cell], [Paragraph(descriptor, desc_style)]], colWidths=[left_w])
             t.setStyle(TableStyle([
                 ("FONTNAME", (0, 0), (-1, -1), font_name),
                 ("FONTSIZE", (0, 0), (0, 0), 7),
                 ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.black),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 2),
             ]))
@@ -1421,7 +1434,7 @@ def invoice_torg12(invoice_id):
         ["", Paragraph("Вид операции", fs6), ""],
         [b4, "", ""],
     ]
-    top_section = Table(section_rows, colWidths=[148*mm, 26*mm, 16*mm])
+    top_section = Table(section_rows, colWidths=[left_w, codes_label_w, codes_val_w])
     top_section.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
         ("FONTSIZE", (1, 0), (1, -1), 6),
@@ -1434,8 +1447,9 @@ def invoice_torg12(invoice_id):
         ("SPAN", (0, 5), (0, 6)),
         ("SPAN", (0, 7), (0, 8)),
         ("SPAN", (0, 9), (0, 11)),
-        ("BOX", (2, 0), (2, -1), 0.5, colors.black),
-        ("INNERGRID", (2, 0), (2, -1), 0.5, colors.black),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
+        ("LINEBEFORE", (1, 0), (1, -1), 0.5, colors.black),
+        ("INNERGRID", (1, 0), (2, -1), 0.5, colors.black),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("ALIGN", (2, 0), (2, 8), "RIGHT"),
         ("ALIGN", (2, 9), (2, 10), "LEFT"),
@@ -1445,11 +1459,12 @@ def invoice_torg12(invoice_id):
     flow.append(top_section)
     flow.append(Spacer(1, 3*mm))
 
-    # === ТОВАРНАЯ НАКЛАДНАЯ + Номер документа, Дата составления (как в Excel строки 16-17) ===
+    # === ТОВАРНАЯ НАКЛАДНАЯ + Номер документа, Дата составления (размеры из Excel) ===
+    title_cols = [sum(_COL_WIDTHS_MM[1:35]) * mm, sum(_COL_WIDTHS_MM[35:37]) * mm, sum(_COL_WIDTHS_MM[37:39]) * mm]
     title_block = Table([
         [Paragraph("ТОВАРНАЯ НАКЛАДНАЯ", ParagraphStyle("Title", parent=styles["Normal"], fontName=font_name, fontSize=10, fontWeight='bold')), "Номер документа", "Дата составления"],
         ["", inv_num, inv_dt],
-    ], colWidths=[100*mm, 35*mm, 35*mm])
+    ], colWidths=title_cols)
     title_block.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
         ("FONTSIZE", (0, 0), (-1, -1), 7),
@@ -1463,10 +1478,10 @@ def invoice_torg12(invoice_id):
     flow.append(title_block)
     flow.append(Spacer(1, 1*mm))
 
-    # === Таблица товаров — 15 колонок как в Excel (строки 20-27) ===
+    # === Таблица товаров — 15 колонок, размеры из Excel ===
     header_r0 = ["Номер\nпо порядку", "Товар", "", "Единица измерения", "", "Количество", "", "", "Масса брутто", "Кол-во\n(масса нетто)", "Цена,\nруб. коп.", "Сумма без\nучета НДС,\nруб. коп.", "НДС", "", "Сумма с\nучетом НДС,\nруб. коп."]
     header_r1 = ["", "наименование, характеристика, сорт, артикул товара", "код", "наименование", "код по ОКЕИ", "Вид упаковки", "в одном месте", "мест,\nштук", "", "", "", "ставка, %", "сумма,\nруб. коп."]
-    col_w = [6*mm, 38*mm, 6*mm, 8*mm, 7*mm, 8*mm, 8*mm, 6*mm, 10*mm, 12*mm, 14*mm, 18*mm, 6*mm, 11*mm, 18*mm]
+    col_w = [w * mm for w in GOODS_TABLE_COLS_MM]
     data = [header_r0, header_r1]
     total_sum = 0.0
     total_qty = 0.0

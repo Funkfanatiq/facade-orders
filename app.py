@@ -1444,14 +1444,11 @@ def invoice_torg12(invoice_id):
     flow.append(title_block)
     flow.append(Spacer(1, 1*mm))
 
-    # Точная копия формы ТОРГ-12 — 15 колонок по образцу Госкомстата
-    header_row = [
-        "№ п/п", "наименование, характеристика, сорт, артикул товара", "код", "наименование",
-        "Код по ОКЕИ", "Вид упак.", "в одном месте", "штук", "Масса брутто", "Кол-во (масса нетто)",
-        "Цена, руб. коп.", "Сумма без учета НДС", "ставка, %", "сумма", "Сумма с учетом НДС"
-    ]
-    col_w = [5*mm, 40*mm, 6*mm, 8*mm, 7*mm, 8*mm, 8*mm, 6*mm, 10*mm, 12*mm, 14*mm, 18*mm, 6*mm, 12*mm, 18*mm]  # ~176мм
-    data = [header_row]
+    # Точная копия формы ТОРГ-12 — 15 колонок, двухуровневый заголовок как на образце
+    header_r0 = ["Номер\nпо порядку", "Товар", "", "Единица измерения", "", "Количество", "", "", "Масса брутто", "Кол-во (масса нетто)", "Цена,\nруб. коп.", "Сумма без учета НДС", "НДС", "", "Сумма с учетом НДС"]
+    header_r1 = ["", "наименование, характеристика, сорт, артикул товара", "код", "наименование", "Код по ОКЕИ", "Вид упаковки", "в одном месте", "штук", "", "", "", "", "ставка, %", "сумма, руб. коп.", ""]
+    col_w = [6*mm, 38*mm, 6*mm, 8*mm, 7*mm, 8*mm, 8*mm, 6*mm, 10*mm, 12*mm, 14*mm, 18*mm, 6*mm, 11*mm, 18*mm]  # ~176мм
+    data = [header_r0, header_r1]
     total_sum = 0.0
     total_qty = 0.0
     for i, it in enumerate(inv.items, 1):
@@ -1467,14 +1464,20 @@ def invoice_torg12(invoice_id):
         data.append([str(i), Paragraph(esc(it.name), fs7), code_str, unit, okei, "", "", "", mass_brutto, fmt_num(qty), fmt_num(prc), fmt_num(s), "0%", "0,00", fmt_num(s)])
     total_row = ["Всего по накладной"] + [""]*7 + ["0", fmt_num(total_qty), "х", fmt_num(total_sum), "х", "0,00", fmt_num(total_sum)]
     data.append(total_row)
-    goods_tbl = Table(data, colWidths=col_w, repeatRows=1)
+    goods_tbl = Table(data, colWidths=col_w, repeatRows=2)
     goods_tbl.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
         ("FONTSIZE", (0, 0), (-1, -1), 7),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8e8e8")),
+        ("BACKGROUND", (0, 0), (-1, 1), colors.HexColor("#e8e8e8")),
         ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f0f0f0")),
+        # Объединение ячеек заголовка как на образце
+        ("SPAN", (0, 0), (0, 1)),
+        ("SPAN", (1, 0), (2, 0)),
+        ("SPAN", (3, 0), (4, 0)),
+        ("SPAN", (5, 0), (7, 0)),
+        ("SPAN", (12, 0), (13, 0)),
         ("SPAN", (0, -1), (7, -1)),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ALIGN", (0, 0), (0, -1), "CENTER"),
         ("ALIGN", (8, 0), (-1, -1), "RIGHT"),

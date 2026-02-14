@@ -94,32 +94,36 @@ def generate_torg12_pdf(invoice, counterparty, config, font_name="Helvetica", am
     total_h_pt = row_pos[-1]
     usable_h = ph - margin_pt - margin_r
     scale_h = usable_h / total_h_pt if total_h_pt > 0 else 1
+    # Масштаб: вписать в страницу (минимум по X и Y)
     scale = min(scale_w, scale_h)
-    # Смещение для центрирования на странице
     scaled_w = total_w_pt * scale
     scaled_h = total_h_pt * scale
     offset_x = (usable_w - scaled_w) / 2 if scaled_w < usable_w else 0
     offset_y = (usable_h - scaled_h) / 2 if scaled_h < usable_h else 0
 
     c = canvas.Canvas(buf, pagesize=landscape(A4))
-    c.setFont(font_name, 8)
+    c.saveState()
     c.translate(margin_pt + offset_x, ph - margin_pt - offset_y)
+    c.scale(scale, scale)  # единый transform — все координаты без *scale
 
     def x_pt(col):
-        return col_pos[col - 1] * scale
+        return col_pos[col - 1]
     def y_pt(row):
-        """Y верхней границы строки row (origin — верх страницы, вниз отрицательно)"""
-        return -row_pos[row - 1] * scale
+        return -row_pos[row - 1]
     def w_pt(c1, c2):
-        return (col_pos[c2] - col_pos[c1 - 1]) * scale
+        return col_pos[c2] - col_pos[c1 - 1]
     def h_pt(r1, r2):
-        return (row_pos[r2] - row_pos[r1 - 1]) * scale if r1 <= r2 else 0
+        return (row_pos[r2] - row_pos[r1 - 1]) if r1 <= r2 else 0
 
-    # Рисуем объединённые области с рамками
+    # Рисуем объединённые области с рамками (без дубликатов)
     thin = 0.5
     c.setStrokeColorRGB(0, 0, 0)
     c.setLineWidth(thin)
+    seen = set()
     for ref in MERGED_CELLS:
+        if ref in seen:
+            continue
+        seen.add(ref)
         r1, c1, r2, c2 = _parse_range(ref)
         x1 = x_pt(c1)
         y1 = y_pt(r1)
@@ -146,7 +150,7 @@ def generate_torg12_pdf(invoice, counterparty, config, font_name="Helvetica", am
 
     # Заголовок A1:AM1
     c.setFont(font_name, 8)
-    center_x = total_w_pt * scale / 2
+    center_x = total_w_pt / 2
     c.drawCentredString(center_x, y_pt(1) - 4, "Унифицированная форма № ТОРГ-12")
     c.drawCentredString(center_x, y_pt(1) - 10, "Утверждена постановлением Госкомстата России от 25.12.98 № 132")
 
@@ -215,7 +219,7 @@ def generate_torg12_pdf(invoice, counterparty, config, font_name="Helvetica", am
         prc = float(it.price or 0)
         total_sum += qty * prc
 
-    # Товарные строки (упрощённо - одна таблица с рамками)
+    # Товарные строки — колонки по Excel: B=номер, C-F=товар, G-H=ед.изм, O=кол-во, P-Q=цена, R-U=сумма, V-AD=НДС%, AE-AK=НДСсумма, AL-AM=сумма с НДС
     row = 22
     for i, it in enumerate(invoice.items, 1):
         qty = float(it.quantity or 0)
@@ -224,20 +228,20 @@ def generate_torg12_pdf(invoice, counterparty, config, font_name="Helvetica", am
         unit = it.unit or "шт"
         c.setFont(font_name, 7)
         c.drawCentredString(x_pt(2) + w_pt(2, 2) / 2, y_pt(row) - 7, str(i))
-        c.drawString(x_pt(3) + 2, y_pt(row) - 7, esc(it.name)[:60])
-        c.drawString(x_pt(8) + 2, y_pt(row) - 7, unit)
-        c.drawRightString(x_pt(16) - 2, y_pt(row) - 7, fmt_num(qty))
-        c.drawRightString(x_pt(23) - 2, y_pt(row) - 7, fmt_num(prc))
-        c.drawRightString(x_pt(32) - 2, y_pt(row) - 7, fmt_num(s))
-        c.drawString(x_pt(33) + 2, y_pt(row) - 7, "0%")
-        c.drawRightString(x_pt(38) - 2, y_pt(row) - 7, fmt_num(s))
+        c.drawString(x_pt(3) + 2, y_pt(row) - 7, esc(it.name)[:50])
+        c.drawString(x_pt(7) + 2, y_pt(row) - 7, unit)
+        c.drawRightString(x_pt(15) - 2, y_pt(row) - 7, fmt_num(qty))
+        c.drawRightString(x_pt(17) - 2, y_pt(row) - 7, fmt_num(prc))
+        c.drawRightString(x_pt(21) - 2, y_pt(row) - 7, fmt_num(s))
+        c.drawCentredString(x_pt(26) + w_pt(22, 30) / 2, y_pt(row) - 7, "0%")
+        c.drawRightString(x_pt(37) - 2, y_pt(row) - 7, fmt_num(s))
         row += 1
 
     # Итого
     c.drawString(x_pt(3) + 2, y_pt(row) - 7, "Всего по накладной")
-    c.drawRightString(x_pt(16) - 2, y_pt(row) - 7, fmt_num(sum(float(x.quantity or 0) for x in invoice.items)))
-    c.drawRightString(x_pt(32) - 2, y_pt(row) - 7, fmt_num(total_sum))
-    c.drawRightString(x_pt(38) - 2, y_pt(row) - 7, fmt_num(total_sum))
+    c.drawRightString(x_pt(15) - 2, y_pt(row) - 7, fmt_num(sum(float(x.quantity or 0) for x in invoice.items)))
+    c.drawRightString(x_pt(21) - 2, y_pt(row) - 7, fmt_num(total_sum))
+    c.drawRightString(x_pt(37) - 2, y_pt(row) - 7, fmt_num(total_sum))
 
     # Нижняя часть — каждая строка в своей ячейке
     n = len(invoice.items)
@@ -260,6 +264,7 @@ def generate_torg12_pdf(invoice, counterparty, config, font_name="Helvetica", am
     doc_date = __import__('datetime').date.today()
     c.drawString(x_pt(2) + 2, y_pt(44) - 7, f"Отпуск груза произвел ___ {doc_date.strftime('%d.%m.%Y')} г.   м.п.")
 
+    c.restoreState()
     c.save()
     buf.seek(0)
     return buf

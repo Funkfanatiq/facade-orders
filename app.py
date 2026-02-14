@@ -1303,7 +1303,7 @@ def _unit_to_okei(unit):
 @app.route("/invoice/<int:invoice_id>/torg12")
 @login_required
 def invoice_torg12(invoice_id):
-    """Скачивание товарной накладной ТОРГ-12. Точная копия формы по образцу."""
+    """ТОРГ-12 — полная идентичность образцу Excel (11 от 12.07.2016)."""
     if current_user.role not in ["Менеджер", "Админ"]:
         flash("Доступ запрещен", "error")
         return redirect(url_for("dashboard"))
@@ -1345,7 +1345,6 @@ def invoice_torg12(invoice_id):
     seller_account = esc(cfg.get('COMPANY_ACCOUNT'))
     seller_corr = esc(cfg.get('COMPANY_CORR_ACCOUNT'))
     seller_okpo = esc(cfg.get('COMPANY_OKPO') or "")
-
     buyer_name = esc(cp.full_name or cp.name)
     buyer_addr = esc(cp.address or cp.legal_address or "")
     buyer_inn = esc(cp.inn or "")
@@ -1354,127 +1353,102 @@ def invoice_torg12(invoice_id):
     buyer_account = esc(cp.payment_account or "")
     buyer_corr = esc(cp.corr_account or "")
     buyer_okpo = esc(cp.okpo or "")
-
     doc_date = date.today()
     org_str = f"{seller_name}, {seller_addr}, ИНН {seller_inn}, р/с {seller_account} в банке {seller_bank} БИК {seller_bik}, корр/с {seller_corr}"
     consignee_str = f"{buyer_name}, {buyer_addr or ''}, ИНН {buyer_inn}".strip()
     if cp.payment_account and cp.bank:
         consignee_str += f", р/с {buyer_account} в банке {buyer_bank} БИК {buyer_bik}, корр/с {buyer_corr}"
     basis = f"Счет на оплату № {esc(inv.invoice_number)} от {inv.invoice_date.strftime('%d.%m.%Y')}"
+    inv_num = esc(inv.invoice_number)
+    inv_dt = (inv.invoice_date or doc_date).strftime('%d.%m.%Y')
+    buyer_okpo_str = (buyer_okpo or "—").strip() or "—"
+    seller_okpo_str = (seller_okpo or "—").strip() or "—"
 
     flow = []
     desc_style = ParagraphStyle("Desc", parent=styles["Normal"], fontName=font_name, fontSize=6, alignment=TA_CENTER, textColor=colors.HexColor("#555555"))
 
-    # === Верх: утверждение + справа таблица Код (заголовок "Унифицированная форма № ТОРГ-12" перенесён над таблицей) ===
-    code_table = Table([
-        ["Код"],
-        [esc(inv.invoice_number)],   # номер документа — верхняя ячейка
-        ["0330212"],
-        [str(seller_okpo) if seller_okpo else "—"],
-    ], colWidths=[25*mm])
-    code_table.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (-1, -1), font_name),
-        ("FONTSIZE", (0, 0), (-1, -1), 7),
-        ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
-        ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (0, 0), (0, 0), "CENTER"),
-        ("ALIGN", (0, 1), (0, 1), "LEFT"),   # номер — по левому краю
-        ("ALIGN", (0, 2), (-1, -1), "RIGHT"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-    ]))
-    top_header = Table([
-        [Paragraph("Утверждена постановлением Госкомстата России от 25.12.98 № 132", fs7), code_table],
-    ], colWidths=[180*mm, 25*mm])
-    top_header.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-    ]))
-    flow.append(top_header)
+    # === Строка 1: Заголовок + утверждение (как в Excel A1:AM1) ===
+    header_text = "Унифицированная форма № ТОРГ-12\nУтверждена постановлением Госкомстата России от 25.12.98 № 132"
+    flow.append(Paragraph(header_text, ParagraphStyle("H", parent=styles["Normal"], fontName=font_name, fontSize=8, alignment=TA_CENTER)))
     flow.append(Spacer(1, 2*mm))
 
-    # === Левая часть: графа (label) слева, данные с подчёркиванием справа, дескриптор снизу ===
+    # === Строки 2-18: Левая часть + правая колонка Коды (как в Excel) ===
     def block_row(label, data_cell, descriptor):
-        """label — перед подчёркиванием (Грузополучатель и т.д.), data — под линией, descriptor — под линией по центру."""
         if label:
-            t = Table([[label, data_cell], [Paragraph(descriptor, desc_style), ""]], colWidths=[32*mm, 120*mm])
+            t = Table([[label, data_cell], [Paragraph(descriptor, desc_style), ""]], colWidths=[30*mm, 118*mm])
             t.setStyle(TableStyle([
                 ("FONTNAME", (0, 0), (-1, -1), font_name),
                 ("FONTSIZE", (0, 0), (1, 0), 7),
                 ("LINEBELOW", (1, 0), (1, 0), 0.5, colors.black),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("LEFTPADDING", (0, 0), (0, -1), 2),
-                ("RIGHTPADDING", (0, 0), (0, -1), 12),
+                ("RIGHTPADDING", (0, 0), (0, -1), 8),
                 ("LEFTPADDING", (1, 0), (1, -1), 4),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 2),
                 ("SPAN", (0, 1), (1, 1)),
             ]))
         else:
-            t = Table([[data_cell], [Paragraph(descriptor, desc_style)]], colWidths=[152*mm])
+            t = Table([[data_cell], [Paragraph(descriptor, desc_style)]], colWidths=[148*mm])
             t.setStyle(TableStyle([
                 ("FONTNAME", (0, 0), (-1, -1), font_name),
                 ("FONTSIZE", (0, 0), (0, 0), 7),
                 ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.black),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 2),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 2),
             ]))
         return t
 
-    buyer_okpo_str = (buyer_okpo or "—").strip() or "—"
-    seller_okpo_str = (seller_okpo or "—").strip() or "—"
-    inv_num = esc(inv.invoice_number)
-    inv_dt = (inv.invoice_date or doc_date).strftime('%d.%m.%Y')
-
-    # Единая таблица: каждая строка [левый блок | подпись | значение] — подписи напротив грузоотправитель, грузополучатель, поставщик, плательщик
-    # По образцу: грузоотправитель → форма по ОКУД + по ОКПО; грузополучатель → вид деятельности по ОКДП + по ОКПО; поставщик → по ОКПО; плательщик → по ОКПО
+    # Порядок блоков как в Excel: грузоотправитель, структурное подразделение, грузополучатель, поставщик, плательщик, основание
     b0 = block_row("", Paragraph(org_str, fs7), "организация-грузоотправитель, адрес, телефон, факс, банковские реквизиты")
+    b_struct = block_row("структурное подразделение", Paragraph(" ", fs7), "")
     b1 = block_row("Грузополучатель", Paragraph(consignee_str, fs7), "организация, адрес, телефон, факс, банковские реквизиты")
     b2 = block_row("Поставщик", Paragraph(org_str, fs7), "организация, адрес, телефон, факс, банковские реквизиты")
     b3 = block_row("Плательщик", Paragraph(consignee_str, fs7), "организация, адрес, телефон, факс, банковские реквизиты")
     b4 = block_row("Основание", Paragraph(basis, fs7), "договор, заказ-наряд")
 
+    # Порядок строк и столбцов как в Excel: грузоотправитель, структурное подразделение, грузополучатель, поставщик, плательщик, основание
     section_rows = [
-        [b0, Paragraph("Форма по ОКУД", fs6), "0330212"],
-        ["", Paragraph("по ОКПО", fs6), seller_okpo_str],  # ОКПО грузоотправителя
-        [b1, Paragraph("Вид деятельности по ОКДП", fs6), "—"],
-        ["", Paragraph("по ОКПО", fs6), buyer_okpo_str],   # ОКПО грузополучателя
-        [b2, Paragraph("по ОКПО", fs6), seller_okpo_str],  # ОКПО поставщика
-        [b3, Paragraph("по ОКПО", fs6), buyer_okpo_str],  # ОКПО плательщика
-        [b4, Paragraph("номер", fs6), inv_num],
+        [b0, Paragraph("Коды", fs7), ""],
+        ["", Paragraph("Форма по ОКУД", fs6), "0330212"],
+        ["", Paragraph("по ОКПО", fs6), seller_okpo_str],
+        [b_struct, Paragraph("Вид деятельности по ОКДП", fs6), "—"],
+        ["", Paragraph("по ОКПО", fs6), buyer_okpo_str],
+        [b1, Paragraph("по ОКПО", fs6), seller_okpo_str],
+        ["", Paragraph("по ОКПО", fs6), buyer_okpo_str],
+        [b2, Paragraph("по ОКПО", fs6), seller_okpo_str],
+        ["", Paragraph("по ОКПО", fs6), buyer_okpo_str],
+        [b3, Paragraph("номер", fs6), inv_num],
         ["", Paragraph("дата", fs6), inv_dt],
         ["", Paragraph("Вид операции", fs6), ""],
+        [b4, "", ""],
     ]
-    top_section = Table(section_rows, colWidths=[152*mm, 26*mm, 16*mm])
+    top_section = Table(section_rows, colWidths=[148*mm, 26*mm, 16*mm])
     top_section.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
         ("FONTSIZE", (1, 0), (1, -1), 6),
         ("FONTSIZE", (2, 0), (2, -1), 7),
         ("VALIGN", (0, 0), (0, -1), "TOP"),
-        ("VALIGN", (1, 0), (1, -1), "TOP"),   # подписи сверху, не смещены вниз
+        ("VALIGN", (1, 0), (1, -1), "TOP"),
         ("VALIGN", (2, 0), (2, -1), "MIDDLE"),
-        ("SPAN", (0, 0), (0, 1)),   # грузоотправитель на 2 строки
-        ("SPAN", (0, 2), (0, 3)),   # грузополучатель на 2 строки
-        ("SPAN", (0, 6), (0, 8)),   # основание на 3 строки
+        ("SPAN", (0, 0), (0, 2)),
+        ("SPAN", (0, 3), (0, 4)),
+        ("SPAN", (0, 5), (0, 6)),
+        ("SPAN", (0, 7), (0, 8)),
+        ("SPAN", (0, 9), (0, 11)),
         ("BOX", (2, 0), (2, -1), 0.5, colors.black),
         ("INNERGRID", (2, 0), (2, -1), 0.5, colors.black),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-        ("ALIGN", (2, 0), (2, 5), "RIGHT"),
-        ("ALIGN", (2, 6), (2, 7), "LEFT"),
-        ("RIGHTPADDING", (1, 0), (1, -1), 8),   # отступ от граф, чтобы не сливалось
+        ("ALIGN", (2, 0), (2, 8), "RIGHT"),
+        ("ALIGN", (2, 9), (2, 10), "LEFT"),
+        ("RIGHTPADDING", (1, 0), (1, -1), 8),
         ("LEFTPADDING", (2, 0), (2, -1), 5),
-        ("RIGHTPADDING", (2, 0), (2, -1), 2),
     ]))
     flow.append(top_section)
     flow.append(Spacer(1, 3*mm))
 
-    # === Унифицированная форма № ТОРГ-12 (маленьким шрифтом слева над таблицей) + ТОВАРНАЯ НАКЛАДНАЯ ===
-    form_title = Paragraph("Унифицированная форма № ТОРГ-12", ParagraphStyle("FormTitle", parent=styles["Normal"], fontName=font_name, fontSize=6))
-    flow.append(form_title)
-    flow.append(Spacer(1, 1*mm))
+    # === ТОВАРНАЯ НАКЛАДНАЯ + Номер документа, Дата составления (как в Excel строки 16-17) ===
     title_block = Table([
         [Paragraph("ТОВАРНАЯ НАКЛАДНАЯ", ParagraphStyle("Title", parent=styles["Normal"], fontName=font_name, fontSize=10, fontWeight='bold')), "Номер документа", "Дата составления"],
-        ["", esc(inv.invoice_number), doc_date.strftime('%d.%m.%Y')],
+        ["", inv_num, inv_dt],
     ], colWidths=[100*mm, 35*mm, 35*mm])
     title_block.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
@@ -1489,11 +1463,10 @@ def invoice_torg12(invoice_id):
     flow.append(title_block)
     flow.append(Spacer(1, 1*mm))
 
-    # Точная копия формы ТОРГ-12 — 15 колонок, двухуровневый заголовок как на образце
-    # По образцу ТОРГ-12 (11 от 12.07.2016)
+    # === Таблица товаров — 15 колонок как в Excel (строки 20-27) ===
     header_r0 = ["Номер\nпо порядку", "Товар", "", "Единица измерения", "", "Количество", "", "", "Масса брутто", "Кол-во\n(масса нетто)", "Цена,\nруб. коп.", "Сумма без\nучета НДС,\nруб. коп.", "НДС", "", "Сумма с\nучетом НДС,\nруб. коп."]
-    header_r1 = ["", "наименование, характеристика, сорт, артикул товара", "код", "наименование", "код по ОКЕИ", "Вид упаковки", "в одном месте", "мест,\nштук", "", "", "", "", "ставка, %", "сумма,\nруб. коп.", ""]
-    col_w = [6*mm, 38*mm, 6*mm, 8*mm, 7*mm, 8*mm, 8*mm, 6*mm, 10*mm, 12*mm, 14*mm, 18*mm, 6*mm, 11*mm, 18*mm]  # ~176мм
+    header_r1 = ["", "наименование, характеристика, сорт, артикул товара", "код", "наименование", "код по ОКЕИ", "Вид упаковки", "в одном месте", "мест,\nштук", "", "", "", "ставка, %", "сумма,\nруб. коп."]
+    col_w = [6*mm, 38*mm, 6*mm, 8*mm, 7*mm, 8*mm, 8*mm, 6*mm, 10*mm, 12*mm, 14*mm, 18*mm, 6*mm, 11*mm, 18*mm]
     data = [header_r0, header_r1]
     total_sum = 0.0
     total_qty = 0.0
@@ -1516,7 +1489,6 @@ def invoice_torg12(invoice_id):
         ("FONTSIZE", (0, 0), (-1, -1), 7),
         ("BACKGROUND", (0, 0), (-1, 1), colors.HexColor("#e8e8e8")),
         ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f0f0f0")),
-        # Объединение ячеек заголовка как на образце
         ("SPAN", (0, 0), (0, 1)),
         ("SPAN", (1, 0), (2, 0)),
         ("SPAN", (3, 0), (4, 0)),
@@ -1533,17 +1505,18 @@ def invoice_torg12(invoice_id):
     flow.append(goods_tbl)
     flow.append(Spacer(1, 1*mm))
 
+    # === Нижняя часть — как в Excel ===
     n_items = len(inv.items)
     records_word = "записей" if n_items >= 5 or (10 <= n_items % 100 <= 20) else "записи" if 2 <= n_items % 10 <= 4 else "запись"
     flow.append(Paragraph(f"Товарная накладная имеет приложение на ___ листах и содержит {n_items} порядковых номера {records_word}", fs7))
     flow.append(Paragraph("Масса груза (нетто) ___ прописью   Масса груза (брутто) ___ прописью   Всего мест ___ прописью", fs7))
-    flow.append(Paragraph("Приложение (паспорта, сертификаты, и т.д.) на ___ листах   По доверенности № ___ выданной ___", fs7))
+    flow.append(Paragraph("Приложение (паспорта, сертификаты и т.п.) на ___ листах   По доверенности № ___ от ___ выданной ___", fs7))
     amount_words = _amount_to_words_rub(total_sum)
     flow.append(Paragraph(f"Всего отпущено на сумму {amount_words}", fs8))
     flow.append(Spacer(1, 2*mm))
 
     sig_left = Table([
-        ["Отпуск груза разрешил", "Руководитель организац.", ""],
+        ["Отпуск груза разрешил", "Генеральный директор", ""],
         ["должность", "подпись", "расшифровка подписи"],
         ["Главный (старший) бухгалтер", "", ""],
         ["должность", "подпись", "расшифровка подписи"],
@@ -1551,7 +1524,7 @@ def invoice_torg12(invoice_id):
     sig_right = Table([
         ["Груз принял", "", ""],
         ["должность", "подпись", "расшифровка подписи"],
-        ["Груз получил грузополучатель", "", ""],
+        ["Груз получил", "грузополучатель", ""],
         ["должность", "подпись", "расшифровка подписи"],
     ], colWidths=[50*mm, 35*mm, 35*mm])
     for st in [sig_left, sig_right]:

@@ -1369,24 +1369,25 @@ def invoice_torg12(invoice_id):
     header_row1 = Paragraph("Унифицированная форма № ТОРГ-12", ParagraphStyle("H1", parent=styles["Normal"], fontName=font_name, fontSize=9, alignment=TA_CENTER))
     header_row2 = Paragraph("Утверждена постановлением Госкомстата России от 25.12.98 № 132", fs7)
     code_table = Table([
-        ["Код", ""],
-        ["Форма по ОКУД", "0330212"],
-        ["по ОКПО", seller_okpo or "—"],
-    ], colWidths=[28*mm, 22*mm])
+        ["Код"],
+        ["0330212"],
+        [seller_okpo or "—"],
+    ], colWidths=[22*mm])
     code_table.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
         ("FONTSIZE", (0, 0), (-1, -1), 7),
         ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
         ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+        ("ALIGN", (0, 0), (0, 0), "CENTER"),
+        ("ALIGN", (0, 1), (-1, -1), "RIGHT"),
         ("LEFTPADDING", (0, 0), (-1, -1), 2),
         ("RIGHTPADDING", (0, 0), (-1, -1), 2),
     ]))
     top_header = Table([
         [header_row1, code_table],
         [Paragraph("Утверждена постановлением Госкомстата России от 25.12.98 № 132", fs7), ""],
-    ], colWidths=[180*mm, 50*mm])
+    ], colWidths=[180*mm, 22*mm])
     top_header.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("SPAN", (1, 0), (1, 1)),
@@ -1410,7 +1411,6 @@ def invoice_torg12(invoice_id):
 
     left_blocks = [
         block_row(Paragraph(org_str, fs7), "организация - грузоотправитель, адрес, номер телефона, факса, банковские реквизиты"),
-        block_row("", "структурное подразделение"),
         block_row(Paragraph(f"Грузополучатель  {consignee_str}", fs7), "наименование организации, адрес, номер телефона, банковские реквизиты"),
         block_row(Paragraph(f"Поставщик  {org_str}", fs7), "наименование организации, адрес, номер телефона, банковские реквизиты"),
         block_row(Paragraph(f"Плательщик  {consignee_str}", fs7), "наименование организации, адрес, номер телефона, банковские реквизиты"),
@@ -1423,41 +1423,48 @@ def invoice_torg12(invoice_id):
     left_col = Table(left_rows, colWidths=[165*mm])
     left_col.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
 
-    # === Правая часть: вертикальные ячейки по ОКПО, Транспортная накладная, Вид операции ===
-    right_cells = [
-        ["Вид деятельности по ОКДП", ""],
-        ["по ОКПО", buyer_okpo or "—"],
-        ["по ОКПО", seller_okpo or "—"],
-        ["по ОКПО", buyer_okpo or "—"],
-    ]
-    right_table = Table(right_cells, colWidths=[28*mm, 22*mm])
-    right_table.setStyle(TableStyle([
+    # === Правая часть: столбик как на образце (продолжение после Код/0330212/ОКПО в header) ===
+    # 2 пустых (Вид деятельности), по ОКПО для Грузополучатель/Поставщик/Плательщик
+    codes_col = Table([
+        [""],
+        [""],
+        [buyer_okpo or "—"],
+        [seller_okpo or "—"],
+        [buyer_okpo or "—"],
+    ], colWidths=[22*mm])
+    codes_col.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
         ("FONTSIZE", (0, 0), (-1, -1), 7),
         ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
         ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+        ("ALIGN", (0, 0), (0, 0), "CENTER"),
+        ("ALIGN", (0, 1), (-1, -1), "RIGHT"),
         ("LEFTPADDING", (0, 0), (-1, -1), 2),
         ("RIGHTPADDING", (0, 0), (-1, -1), 2),
     ]))
+    # Транспортная накладная: левая колонка — номер/дата, правая — пустые ячейки
     transport_tbl = Table([
-        ["Транспортная накладная", ""],
-        ["номер", "дата"],
-        ["номер", "дата"],
-        ["Вид операции", ""],
-    ], colWidths=[28*mm, 22*mm])
+        ["номер", ""],
+        ["дата", ""],
+    ], colWidths=[12*mm, 10*mm])
     transport_tbl.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
         ("FONTSIZE", (0, 0), (-1, -1), 7),
         ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
         ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
         ("LEFTPADDING", (0, 0), (-1, -1), 2),
+        ("ALIGN", (0, 0), (0, -1), "LEFT"),
     ]))
-    right_col = Table([[right_table], [Spacer(1, 2*mm)], [transport_tbl]], colWidths=[50*mm])
+    # Вид операции — одна пустая ячейка
+    vid_oper = Table([[""]], colWidths=[22*mm])
+    vid_oper.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
+    ]))
+    right_col = Table([[codes_col], [Spacer(1, 2*mm)], [transport_tbl], [Spacer(1, 2*mm)], [vid_oper]], colWidths=[22*mm])
     right_col.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
 
-    top_section = Table([[left_col, right_col]], colWidths=[165*mm, 55*mm])
+    top_section = Table([[left_col, right_col]], colWidths=[165*mm, 22*mm])
     top_section.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (1, 0), (1, -1), "RIGHT")]))
     flow.append(top_section)
     flow.append(Spacer(1, 3*mm))

@@ -1322,7 +1322,7 @@ def invoice_torg12(invoice_id):
     from xml.sax.saxutils import escape
     font_name = _get_pdf_font()
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=8*mm, bottomMargin=8*mm, leftMargin=10*mm, rightMargin=10*mm)
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=5*mm, bottomMargin=5*mm, leftMargin=5*mm, rightMargin=5*mm)
     styles = getSampleStyleSheet()
     fs6 = ParagraphStyle("FS6", parent=styles["Normal"], fontName=font_name, fontSize=6)
     fs7 = ParagraphStyle("FS7", parent=styles["Normal"], fontName=font_name, fontSize=7)
@@ -1365,9 +1365,7 @@ def invoice_torg12(invoice_id):
     flow = []
     desc_style = ParagraphStyle("Desc", parent=styles["Normal"], fontName=font_name, fontSize=6, alignment=TA_CENTER, textColor=colors.HexColor("#555555"))
 
-    # === Верх: заголовок формы + справа таблица Код ===
-    header_row1 = Paragraph("Унифицированная форма № ТОРГ-12", ParagraphStyle("H1", parent=styles["Normal"], fontName=font_name, fontSize=9, alignment=TA_CENTER))
-    header_row2 = Paragraph("Утверждена постановлением Госкомстата России от 25.12.98 № 132", fs7)
+    # === Верх: утверждение + справа таблица Код (заголовок "Унифицированная форма № ТОРГ-12" перенесён над таблицей) ===
     code_table = Table([
         ["Код"],
         [esc(inv.invoice_number)],   # номер документа — верхняя ячейка
@@ -1387,13 +1385,10 @@ def invoice_torg12(invoice_id):
         ("RIGHTPADDING", (0, 0), (-1, -1), 2),
     ]))
     top_header = Table([
-        [header_row1, code_table],
-        [Paragraph("Утверждена постановлением Госкомстата России от 25.12.98 № 132", fs7), ""],
+        [Paragraph("Утверждена постановлением Госкомстата России от 25.12.98 № 132", fs7), code_table],
     ], colWidths=[180*mm, 25*mm])
     top_header.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("SPAN", (1, 0), (1, 1)),
-        ("ALIGN", (0, 0), (0, 0), "CENTER"),
     ]))
     flow.append(top_header)
     flow.append(Spacer(1, 2*mm))
@@ -1473,7 +1468,10 @@ def invoice_torg12(invoice_id):
     flow.append(top_section)
     flow.append(Spacer(1, 3*mm))
 
-    # === ТОВАРНАЯ НАКЛАДНАЯ + Номер документа, Дата составления ===
+    # === Унифицированная форма № ТОРГ-12 (маленьким шрифтом слева над таблицей) + ТОВАРНАЯ НАКЛАДНАЯ ===
+    form_title = Paragraph("Унифицированная форма № ТОРГ-12", ParagraphStyle("FormTitle", parent=styles["Normal"], fontName=font_name, fontSize=6))
+    flow.append(form_title)
+    flow.append(Spacer(1, 1*mm))
     title_block = Table([
         [Paragraph("ТОВАРНАЯ НАКЛАДНАЯ", ParagraphStyle("Title", parent=styles["Normal"], fontName=font_name, fontSize=10, fontWeight='bold')), "Номер документа", "Дата составления"],
         ["", esc(inv.invoice_number), doc_date.strftime('%d.%m.%Y')],

@@ -1426,72 +1426,45 @@ def invoice_torg12(invoice_id):
 
     buyer_okpo_str = (buyer_okpo or "—").strip() or "—"
     seller_okpo_str = (seller_okpo or "—").strip() or "—"
+    inv_num = esc(inv.invoice_number)
+    inv_dt = (inv.invoice_date or doc_date).strftime('%d.%m.%Y')
 
-    # Левая колонка: блоки (без изменений)
-    left_blocks = [
-        block_row("", Paragraph(org_str, fs7), "организация - грузоотправитель, адрес, номер телефона, факса, банковские реквизиты"),
-        block_row("Грузополучатель", Paragraph(consignee_str, fs7), "наименование организации, адрес, номер телефона, банковские реквизиты"),
-        block_row("Поставщик", Paragraph(org_str, fs7), "наименование организации, адрес, номер телефона, банковские реквизиты"),
-        block_row("Плательщик", Paragraph(consignee_str, fs7), "наименование организации, адрес, номер телефона, банковские реквизиты"),
-        block_row("Основание", Paragraph(basis, fs7), "наименование документа (договор, контракт, заказ-наряд)"),
-    ]
-    left_rows = [[left_blocks[0]]]
-    for b in left_blocks[1:]:
-        left_rows.append([Spacer(1, 2*mm)])
-        left_rows.append([b])
-    left_col = Table(left_rows, colWidths=[152*mm])
-    left_col.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    # Единая таблица: каждая строка [левый блок | подпись | значение] — подписи напротив грузоотправитель, грузополучатель, поставщик, плательщик
+    # По образцу: грузоотправитель → форма по ОКУД + по ОКПО; грузополучатель → вид деятельности по ОКДП + по ОКПО; поставщик → по ОКПО; плательщик → по ОКПО
+    b0 = block_row("", Paragraph(org_str, fs7), "организация - грузоотправитель, адрес, номер телефона, факса, банковские реквизиты")
+    b1 = block_row("Грузополучатель", Paragraph(consignee_str, fs7), "наименование организации, адрес, номер телефона, банковские реквизиты")
+    b2 = block_row("Поставщик", Paragraph(org_str, fs7), "наименование организации, адрес, номер телефона, банковские реквизиты")
+    b3 = block_row("Плательщик", Paragraph(consignee_str, fs7), "наименование организации, адрес, номер телефона, банковские реквизиты")
+    b4 = block_row("Основание", Paragraph(basis, fs7), "наименование документа (договор, контракт, заказ-наряд)")
 
-    # Перед столбцом кодов — подписи по образцу ТОРГ-12
-    right_labels = [
-        [Paragraph("форма по ОКУД", fs6)],
-        [Paragraph("по ОКПО", fs6)],
-        [Paragraph("вид деятельности по ОКДП", fs6)],
-        [Paragraph("по ОКПО", fs6)],
-        [Paragraph("по ОКПО", fs6)],
-        [Paragraph("По ОКПО", fs6)],
-        [Paragraph("номер", fs6)],
-        [Paragraph("дата", fs6)],
-        [Paragraph("Вид операции", fs6)],
+    section_rows = [
+        [b0, Paragraph("форма по ОКУД", fs6), "0330212"],
+        ["", Paragraph("по ОКПО", fs6), seller_okpo_str],   # ОКПО грузоотправителя
+        [b1, Paragraph("вид деятельности по ОКДП", fs6), "—"],
+        ["", Paragraph("по ОКПО", fs6), buyer_okpo_str],   # ОКПО грузополучателя
+        [b2, Paragraph("по ОКПО", fs6), seller_okpo_str],  # ОКПО поставщика
+        [b3, Paragraph("по ОКПО", fs6), buyer_okpo_str],  # ОКПО плательщика
+        [b4, Paragraph("номер", fs6), inv_num],
+        ["", Paragraph("дата", fs6), inv_dt],
+        ["", Paragraph("Вид операции", fs6), ""],
     ]
-    right_values = [
-        ["0330212"],
-        [seller_okpo_str],   # ОКПО грузоотправителя
-        ["—"],              # вид деятельности по ОКДП
-        [buyer_okpo_str],   # ОКПО грузополучателя
-        [seller_okpo_str],  # ОКПО поставщика
-        [buyer_okpo_str],   # ОКПО плательщика
-        [esc(inv.invoice_number)],
-        [(inv.invoice_date or doc_date).strftime('%d.%m.%Y')],
-        [""],
-    ]
-    right_labels_t = Table(right_labels, colWidths=[22*mm], rowHeights=[7*mm]*9)
-    right_labels_t.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (-1, -1), font_name),
-        ("FONTSIZE", (0, 0), (-1, -1), 6),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 1),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-    ]))
-    right_values_t = Table(right_values, colWidths=[16*mm], rowHeights=[7*mm]*9)
-    right_values_t.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (-1, -1), font_name),
-        ("FONTSIZE", (0, 0), (-1, -1), 7),
-        ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
-        ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (0, 0), (0, 5), "RIGHT"),
-        ("ALIGN", (0, 6), (0, 7), "LEFT"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-    ]))
-
-    top_section = Table([[left_col, "", right_labels_t, right_values_t]], colWidths=[152*mm, 8*mm, 22*mm, 16*mm])
+    top_section = Table(section_rows, colWidths=[152*mm, 22*mm, 16*mm])
     top_section.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (0, 0), (0, 0), "LEFT"),
-        ("ALIGN", (2, 0), (3, 0), "RIGHT"),
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (1, 0), (1, -1), 6),
+        ("FONTSIZE", (2, 0), (2, -1), 7),
+        ("VALIGN", (0, 0), (0, -1), "TOP"),
+        ("VALIGN", (1, 0), (2, -1), "MIDDLE"),
+        ("SPAN", (0, 0), (0, 1)),   # грузоотправитель на 2 строки
+        ("SPAN", (0, 2), (0, 3)),   # грузополучатель на 2 строки
+        ("SPAN", (0, 6), (0, 8)),   # основание на 3 строки
+        ("BOX", (2, 0), (2, -1), 0.5, colors.black),
+        ("INNERGRID", (2, 0), (2, -1), 0.5, colors.black),
+        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+        ("ALIGN", (2, 0), (2, 5), "RIGHT"),
+        ("ALIGN", (2, 6), (2, 7), "LEFT"),
+        ("LEFTPADDING", (2, 0), (2, -1), 2),
+        ("RIGHTPADDING", (2, 0), (2, -1), 2),
     ]))
     flow.append(top_section)
     flow.append(Spacer(1, 3*mm))

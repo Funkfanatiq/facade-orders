@@ -1400,18 +1400,20 @@ def invoice_torg12(invoice_id):
     def block_row(label, data_cell, descriptor):
         """label — перед подчёркиванием (Грузополучатель и т.д.), data — под линией, descriptor — под линией по центру."""
         if label:
-            t = Table([[label, data_cell], [Paragraph(descriptor, desc_style), ""]], colWidths=[22*mm, 143*mm])
+            t = Table([[label, data_cell], [Paragraph(descriptor, desc_style), ""]], colWidths=[32*mm, 120*mm])
             t.setStyle(TableStyle([
                 ("FONTNAME", (0, 0), (-1, -1), font_name),
                 ("FONTSIZE", (0, 0), (1, 0), 7),
                 ("LINEBELOW", (1, 0), (1, 0), 0.5, colors.black),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 2),
+                ("LEFTPADDING", (0, 0), (0, -1), 2),
+                ("RIGHTPADDING", (0, 0), (0, -1), 12),
+                ("LEFTPADDING", (1, 0), (1, -1), 4),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 2),
                 ("SPAN", (0, 1), (1, 1)),
             ]))
         else:
-            t = Table([[data_cell], [Paragraph(descriptor, desc_style)]], colWidths=[165*mm])
+            t = Table([[data_cell], [Paragraph(descriptor, desc_style)]], colWidths=[152*mm])
             t.setStyle(TableStyle([
                 ("FONTNAME", (0, 0), (-1, -1), font_name),
                 ("FONTSIZE", (0, 0), (0, 0), 7),
@@ -1422,6 +1424,10 @@ def invoice_torg12(invoice_id):
             ]))
         return t
 
+    buyer_okpo_str = (buyer_okpo or "—").strip() or "—"
+    seller_okpo_str = (seller_okpo or "—").strip() or "—"
+
+    # Левая колонка: блоки
     left_blocks = [
         block_row("", Paragraph(org_str, fs7), "организация - грузоотправитель, адрес, номер телефона, факса, банковские реквизиты"),
         block_row("Грузополучатель", Paragraph(consignee_str, fs7), "наименование организации, адрес, номер телефона, банковские реквизиты"),
@@ -1433,23 +1439,21 @@ def invoice_torg12(invoice_id):
     for b in left_blocks[1:]:
         left_rows.append([Spacer(1, 2*mm)])
         left_rows.append([b])
-    left_col = Table(left_rows, colWidths=[165*mm])
+    left_col = Table(left_rows, colWidths=[152*mm])
     left_col.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
 
-    # === Правая часть: один столбец ячеек (без вложенных таблиц — иначе пусто/съезжает) ===
-    buyer_okpo_str = str(buyer_okpo) if buyer_okpo else "—"
-    seller_okpo_str = str(seller_okpo) if seller_okpo else "—"
+    # Правая таблица: 8 ячеек по образцу ТОРГ-12 (ОКПО, номер, дата)
     right_data = [
         [""],
         [""],
         [buyer_okpo_str],
         [seller_okpo_str],
         [buyer_okpo_str],
-        ["номер"],
-        ["дата"],
+        [esc(inv.invoice_number)],
+        [inv.invoice_date.strftime('%d.%m.%Y') if inv.invoice_date else doc_date.strftime('%d.%m.%Y')],
         [""],
     ]
-    right_col = Table(right_data, colWidths=[25*mm])
+    right_col = Table(right_data, colWidths=[25*mm], rowHeights=[7*mm]*8)
     right_col.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
         ("FONTSIZE", (0, 0), (-1, -1), 7),
@@ -1462,8 +1466,13 @@ def invoice_torg12(invoice_id):
         ("RIGHTPADDING", (0, 0), (-1, -1), 2),
     ]))
 
-    top_section = Table([[left_col, right_col]], colWidths=[165*mm, 25*mm])
-    top_section.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    # Слева блоки, зазор 10мм, справа таблица (чтобы «Грузополучатель» не прилипал к правой колонке)
+    top_section = Table([[left_col, "", right_col]], colWidths=[152*mm, 10*mm, 25*mm])
+    top_section.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (0, 0), (0, 0), "LEFT"),
+        ("ALIGN", (2, 0), (2, 0), "RIGHT"),
+    ]))
     flow.append(top_section)
     flow.append(Spacer(1, 3*mm))
 

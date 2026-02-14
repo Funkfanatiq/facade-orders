@@ -1426,8 +1426,9 @@ def invoice_torg12(invoice_id):
     flow.append(Paragraph("ТОВАРНАЯ НАКЛАДНАЯ", title_style))
     flow.append(Spacer(1, 1*mm))
 
-    data = [["№", "Наименование, характеристика, сорт, артикул", "Код", "Ед.изм.", "Код ОКЕИ", "Вид упак.", "в 1 месте", "штук", "Масса брутто", "Кол-во (масса нетто)", "Цена", "Сумма без НДС", "НДС ставка, сумма", "Сумма с НДС"]]
-    col_w = [5*mm, 20*mm, 5*mm, 7*mm, 5*mm, 5*mm, 5*mm, 5*mm, 7*mm, 7*mm, 9*mm, 11*mm, 5*mm, 9*mm, 9*mm, 11*mm]
+    # Упрощённая таблица по образцу ТОРГ-12 — 10 колонок, читаемая ширина
+    data = [["№", "Наименование, характеристика, сорт, артикул", "Код", "Ед.изм.", "Код ОКЕИ", "Кол-во", "Цена", "Сумма без НДС", "НДС ставка, сумма", "Сумма с НДС"]]
+    col_w = [6*mm, 65*mm, 5*mm, 10*mm, 7*mm, 14*mm, 15*mm, 18*mm, 14*mm, 18*mm]  # итого ~182мм
     total_sum = 0.0
     total_qty = 0.0
     for i, it in enumerate(inv.items, 1):
@@ -1438,8 +1439,8 @@ def invoice_torg12(invoice_id):
         total_qty += qty
         unit = it.unit or "шт"
         okei = _unit_to_okei(unit)
-        data.append([str(i), Paragraph(esc(it.name), fs7), "", unit, okei, "", "", "", "", "", "", fmt_num(qty), fmt_num(prc), fmt_num(s), "0%, 0,00", fmt_num(s)])
-    total_row = ["Всего по накладной", "", "", "", "", "", "", "", "", "", "0", fmt_num(total_qty), "х", fmt_num(total_sum), "0%, 0,00", fmt_num(total_sum)]
+        data.append([str(i), Paragraph(esc(it.name), fs7), "", unit, okei, fmt_num(qty), fmt_num(prc), fmt_num(s), "0%, 0,00", fmt_num(s)])
+    total_row = ["Всего по накладной", "", "", "", "", fmt_num(total_qty), "х", fmt_num(total_sum), "0%, 0,00", fmt_num(total_sum)]
     data.append(total_row)
     goods_tbl = Table(data, colWidths=col_w, repeatRows=1)
     goods_tbl.setStyle(TableStyle([
@@ -1447,13 +1448,13 @@ def invoice_torg12(invoice_id):
         ("FONTSIZE", (0, 0), (-1, -1), 7),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8e8e8")),
         ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f0f0f0")),
-        ("SPAN", (0, -1), (8, -1)),
+        ("SPAN", (0, -1), (4, -1)),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ALIGN", (0, 0), (0, -1), "CENTER"),
-        ("ALIGN", (9, 0), (-1, -1), "RIGHT"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+        ("ALIGN", (5, 0), (-1, -1), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
     ]))
     flow.append(goods_tbl)
     flow.append(Spacer(1, 1*mm))

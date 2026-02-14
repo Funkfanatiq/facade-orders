@@ -90,15 +90,20 @@ def generate_torg12_pdf(invoice, counterparty, config, font_name="Helvetica", am
     total_w_pt = col_pos[-1]
     usable_w = pw - margin_pt - margin_r
     scale_w = usable_w / total_w_pt if total_w_pt > 0 else 1
-    # Высота листа для масштаба по Y
+    # Высота: верхнее поле 19mm, нижнее 25.4mm (как в Excel)
     total_h_pt = row_pos[-1]
-    usable_h = ph - 2 * margin_pt
+    usable_h = ph - margin_pt - margin_r
     scale_h = usable_h / total_h_pt if total_h_pt > 0 else 1
     scale = min(scale_w, scale_h)
+    # Смещение для центрирования на странице
+    scaled_w = total_w_pt * scale
+    scaled_h = total_h_pt * scale
+    offset_x = (usable_w - scaled_w) / 2 if scaled_w < usable_w else 0
+    offset_y = (usable_h - scaled_h) / 2 if scaled_h < usable_h else 0
 
     c = canvas.Canvas(buf, pagesize=landscape(A4))
     c.setFont(font_name, 8)
-    c.translate(margin_pt, ph - margin_pt)
+    c.translate(margin_pt + offset_x, ph - margin_pt - offset_y)
 
     def x_pt(col):
         return col_pos[col - 1] * scale
@@ -163,41 +168,42 @@ def generate_torg12_pdf(invoice, counterparty, config, font_name="Helvetica", am
     c.drawRightString(x_pt(38) - 2, y_pt(5) - 6, "Вид деятельности по ОКДП")
     c.drawString(x_pt(39) + 2, y_pt(5) - 6, "—")
 
-    # Грузополучатель D7
-    c.drawString(x_pt(4) + 2, y_pt(7) - 6, "Грузополучатель")
-    c.drawString(x_pt(5) + 2, y_pt(7) - 6, consignee[:150])
+    # Грузополучатель B7:C7, данные D7:AI7
+    c.drawString(x_pt(2) + 2, y_pt(7) - 6, "Грузополучатель")
+    c.drawString(x_pt(4) + 4, y_pt(7) - 6, consignee[:150])
     c.drawRightString(x_pt(38) - 2, y_pt(7) - 6, "по ОКПО")
     c.drawString(x_pt(39) + 2, y_pt(7) - 6, esc(counterparty.okpo or '—'))
 
-    # Поставщик B8, ТОВАРНАЯ НАКЛАДНАЯ D8
+    # Поставщик B8:C8, данные D8:AI8
     c.drawString(x_pt(2) + 2, y_pt(8) - 8, "Поставщик")
-    c.drawString(x_pt(4) + 2, y_pt(8) - 8, org_str[:120])
+    c.drawString(x_pt(4) + 4, y_pt(8) - 8, org_str[:120])
     c.drawRightString(x_pt(38) - 2, y_pt(8) - 8, "по ОКПО")
     c.drawString(x_pt(39) + 2, y_pt(8) - 8, esc(config.get('COMPANY_OKPO') or '—'))
 
-    # Плательщик B10
+    # Плательщик B10:C10, данные D10:AI10
     c.drawString(x_pt(2) + 2, y_pt(10) - 8, "Плательщик")
-    c.drawString(x_pt(4) + 2, y_pt(10) - 8, consignee[:120])
+    c.drawString(x_pt(4) + 4, y_pt(10) - 8, consignee[:120])
     c.drawRightString(x_pt(38) - 2, y_pt(10) - 8, "по ОКПО")
     c.drawString(x_pt(39) + 2, y_pt(10) - 8, esc(counterparty.okpo or '—'))
 
-    # Номер, дата AK13, AM13
+    # Номер (стр.13), дата (стр.14) — AK13:AL14, AM13:AM14
     c.drawRightString(x_pt(38) - 2, y_pt(13) - 6, "номер")
-    c.drawRightString(x_pt(37) - 2, y_pt(13) - 6, "дата")
     c.drawString(x_pt(39) + 2, y_pt(13) - 6, inv_num)
-    c.drawString(x_pt(38) + 2, y_pt(13) - 6, inv_dt)
+    c.drawRightString(x_pt(38) - 2, y_pt(14) - 6, "дата")
+    c.drawString(x_pt(39) + 2, y_pt(14) - 6, inv_dt)
 
-    # Основание C14
-    c.drawString(x_pt(3) + 2, y_pt(14) - 6, "Основание")
-    c.drawString(x_pt(4) + 2, y_pt(14) - 6, basis[:80])
-    c.drawRightString(x_pt(38) - 2, y_pt(14) - 6, "Номер документа")
-    c.drawRightString(x_pt(37) - 2, y_pt(14) - 6, "Дата составления")
-    c.drawString(x_pt(39) + 2, y_pt(14) - 6, inv_num)
-    c.drawString(x_pt(38) + 2, y_pt(14) - 6, inv_dt)
+    # Основание B14:C14, данные D14:AI14
+    c.drawString(x_pt(2) + 2, y_pt(14) - 6, "Основание")
+    c.drawString(x_pt(4) + 4, y_pt(14) - 6, basis[:80])
 
-    # ТОВАРНАЯ НАКЛАДНАЯ J17, Вид операции AL18
+    # ТОВАРНАЯ НАКЛАДНАЯ J17, К16:N16 Номер документа, O16:R16 Дата составления
     c.setFont(font_name, 9)
-    c.drawString(x_pt(10) + 2, y_pt(17) - 10, "ТОВАРНАЯ НАКЛАДНАЯ")
+    c.drawString(x_pt(2) + 2, y_pt(17) - 10, "ТОВАРНАЯ НАКЛАДНАЯ")
+    c.setFont(font_name, 7)
+    c.drawCentredString(x_pt(11) + w_pt(11, 14) / 2, y_pt(16) - 6, "Номер документа")
+    c.drawCentredString(x_pt(15) + w_pt(15, 18) / 2, y_pt(16) - 6, "Дата составления")
+    c.drawCentredString(x_pt(11) + w_pt(11, 14) / 2, y_pt(17) - 6, inv_num)
+    c.drawCentredString(x_pt(15) + w_pt(15, 18) / 2, y_pt(17) - 6, inv_dt)
     c.drawRightString(x_pt(38) - 2, y_pt(18) - 6, "Вид операции")
 
     # Таблица товаров - заголовки и данные
@@ -233,23 +239,26 @@ def generate_torg12_pdf(invoice, counterparty, config, font_name="Helvetica", am
     c.drawRightString(x_pt(32) - 2, y_pt(row) - 7, fmt_num(total_sum))
     c.drawRightString(x_pt(38) - 2, y_pt(row) - 7, fmt_num(total_sum))
 
-    # Нижняя часть
+    # Нижняя часть — каждая строка в своей ячейке
     n = len(invoice.items)
     rec = "записей" if n >= 5 else "записи" if 2 <= n % 10 <= 4 else "запись"
-    c.drawString(x_pt(2) + 2, y_pt(28) - 8, f"Товарная накладная имеет приложение на ___ листах и содержит {n} порядковых номера {rec}")
-    c.drawString(x_pt(2) + 2, y_pt(29) - 8, "Масса груза (нетто) ___ прописью   Масса груза (брутто) ___ прописью   Всего мест ___ прописью")
-    c.drawString(x_pt(2) + 2, y_pt(30) - 8, "Приложение (паспорта, сертификаты и т.п.) на ___ листах   По доверенности № ___ от ___ выданной ___")
+    c.setFont(font_name, 6)
+    c.drawString(x_pt(2) + 2, y_pt(28) - 6, f"Товарная накладная имеет приложение на ___ листах и содержит {n} порядковых номера {rec}")
+    c.drawString(x_pt(2) + 2, y_pt(29) - 6, "Масса груза (нетто) ___ прописью   Масса груза (брутто) ___ прописью   Всего мест ___ прописью")
+    c.drawString(x_pt(2) + 2, y_pt(30) - 6, "Приложение (паспорта, сертификаты и т.п.) на ___ листах   По доверенности № ___ от ___ выданной ___")
     amount_w = amount_to_words(total_sum)
-    c.drawString(x_pt(2) + 2, y_pt(31) - 8, f"Всего отпущено на сумму {amount_w}")
+    c.setFont(font_name, 7)
+    c.drawString(x_pt(2) + 2, y_pt(31) - 7, f"Всего отпущено на сумму {amount_w}")
 
-    # Подписи
-    c.drawString(x_pt(2) + 2, y_pt(41) - 8, "Отпуск груза разрешил")
-    c.drawString(x_pt(5) + 2, y_pt(41) - 8, "Генеральный директор")
-    c.drawString(x_pt(10) + 2, y_pt(41) - 8, "Груз принял")
-    c.drawString(x_pt(15) + 2, y_pt(41) - 8, "Груз получил")
-    c.drawString(x_pt(20) + 2, y_pt(41) - 8, "грузополучатель")
+    # Подписи — по строкам как в Excel (J41:S41, J42:S42, J43:S43)
+    c.setFont(font_name, 7)
+    c.drawString(x_pt(2) + 2, y_pt(41) - 7, "Отпуск груза разрешил")
+    c.drawString(x_pt(10) + 2, y_pt(41) - 7, "Груз принял")
+    c.drawString(x_pt(2) + 2, y_pt(42) - 7, "Генеральный директор")
+    c.drawString(x_pt(10) + 2, y_pt(42) - 7, "Груз получил")
+    c.drawString(x_pt(10) + 2, y_pt(43) - 7, "грузополучатель")
     doc_date = __import__('datetime').date.today()
-    c.drawString(x_pt(2) + 2, y_pt(42) - 8, f"Отпуск груза произвел ___ {doc_date.strftime('%d.%m.%Y')} г.   м.п.")
+    c.drawString(x_pt(2) + 2, y_pt(44) - 7, f"Отпуск груза произвел ___ {doc_date.strftime('%d.%m.%Y')} г.   м.п.")
 
     c.save()
     buf.seek(0)

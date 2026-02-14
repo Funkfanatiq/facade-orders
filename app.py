@@ -1442,34 +1442,56 @@ def invoice_torg12(invoice_id):
     left_col = Table(left_rows, colWidths=[152*mm])
     left_col.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
 
-    # Правая колонка: единый узкий столбец (16мм), порядок ОКПО: грузоотправитель, грузополучатель, поставщик, плательщик
-    right_data = [
+    # Перед столбцом кодов — подписи по образцу ТОРГ-12
+    right_labels = [
+        [Paragraph("форма по ОКУД", fs6)],
+        [Paragraph("по ОКПО", fs6)],
+        [Paragraph("вид деятельности по ОКДП", fs6)],
+        [Paragraph("по ОКПО", fs6)],
+        [Paragraph("по ОКПО", fs6)],
+        [Paragraph("По ОКПО", fs6)],
+        [Paragraph("номер", fs6)],
+        [Paragraph("дата", fs6)],
+        [Paragraph("Вид операции", fs6)],
+    ]
+    right_values = [
+        ["0330212"],
         [seller_okpo_str],   # ОКПО грузоотправителя
-        [buyer_okpo_str],    # ОКПО грузополучателя
-        [seller_okpo_str],   # ОКПО поставщика
-        [buyer_okpo_str],    # ОКПО плательщика
+        ["—"],              # вид деятельности по ОКДП
+        [buyer_okpo_str],   # ОКПО грузополучателя
+        [seller_okpo_str],  # ОКПО поставщика
+        [buyer_okpo_str],   # ОКПО плательщика
         [esc(inv.invoice_number)],
         [(inv.invoice_date or doc_date).strftime('%d.%m.%Y')],
         [""],
     ]
-    right_col = Table(right_data, colWidths=[16*mm], rowHeights=[7*mm]*7)
-    right_col.setStyle(TableStyle([
+    right_labels_t = Table(right_labels, colWidths=[22*mm], rowHeights=[7*mm]*9)
+    right_labels_t.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, -1), 6),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 1),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    right_values_t = Table(right_values, colWidths=[16*mm], rowHeights=[7*mm]*9)
+    right_values_t.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
         ("FONTSIZE", (0, 0), (-1, -1), 7),
         ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
         ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (0, 0), (0, 3), "RIGHT"),
-        ("ALIGN", (0, 4), (0, 5), "LEFT"),
+        ("ALIGN", (0, 0), (0, 5), "RIGHT"),
+        ("ALIGN", (0, 6), (0, 7), "LEFT"),
         ("LEFTPADDING", (0, 0), (-1, -1), 2),
         ("RIGHTPADDING", (0, 0), (-1, -1), 2),
     ]))
 
-    top_section = Table([[left_col, "", right_col]], colWidths=[152*mm, 10*mm, 16*mm])
+    top_section = Table([[left_col, "", right_labels_t, right_values_t]], colWidths=[152*mm, 8*mm, 22*mm, 16*mm])
     top_section.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("ALIGN", (0, 0), (0, 0), "LEFT"),
-        ("ALIGN", (2, 0), (2, 0), "RIGHT"),
+        ("ALIGN", (2, 0), (3, 0), "RIGHT"),
     ]))
     flow.append(top_section)
     flow.append(Spacer(1, 3*mm))

@@ -1413,7 +1413,7 @@ def invoice_torg12(invoice_id):
         unit = it.unit or "шт"
         okei = _unit_to_okei(unit)
         data.append([str(i), Paragraph(esc(it.name), fs7), "", unit, okei, "", "", "", "", "", "", fmt_num(it.quantity), fmt_num(it.price), fmt_num(s), "0%, 0,00", fmt_num(s)])
-    total_row = ["Всего по накладной", "", "", "", "", "", "", "", "", "0", fmt_num(total_qty), "х", fmt_num(total_sum), "0%, 0,00", fmt_num(total_sum)]
+    total_row = ["Всего по накладной", "", "", "", "", "", "", "", "", "", "0", fmt_num(total_qty), "х", fmt_num(total_sum), "0%, 0,00", fmt_num(total_sum)]
     data.append(total_row)
     goods_tbl = Table(data, colWidths=col_w, repeatRows=1)
     goods_tbl.setStyle(TableStyle([
@@ -1434,7 +1434,7 @@ def invoice_torg12(invoice_id):
     records_word = "записей" if n_items >= 5 or (10 <= n_items % 100 <= 20) else "записи" if 2 <= n_items % 10 <= 4 else "запись"
     flow.append(Paragraph(f"Товарная накладная имеет приложение на ___ листах и содержит {n_items} порядковых номера {records_word}", fs7))
     flow.append(Paragraph("Масса груза (нетто) ___ прописью   Масса груза (брутто) ___ прописью   Всего мест ___ прописью", fs7))
-    flow.append(Paragraph("Приложение (паспорта, сертификаты, и т.л.) на ___ листах   По доверенности № ___ выданной ___", fs7))
+    flow.append(Paragraph("Приложение (паспорта, сертификаты, и т.д.) на ___ листах   По доверенности № ___ выданной ___", fs7))
     amount_words = _amount_to_words_rub(total_sum)
     flow.append(Paragraph(f"Всего отпущено на сумму {amount_words}", fs8))
     flow.append(Spacer(1, 2*mm))

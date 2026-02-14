@@ -1448,13 +1448,14 @@ def invoice_torg12(invoice_id):
         ["", Paragraph("дата", fs6), inv_dt],
         ["", Paragraph("Вид операции", fs6), ""],
     ]
-    top_section = Table(section_rows, colWidths=[152*mm, 22*mm, 16*mm])
+    top_section = Table(section_rows, colWidths=[152*mm, 26*mm, 16*mm])
     top_section.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
         ("FONTSIZE", (1, 0), (1, -1), 6),
         ("FONTSIZE", (2, 0), (2, -1), 7),
         ("VALIGN", (0, 0), (0, -1), "TOP"),
-        ("VALIGN", (1, 0), (2, -1), "MIDDLE"),
+        ("VALIGN", (1, 0), (1, -1), "TOP"),   # подписи сверху, не смещены вниз
+        ("VALIGN", (2, 0), (2, -1), "MIDDLE"),
         ("SPAN", (0, 0), (0, 1)),   # грузоотправитель на 2 строки
         ("SPAN", (0, 2), (0, 3)),   # грузополучатель на 2 строки
         ("SPAN", (0, 6), (0, 8)),   # основание на 3 строки
@@ -1463,7 +1464,8 @@ def invoice_torg12(invoice_id):
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("ALIGN", (2, 0), (2, 5), "RIGHT"),
         ("ALIGN", (2, 6), (2, 7), "LEFT"),
-        ("LEFTPADDING", (2, 0), (2, -1), 2),
+        ("RIGHTPADDING", (1, 0), (1, -1), 5),   # отступ от граф, подписи не прилипают
+        ("LEFTPADDING", (2, 0), (2, -1), 4),
         ("RIGHTPADDING", (2, 0), (2, -1), 2),
     ]))
     flow.append(top_section)

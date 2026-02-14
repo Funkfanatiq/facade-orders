@@ -1378,12 +1378,20 @@ def invoice_torg12(invoice_id):
     flow.append(Spacer(1, 1*mm))
 
     left_block = Table([
+        ["Грузоотправитель", f"по ОКПО {seller_okpo}" if seller_okpo else ""],
         [org_str, ""],
-        ["организация – грузоотправитель, адрес, номер телефона, факса, банковские реквизиты", ""],
+        ["организация-грузоотправитель, адрес, номер телефона, факса, банковские реквизиты", ""],
         ["структурное подразделение", ""],
-        [consignee_str, f"по ОКПО {buyer_okpo}" if buyer_okpo else ""],
-        [org_str, f"по ОКПО {seller_okpo}" if seller_okpo else ""],
-        [consignee_str, f"по ОКПО {buyer_okpo}" if buyer_okpo else ""],
+        ["Грузополучатель", f"по ОКПО {buyer_okpo}" if buyer_okpo else ""],
+        [consignee_str, ""],
+        ["организации, адрес, номер телефона, банковские реквизиты", ""],
+        ["Поставщик", f"по ОКПО {seller_okpo}" if seller_okpo else ""],
+        [org_str, ""],
+        ["наименование организации, адрес, номер телефона, банковские реквизиты", ""],
+        ["Плательщик", f"по ОКПО {buyer_okpo}" if buyer_okpo else ""],
+        [consignee_str, ""],
+        ["организации, адрес, номер телефона, банковские реквизиты", ""],
+        ["Основание", ""],
         [basis, ""],
         ["наименование документа (договор, контракт, заказ-наряд)", ""],
     ], colWidths=[165*mm, 35*mm])
@@ -1404,8 +1412,6 @@ def invoice_torg12(invoice_id):
         ["номер", "дата"],
         ["", ""],
         ["Вид операции", ""],
-        ["Номер документа", esc(inv.invoice_number)],
-        ["Дата составления", doc_date.strftime('%d.%m.%Y')],
         ["Страница 1", ""],
     ], colWidths=[35*mm, 45*mm])
     right_block.setStyle(TableStyle([
@@ -1422,13 +1428,30 @@ def invoice_torg12(invoice_id):
     flow.append(top_section)
     flow.append(Spacer(1, 2*mm))
 
-    title_style = ParagraphStyle("Title", parent=styles["Normal"], fontName=font_name, fontSize=10, alignment=TA_CENTER, fontWeight='bold')
-    flow.append(Paragraph("ТОВАРНАЯ НАКЛАДНАЯ", title_style))
+    title_block = Table([
+        [Paragraph("ТОВАРНАЯ НАКЛАДНАЯ", ParagraphStyle("Title", parent=styles["Normal"], fontName=font_name, fontSize=10, alignment=TA_CENTER, fontWeight='bold')), "Номер документа", "Дата составления"],
+        ["", esc(inv.invoice_number), doc_date.strftime('%d.%m.%Y')],
+    ], colWidths=[100*mm, 35*mm, 35*mm])
+    title_block.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("VALIGN", (0, 0), (0, -1), "MIDDLE"),
+        ("SPAN", (0, 0), (0, -1)),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("BACKGROUND", (1, 0), (2, -1), colors.HexColor("#f8f8f8")),
+        ("ALIGN", (1, 0), (2, -1), "CENTER"),
+    ]))
+    flow.append(title_block)
     flow.append(Spacer(1, 1*mm))
 
-    # Упрощённая таблица по образцу ТОРГ-12 — 10 колонок, читаемая ширина
-    data = [["№", "Наименование, характеристика, сорт, артикул", "Код", "Ед.изм.", "Код ОКЕИ", "Кол-во", "Цена", "Сумма без НДС", "НДС ставка, сумма", "Сумма с НДС"]]
-    col_w = [6*mm, 65*mm, 5*mm, 10*mm, 7*mm, 14*mm, 15*mm, 18*mm, 14*mm, 18*mm]  # итого ~182мм
+    # Точная копия формы ТОРГ-12 — 15 колонок по образцу Госкомстата
+    header_row = [
+        "№ п/п", "наименование, характеристика, сорт, артикул товара", "код", "наименование",
+        "Код по ОКЕИ", "Вид упак.", "в одном месте", "штук", "Масса брутто", "Кол-во (масса нетто)",
+        "Цена, руб. коп.", "Сумма без учета НДС", "ставка, %", "сумма", "Сумма с учетом НДС"
+    ]
+    col_w = [5*mm, 40*mm, 6*mm, 8*mm, 7*mm, 8*mm, 8*mm, 6*mm, 10*mm, 12*mm, 14*mm, 18*mm, 6*mm, 12*mm, 18*mm]  # ~176мм
+    data = [header_row]
     total_sum = 0.0
     total_qty = 0.0
     for i, it in enumerate(inv.items, 1):
@@ -1439,8 +1462,10 @@ def invoice_torg12(invoice_id):
         total_qty += qty
         unit = it.unit or "шт"
         okei = _unit_to_okei(unit)
-        data.append([str(i), Paragraph(esc(it.name), fs7), "", unit, okei, fmt_num(qty), fmt_num(prc), fmt_num(s), "0%, 0,00", fmt_num(s)])
-    total_row = ["Всего по накладной", "", "", "", "", fmt_num(total_qty), "х", fmt_num(total_sum), "0%, 0,00", fmt_num(total_sum)]
+        code_str = str(it.price_list_item_id) if it.price_list_item_id else ""
+        mass_brutto = fmt_num(qty)
+        data.append([str(i), Paragraph(esc(it.name), fs7), code_str, unit, okei, "", "", "", mass_brutto, fmt_num(qty), fmt_num(prc), fmt_num(s), "0%", "0,00", fmt_num(s)])
+    total_row = ["Всего по накладной"] + [""]*7 + ["0", fmt_num(total_qty), "х", fmt_num(total_sum), "х", "0,00", fmt_num(total_sum)]
     data.append(total_row)
     goods_tbl = Table(data, colWidths=col_w, repeatRows=1)
     goods_tbl.setStyle(TableStyle([
@@ -1448,13 +1473,13 @@ def invoice_torg12(invoice_id):
         ("FONTSIZE", (0, 0), (-1, -1), 7),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8e8e8")),
         ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f0f0f0")),
-        ("SPAN", (0, -1), (4, -1)),
+        ("SPAN", (0, -1), (7, -1)),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ALIGN", (0, 0), (0, -1), "CENTER"),
-        ("ALIGN", (5, 0), (-1, -1), "RIGHT"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 3),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("ALIGN", (8, 0), (-1, -1), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
     ]))
     flow.append(goods_tbl)
     flow.append(Spacer(1, 1*mm))

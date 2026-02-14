@@ -1413,7 +1413,9 @@ def invoice_torg12(invoice_id):
         ("FONTSIZE", (0, 0), (-1, -1), 7),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f8f8f8")),
-    ]) + [("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 2)])
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2),
+    ]))
 
     top_section = Table([[left_block, right_block]], colWidths=[200*mm, 70*mm])
     top_section.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
@@ -1450,7 +1452,9 @@ def invoice_torg12(invoice_id):
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ALIGN", (0, 0), (0, -1), "CENTER"),
         ("ALIGN", (9, 0), (-1, -1), "RIGHT"),
-    ]) + [("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 2)])
+        ("LEFTPADDING", (0, 0), (-1, -1), 2),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+    ]))
     flow.append(goods_tbl)
     flow.append(Spacer(1, 1*mm))
 

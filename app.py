@@ -1427,7 +1427,7 @@ def invoice_torg12(invoice_id):
     buyer_okpo_str = (buyer_okpo or "—").strip() or "—"
     seller_okpo_str = (seller_okpo or "—").strip() or "—"
 
-    # Левая колонка: блоки
+    # Левая колонка: блоки (без изменений)
     left_blocks = [
         block_row("", Paragraph(org_str, fs7), "организация - грузоотправитель, адрес, номер телефона, факса, банковские реквизиты"),
         block_row("Грузополучатель", Paragraph(consignee_str, fs7), "наименование организации, адрес, номер телефона, банковские реквизиты"),
@@ -1442,32 +1442,30 @@ def invoice_torg12(invoice_id):
     left_col = Table(left_rows, colWidths=[152*mm])
     left_col.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
 
-    # Правая таблица: 8 ячеек по образцу ТОРГ-12 (ОКПО, номер, дата)
+    # Правая колонка: единый узкий столбец (16мм), порядок ОКПО: грузоотправитель, грузополучатель, поставщик, плательщик
     right_data = [
-        [""],
-        [""],
-        [buyer_okpo_str],
-        [seller_okpo_str],
-        [buyer_okpo_str],
+        [seller_okpo_str],   # ОКПО грузоотправителя
+        [buyer_okpo_str],    # ОКПО грузополучателя
+        [seller_okpo_str],   # ОКПО поставщика
+        [buyer_okpo_str],    # ОКПО плательщика
         [esc(inv.invoice_number)],
-        [inv.invoice_date.strftime('%d.%m.%Y') if inv.invoice_date else doc_date.strftime('%d.%m.%Y')],
+        [(inv.invoice_date or doc_date).strftime('%d.%m.%Y')],
         [""],
     ]
-    right_col = Table(right_data, colWidths=[25*mm], rowHeights=[7*mm]*8)
+    right_col = Table(right_data, colWidths=[16*mm], rowHeights=[7*mm]*7)
     right_col.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
         ("FONTSIZE", (0, 0), (-1, -1), 7),
         ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
         ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (0, 0), (0, 4), "RIGHT"),
-        ("ALIGN", (0, 5), (0, 6), "LEFT"),
+        ("ALIGN", (0, 0), (0, 3), "RIGHT"),
+        ("ALIGN", (0, 4), (0, 5), "LEFT"),
         ("LEFTPADDING", (0, 0), (-1, -1), 2),
         ("RIGHTPADDING", (0, 0), (-1, -1), 2),
     ]))
 
-    # Слева блоки, зазор 10мм, справа таблица (чтобы «Грузополучатель» не прилипал к правой колонке)
-    top_section = Table([[left_col, "", right_col]], colWidths=[152*mm, 10*mm, 25*mm])
+    top_section = Table([[left_col, "", right_col]], colWidths=[152*mm, 10*mm, 16*mm])
     top_section.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("ALIGN", (0, 0), (0, 0), "LEFT"),

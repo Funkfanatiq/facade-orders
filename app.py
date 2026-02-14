@@ -1370,6 +1370,7 @@ def invoice_torg12(invoice_id):
     header_row2 = Paragraph("Утверждена постановлением Госкомстата России от 25.12.98 № 132", fs7)
     code_table = Table([
         ["Код"],
+        [esc(inv.invoice_number)],   # номер документа — верхняя ячейка
         ["0330212"],
         [str(seller_okpo) if seller_okpo else "—"],
     ], colWidths=[25*mm])
@@ -1380,7 +1381,8 @@ def invoice_torg12(invoice_id):
         ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ALIGN", (0, 0), (0, 0), "CENTER"),
-        ("ALIGN", (0, 1), (-1, -1), "RIGHT"),
+        ("ALIGN", (0, 1), (0, 1), "LEFT"),   # номер — по левому краю
+        ("ALIGN", (0, 2), (-1, -1), "RIGHT"),
         ("LEFTPADDING", (0, 0), (-1, -1), 2),
         ("RIGHTPADDING", (0, 0), (-1, -1), 2),
     ]))
@@ -1464,8 +1466,8 @@ def invoice_torg12(invoice_id):
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("ALIGN", (2, 0), (2, 5), "RIGHT"),
         ("ALIGN", (2, 6), (2, 7), "LEFT"),
-        ("RIGHTPADDING", (1, 0), (1, -1), 5),   # отступ от граф, подписи не прилипают
-        ("LEFTPADDING", (2, 0), (2, -1), 4),
+        ("RIGHTPADDING", (1, 0), (1, -1), 8),   # отступ от граф, чтобы не сливалось
+        ("LEFTPADDING", (2, 0), (2, -1), 5),
         ("RIGHTPADDING", (2, 0), (2, -1), 2),
     ]))
     flow.append(top_section)

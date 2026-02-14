@@ -1323,10 +1323,12 @@ def invoice_torg12(invoice_id):
     from torg12_excel_dims import (
         LEFT_BLOCK_MM, CODES_LABEL_MM, CODES_VAL_MM,
         GOODS_TABLE_COLS_MM, _COL_WIDTHS_MM,
+        ROW_HEIGHTS_MM, DEFAULT_ROW_MM,
     )
     font_name = _get_pdf_font()
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=5*mm, bottomMargin=5*mm, leftMargin=5*mm, rightMargin=5*mm)
+    # Поля как в Excel: left 0.75", right 1", top 0.75", bottom 1" (1"=25.4mm)
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=19*mm, bottomMargin=25.4*mm, leftMargin=19*mm, rightMargin=25.4*mm)
     styles = getSampleStyleSheet()
     fs6 = ParagraphStyle("FS6", parent=styles["Normal"], fontName=font_name, fontSize=6)
     fs7 = ParagraphStyle("FS7", parent=styles["Normal"], fontName=font_name, fontSize=7)
@@ -1372,7 +1374,7 @@ def invoice_torg12(invoice_id):
     desc_style = ParagraphStyle("Desc", parent=styles["Normal"], fontName=font_name, fontSize=6, alignment=TA_CENTER, textColor=colors.HexColor("#555555"))
 
     # === Строка 1: Заголовок + утверждение (как в Excel A1:AM1) ===
-    header_text = "Унифицированная форма № ТОРГ-12 (образец 11 от 12.07.2016)\nУтверждена постановлением Госкомстата России от 25.12.98 № 132"
+    header_text = "Унифицированная форма № ТОРГ-12\nУтверждена постановлением Госкомстата России от 25.12.98 № 132"
     flow.append(Paragraph(header_text, ParagraphStyle("H", parent=styles["Normal"], fontName=font_name, fontSize=8, alignment=TA_CENTER)))
     flow.append(Spacer(1, 2*mm))
 
@@ -1478,7 +1480,7 @@ def invoice_torg12(invoice_id):
     flow.append(title_block)
     flow.append(Spacer(1, 1*mm))
 
-    # === Таблица товаров — 15 колонок, размеры из Excel ===
+    # === Таблица товаров — 15 колонок, подписи и разбивка как в Excel ===
     header_r0 = ["Номер\nпо порядку", "Товар", "", "Единица измерения", "", "Количество", "", "", "Масса брутто", "Кол-во\n(масса нетто)", "Цена,\nруб. коп.", "Сумма без\nучета НДС,\nруб. коп.", "НДС", "", "Сумма с\nучетом НДС,\nруб. коп."]
     header_r1 = ["", "наименование, характеристика, сорт, артикул товара", "код", "наименование", "код по ОКЕИ", "Вид упаковки", "в одном месте", "мест,\nштук", "", "", "", "ставка, %", "сумма,\nруб. коп."]
     col_w = [w * mm for w in GOODS_TABLE_COLS_MM]
@@ -1498,12 +1500,15 @@ def invoice_torg12(invoice_id):
         data.append([str(i), Paragraph(esc(it.name), fs7), code_str, unit, okei, "", "", "", mass_brutto, fmt_num(qty), fmt_num(prc), fmt_num(s), "0%", "0,00", fmt_num(s)])
     total_row = ["Всего по накладной"] + [""]*7 + ["0", fmt_num(total_qty), "х", fmt_num(total_sum), "х", "0,00", fmt_num(total_sum)]
     data.append(total_row)
-    goods_tbl = Table(data, colWidths=col_w, repeatRows=2)
+    # Высоты строк как в Excel: row 20-21 (заголовки), 22+ (данные), итого
+    row_heights = [ROW_HEIGHTS_MM.get(20, DEFAULT_ROW_MM), ROW_HEIGHTS_MM.get(21, DEFAULT_ROW_MM)]
+    for _ in range(len(data) - 3):
+        row_heights.append(ROW_HEIGHTS_MM.get(22, DEFAULT_ROW_MM))
+    row_heights.append(ROW_HEIGHTS_MM.get(22, DEFAULT_ROW_MM))  # итого
+    goods_tbl = Table(data, colWidths=col_w, rowHeights=[h * mm for h in row_heights], repeatRows=2)
     goods_tbl.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font_name),
         ("FONTSIZE", (0, 0), (-1, -1), 7),
-        ("BACKGROUND", (0, 0), (-1, 1), colors.HexColor("#e8e8e8")),
-        ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f0f0f0")),
         ("SPAN", (0, 0), (0, 1)),
         ("SPAN", (1, 0), (2, 0)),
         ("SPAN", (3, 0), (4, 0)),
@@ -1530,26 +1535,31 @@ def invoice_torg12(invoice_id):
     flow.append(Paragraph(f"Всего отпущено на сумму {amount_words}", fs8))
     flow.append(Spacer(1, 2*mm))
 
+    # Блок подписей — размеры по Excel (B-I левый, J-S правый)
+    sig_left_w = sum(_COL_WIDTHS_MM[1:9])
+    sig_right_w = sum(_COL_WIDTHS_MM[9:19])
+    sig_col_w = sig_left_w / 3
     sig_left = Table([
         ["Отпуск груза разрешил", "Генеральный директор", ""],
         ["должность", "подпись", "расшифровка подписи"],
         ["Главный (старший) бухгалтер", "", ""],
         ["должность", "подпись", "расшифровка подписи"],
-    ], colWidths=[50*mm, 35*mm, 35*mm])
+    ], colWidths=[sig_col_w*mm, sig_col_w*mm, sig_col_w*mm])
     sig_right = Table([
         ["Груз принял", "", ""],
         ["должность", "подпись", "расшифровка подписи"],
         ["Груз получил", "грузополучатель", ""],
         ["должность", "подпись", "расшифровка подписи"],
-    ], colWidths=[50*mm, 35*mm, 35*mm])
+    ], colWidths=[sig_col_w*mm, sig_col_w*mm, sig_col_w*mm])
     for st in [sig_left, sig_right]:
         st.setStyle(TableStyle([
             ("FONTNAME", (0, 0), (-1, -1), font_name),
             ("FONTSIZE", (0, 0), (-1, -1), 7),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ]))
-    sig_combined = Table([[sig_left, sig_right]], colWidths=[120*mm, 120*mm])
+    sig_combined = Table([[sig_left, sig_right]], colWidths=[sig_left_w*mm, sig_right_w*mm])
     sig_combined.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
     flow.append(sig_combined)
     flow.append(Paragraph(f"Отпуск груза произвел ___ {doc_date.strftime('%d.%m.%Y')} г.   м.п.", fs7))

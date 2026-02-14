@@ -13,8 +13,8 @@ _COL_WIDTHS_EXCEL = [
 
 _EXCEL_TO_MM = 0.852
 _COL_WIDTHS_MM_RAW = [w * _EXCEL_TO_MM for w in _COL_WIDTHS_EXCEL]
-# A4 landscape: 297mm, margins 10mm -> usable 277mm. Excel total ~155mm -> scale
-_USABLE_PAGE_MM = 277
+# A4 landscape: 297mm. Excel margins left 0.75"=19mm, right 1"=25.4mm -> usable 252.6mm
+_USABLE_PAGE_MM = 297 - 19 - 25.4
 _SCALE = _USABLE_PAGE_MM / sum(_COL_WIDTHS_MM_RAW) if sum(_COL_WIDTHS_MM_RAW) > 0 else 1.0
 _COL_WIDTHS_MM = [w * _SCALE for w in _COL_WIDTHS_MM_RAW]
 
@@ -24,6 +24,18 @@ LEFT_BLOCK_MM = sum(_COL_WIDTHS_MM[1:29])
 # Секция кодов: AK, AL, AM = cols 36,37,38
 CODES_LABEL_MM = _COL_WIDTHS_MM[36] + _COL_WIDTHS_MM[37]  # AK+AL
 CODES_VAL_MM = _COL_WIDTHS_MM[38]  # AM
+
+# Высоты строк (pt -> mm: 1pt = 0.3528mm)
+ROW_HEIGHTS_MM = {r: h * 0.3528 * _SCALE for r, h in {
+    1: 15.95, 2: 12.95, 3: 12, 4: 12, 5: 8.1, 6: 12, 7: 14.1, 8: 21.95,
+    9: 8.1, 10: 21.95, 11: 8.1, 12: 21.95, 13: 8.1, 14: 12, 15: 12, 16: 12,
+    17: 12, 18: 12, 19: 11.1, 20: 11.1, 21: 44.1, 22: 11.1, 23: 11.1, 24: 11.1,
+    25: 11.1, 26: 11.1, 27: 11.1, 28: 12, 29: 11.1, 30: 8.1, 31: 11.1, 32: 8.1,
+    33: 11.1, 34: 8.1, 35: 5.1, 36: 9.95, 37: 11.1, 38: 9.95, 39: 11.1,
+    40: 11.1, 41: 21.95, 42: 9, 43: 11.1, 44: 11.1, 45: 11.1, 46: 11.1,
+    47: 5.1, 48: 11.1,
+}.items()}
+DEFAULT_ROW_MM = 11.45 * 0.3528 * _SCALE
 
 # Таблица товаров 15 колонок — соответствие Excel (B-AM). По merge cells:
 # 0:Номер B | 1:Товар наим C-E | 2:код F | 3:Ед.наим G-H | 4:ОКЕИ I | 5:Упаковка J |

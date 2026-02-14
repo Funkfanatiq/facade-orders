@@ -1368,7 +1368,7 @@ def invoice_torg12(invoice_id):
     desc_style = ParagraphStyle("Desc", parent=styles["Normal"], fontName=font_name, fontSize=6, alignment=TA_CENTER, textColor=colors.HexColor("#555555"))
 
     # === Строка 1: Заголовок + утверждение (как в Excel A1:AM1) ===
-    header_text = "Унифицированная форма № ТОРГ-12\nУтверждена постановлением Госкомстата России от 25.12.98 № 132"
+    header_text = "Унифицированная форма № ТОРГ-12 (образец 11 от 12.07.2016)\nУтверждена постановлением Госкомстата России от 25.12.98 № 132"
     flow.append(Paragraph(header_text, ParagraphStyle("H", parent=styles["Normal"], fontName=font_name, fontSize=8, alignment=TA_CENTER)))
     flow.append(Spacer(1, 2*mm))
 
@@ -1412,8 +1412,8 @@ def invoice_torg12(invoice_id):
         ["", Paragraph("по ОКПО", fs6), seller_okpo_str],
         [b_struct, Paragraph("Вид деятельности по ОКДП", fs6), "—"],
         ["", Paragraph("по ОКПО", fs6), buyer_okpo_str],
-        [b1, Paragraph("по ОКПО", fs6), seller_okpo_str],
-        ["", Paragraph("по ОКПО", fs6), buyer_okpo_str],
+        [b1, Paragraph("по ОКПО", fs6), buyer_okpo_str],
+        ["", Paragraph("по ОКПО", fs6), seller_okpo_str],
         [b2, Paragraph("по ОКПО", fs6), seller_okpo_str],
         ["", Paragraph("по ОКПО", fs6), buyer_okpo_str],
         [b3, Paragraph("номер", fs6), inv_num],
@@ -1540,7 +1540,11 @@ def invoice_torg12(invoice_id):
     flow.append(Paragraph(f"Отпуск груза произвел ___ {doc_date.strftime('%d.%m.%Y')} г.   м.п.", fs7))
     doc.build(flow)
     buf.seek(0)
-    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=f"torg12_{inv.invoice_number}.pdf")
+    resp = send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=f"torg12_{inv.invoice_number}.pdf")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 @app.route("/counterparty/<int:counterparty_id>/payment/create", methods=["POST"])

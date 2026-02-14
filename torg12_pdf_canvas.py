@@ -82,29 +82,24 @@ def generate_torg12_pdf(invoice, counterparty, config, font_name="Helvetica", am
 
     buf = io.BytesIO()
     pw, ph = landscape(A4)
-    margin_pt = 19 * PT_PER_MM  # 0.75"
-    margin_r = 25.4 * PT_PER_MM  # 1"
+    # Минимальные поля 10мм — форма растягивается на всю ширину и высоту
+    margin_mm = 10
+    margin_pt = margin_mm * PT_PER_MM
 
     # Вычисляем позиции колонок и строк в pt
     col_pos, row_pos = _compute_layout()
     total_w_pt = col_pos[-1]
-    usable_w = pw - margin_pt - margin_r
-    scale_w = usable_w / total_w_pt if total_w_pt > 0 else 1
-    # Высота: верхнее поле 19mm, нижнее 25.4mm (как в Excel)
     total_h_pt = row_pos[-1]
-    usable_h = ph - margin_pt - margin_r
+    usable_w = pw - 2 * margin_pt
+    usable_h = ph - 2 * margin_pt
+    # Растягиваем по ширине и высоте — форма заполняет страницу
+    scale_w = usable_w / total_w_pt if total_w_pt > 0 else 1
     scale_h = usable_h / total_h_pt if total_h_pt > 0 else 1
-    # Масштаб: вписать в страницу (минимум по X и Y)
-    scale = min(scale_w, scale_h)
-    scaled_w = total_w_pt * scale
-    scaled_h = total_h_pt * scale
-    offset_x = (usable_w - scaled_w) / 2 if scaled_w < usable_w else 0
-    offset_y = (usable_h - scaled_h) / 2 if scaled_h < usable_h else 0
 
     c = canvas.Canvas(buf, pagesize=landscape(A4))
     c.saveState()
-    c.translate(margin_pt + offset_x, ph - margin_pt - offset_y)
-    c.scale(scale, scale)  # единый transform — все координаты без *scale
+    c.translate(margin_pt, ph - margin_pt)
+    c.scale(scale_w, scale_h)  # растягиваем по X и Y до границ страницы
 
     def x_pt(col):
         return col_pos[col - 1]

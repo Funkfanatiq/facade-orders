@@ -359,11 +359,15 @@ def internal_error(error):
     """Обработчик внутренних ошибок сервера"""
     try:
         db.session.rollback()
-    except:
+    except Exception:
         pass
-    print(f"Внутренняя ошибка сервера: {error}")
     import traceback
-    traceback.print_exc()
+    import sys
+    print("=" * 60, file=sys.stderr)
+    print("ВНУТРЕННЯЯ ОШИБКА СЕРВЕРА (500):", file=sys.stderr)
+    print(f"Ошибка: {error}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
     try:
         if hasattr(current_user, 'is_authenticated') and current_user.is_authenticated:
             flash("Произошла внутренняя ошибка. Попробуйте позже.", "error")
@@ -644,7 +648,10 @@ def dashboard():
 
     for o in expired:
         if o.filepaths:
-            for path in o.filepaths.split(";"):
+            for path in (o.filepaths or "").split(";"):
+                path = (path or "").strip()
+                if not path:
+                    continue
                 try:
                     os.remove(os.path.join(app.config["UPLOAD_FOLDER"], path))
                 except (FileNotFoundError, OSError) as e:
@@ -656,9 +663,12 @@ def dashboard():
         flash(f"🧹 Удалено заказов: {len(expired)}")
 
     if request.method == "POST" and current_user.role == "Менеджер":
-        order_id = request.form["order_id"]
+        order_id = (request.form.get("order_id") or "").strip()
         client = (request.form.get("client") or "").strip()
         counterparty_id = request.form.get("counterparty_id", type=int)
+        if not order_id:
+            flash("Укажите номер заказа", "error")
+            return redirect(url_for("dashboard"))
         if counterparty_id:
             cp = Counterparty.query.get(counterparty_id)
             if cp:
@@ -669,10 +679,10 @@ def dashboard():
         
         # Валидация входных данных
         try:
-            days = int(request.form["days"])
+            days = int(request.form.get("days", 0))
             if days <= 0:
                 raise ValueError("Количество дней должно быть положительным")
-        except (ValueError, KeyError):
+        except (ValueError, TypeError):
             flash("Неверное количество дней", "error")
             return redirect(url_for("dashboard"))
         
@@ -990,18 +1000,21 @@ def _get_pdf_font():
     try:
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
+        _base = os.path.dirname(os.path.abspath(__file__))
         font_paths = [
+            os.path.join(_base, "fonts", "DejaVuSans.ttf"),  # bundled font
             "C:/Windows/Fonts/arial.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/fonts-liberation/LiberationSans-Regular.ttf",
         ]
         for path in font_paths:
-            if os.path.isfile(path):
+            if path and os.path.isfile(path):
                 pdfmetrics.registerFont(TTFont("PricelistFont", path))
                 return "PricelistFont"
     except Exception:
         pass
-    return "Helvetica"
+    return "Helvetica"  # fallback — не поддерживает кириллицу, может вызывать 500
 
 
 @app.route("/pricelist/export/pdf")
@@ -1156,7 +1169,10 @@ def invoice_pdf(invoice_id):
         return escape(str(s or ""))
 
     def fmt_num(x):
-        return f"{x:.2f}".replace(".", ",")
+        try:
+            return f"{float(x or 0):.2f}".replace(".", ",")
+        except (TypeError, ValueError):
+            return "0,00"
 
     seller_name = esc(cfg.get('COMPANY_NAME'))
     seller_addr = esc(cfg.get('COMPANY_ADDRESS'))
@@ -1293,6 +1309,9 @@ def invoice_torg12(invoice_id):
         return redirect(url_for("dashboard"))
     inv = Invoice.query.get_or_404(invoice_id)
     cp = inv.counterparty
+    if not cp:
+        flash("Контрагент по счёту не найден", "error")
+        return redirect(url_for("dashboard"))
     cfg = app.config
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib import colors
@@ -1313,7 +1332,10 @@ def invoice_torg12(invoice_id):
         return escape(str(s or ""))
 
     def fmt_num(x):
-        return f"{x:.2f}".replace(".", ",")
+        try:
+            return f"{float(x or 0):.2f}".replace(".", ",")
+        except (TypeError, ValueError):
+            return "0,00"
 
     seller_name = esc(cfg.get('COMPANY_NAME'))
     seller_addr = esc(cfg.get('COMPANY_ADDRESS'))
@@ -1407,12 +1429,14 @@ def invoice_torg12(invoice_id):
     total_sum = 0.0
     total_qty = 0.0
     for i, it in enumerate(inv.items, 1):
-        s = round(it.quantity * it.price, 2)
+        qty = float(it.quantity or 0)
+        prc = float(it.price or 0)
+        s = round(qty * prc, 2)
         total_sum += s
-        total_qty += it.quantity
+        total_qty += qty
         unit = it.unit or "шт"
         okei = _unit_to_okei(unit)
-        data.append([str(i), Paragraph(esc(it.name), fs7), "", unit, okei, "", "", "", "", "", "", fmt_num(it.quantity), fmt_num(it.price), fmt_num(s), "0%, 0,00", fmt_num(s)])
+        data.append([str(i), Paragraph(esc(it.name), fs7), "", unit, okei, "", "", "", "", "", "", fmt_num(qty), fmt_num(prc), fmt_num(s), "0%, 0,00", fmt_num(s)])
     total_row = ["Всего по накладной", "", "", "", "", "", "", "", "", "", "0", fmt_num(total_qty), "х", fmt_num(total_sum), "0%, 0,00", fmt_num(total_sum)]
     data.append(total_row)
     goods_tbl = Table(data, colWidths=col_w, repeatRows=1)
@@ -1528,12 +1552,15 @@ def counterparty_card(counterparty_id):
 def render_admin_dashboard():
     """Рендеринг панели администратора"""
     if request.method == "POST":
-        order_id = request.form["order_id"]
-        client = request.form["client"]
+        order_id = (request.form.get("order_id") or "").strip()
+        client = (request.form.get("client") or "").strip()
+        if not order_id or not client:
+            flash("Заполните номер заказа и клиента", "error")
+            return redirect(url_for("dashboard"))
         
         # Валидация входных данных
         try:
-            days = int(request.form["days"])
+            days = int(request.form.get("days", 0))
             if days <= 0:
                 raise ValueError("Количество дней должно быть положительным")
         except (ValueError, KeyError):

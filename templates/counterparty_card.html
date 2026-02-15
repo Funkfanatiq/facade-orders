@@ -329,8 +329,6 @@
           <td>
             <a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" download="invoice_{{ inv.invoice_number }}.pdf">PDF</a>
             <a href="{{ url_for('invoice_torg12', invoice_id=inv.id) }}" class="btn-torg12">ТОРГ-12</a>
-            <a href="{{ url_for('invoice_torg12_xps', invoice_id=inv.id) }}">XPS</a>
-            <a href="{{ url_for('invoice_torg12_xlsx', invoice_id=inv.id) }}">Excel</a>
             {% if current_user.role in ["Менеджер", "Админ"] %}
             <button type="button" class="btn-remove-item" onclick="deleteInvoice({{ inv.id }})" title="Удалить">🗑️</button>
             {% endif %}

@@ -81,8 +81,9 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     ws["D12"] = buyer
     ws["D14"] = basis
 
-    # Номер и дата
-    ws["D8"] = f"{inv_num} от {inv_dt}"
+    # Номер документа (B8:C8) и Дата составления (D8:AI8)
+    ws["B8"] = inv_num
+    ws["D8"] = inv_dt
 
     # ОКПО (если есть в шаблоне)
     okpo = config.get("COMPANY_OKPO") or ""

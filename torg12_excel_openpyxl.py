@@ -21,12 +21,24 @@ def _fmt_num(x):
 
 
 def _org_string(config):
+    """Полная строка реквизитов организации для грузоотправителя/поставщика."""
     parts = [
         config.get("COMPANY_NAME", ""),
         config.get("COMPANY_ADDRESS", ""),
-        f"ИНН {config.get('COMPANY_INN', '')}",
-        f"р/с {config.get('COMPANY_ACCOUNT', '')} в {config.get('COMPANY_BANK', '')}",
     ]
+    inn = config.get("COMPANY_INN", "")
+    if inn:
+        parts.append(f"ИНН {inn}")
+    acc = config.get("COMPANY_ACCOUNT", "")
+    bank = config.get("COMPANY_BANK", "")
+    if acc and bank:
+        parts.append(f"р/с {acc} в {bank}")
+    bik = config.get("COMPANY_BIK", "")
+    corr = config.get("COMPANY_CORR_ACCOUNT", "")
+    if bik:
+        parts.append(f"БИК {bik}")
+    if corr:
+        parts.append(f"к/с {corr}")
     return ", ".join(p for p in parts if p)
 
 

@@ -13,6 +13,11 @@
 
 ### 🔧 Настройки Render.com:
 
+**Вариант A — Docker (рекомендуется, для ТОРГ-12 Excel→PDF):**
+1. **Environment**: **Docker**
+2. Build и Start — автоматически из Dockerfile (LibreOffice установлен для конвертации xlsx→pdf)
+
+**Вариант B — Python (без ТОРГ-12 из шаблона):**
 1. **Build Command**: `pip install -r requirements.txt`
 2. **Start Command**: оставьте пустым (Render использует Procfile)
 3. **Python Version**: 3.11.9 (указывается в runtime.txt)

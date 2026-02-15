@@ -84,6 +84,44 @@ t.setStyle(TableStyle([
 
 ---
 
+## Варианты из Python-экосистемы
+
+### 1. AutoTTN (openpyxl + Excel-шаблон)
+
+**Репозиторий:** [github.com/ArtyomKuteynikov/AutoTTN](https://github.com/ArtyomKuteynikov/AutoTTN)
+
+Подход:
+- Excel-шаблон (например, `Транспортная накладная ШАБЛОН.xlsx`)
+- `openpyxl.load_workbook()` загружает шаблон
+- Заполнение ячеек по координатам: `ws['AD13'] = value`, `ws['B21'] = cargo`
+- Обработка merged cells через `style_range(ws, cell_range, border=...)`
+- Сохранение: `wb.save("filename.xlsx")`
+- **Результат:** XLSX (не PDF). Для PDF — отдельный шаг конвертации.
+
+### 2. xlsx2pdf
+
+**Пакет:** [pypi.org/project/xlsx2pdf](https://pypi.org/project/xlsx2pdf/)
+
+- Зависимости: `reportlab`, `openpyxl`
+- Конвертирует готовый xlsx в PDF
+- **Цепочка:** openpyxl заполнить шаблон → сохранить xlsx → xlsx2pdf → PDF
+
+### 3. МойСклад API
+
+- Печатные формы (в т.ч. ТОРГ-12) — на стороне МойСклад, через веб-интерфейс
+- API даёт доступ к сущностям (документы, контрагенты), но **не к готовым PDF печатных форм**
+- Выгрузка PDF через API есть только для фискальных чеков
+
+### 4. Готовые Excel-шаблоны ТОРГ-12
+
+- [formy-i-blanki.ru](https://www.formy-i-blanki.ru/nakladnaya-torg-12-skachat) — бесплатный бланк в Excel
+- [moedelo.org](https://moedelo.org/club/article-knowledge/tovarnaya-nakladnaya-torg-12-blank) — бланк для ручного заполнения
+- Можно взять шаблон, определить координаты нужных ячеек и заполнять через openpyxl по аналогии с AutoTTN
+
+---
+
 ## Вывод
 
-Перейти с **Canvas** (ручные координаты) на **Platypus Table** — так делают 1С и типовые бухгалтерские системы. Таблица сама обеспечивает выравнивание, сетку и переносы.
+1. **Текущее решение (Platypus Table)** — рабочее, без внешних зависимостей.
+2. **Excel-шаблон (openpyxl)** — вариант, близкий к МойСклад/1С: один раз настроить шаблон, далее только подстановка данных. Для PDF — добавить xlsx2pdf или LibreOffice headless.
+3. **МойСклад API** — не подходит для получения PDF печатных форм.

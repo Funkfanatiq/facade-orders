@@ -328,7 +328,8 @@
           <td class="amount {% if inv.balance > 0 %}balance-owed{% elif inv.balance < 0 %}balance-over{% else %}balance-zero{% endif %}">{{ "%.2f"|format(inv.balance)|replace(".", ",") }} ₽</td>
           <td>
             <a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" download="invoice_{{ inv.invoice_number }}.pdf">PDF</a>
-            <a href="{{ url_for('invoice_torg12', invoice_id=inv.id) }}" download="torg12_{{ inv.invoice_number }}.pdf" class="btn-torg12">Создать закрывающий документ</a>
+            <a href="{{ url_for('invoice_torg12', invoice_id=inv.id) }}" download="torg12_{{ inv.invoice_number }}.pdf" class="btn-torg12">ТОРГ-12</a>
+            <a href="{{ url_for('invoice_torg12_xlsx', invoice_id=inv.id) }}" download="torg12_{{ inv.invoice_number }}.xlsx">ТОРГ-12 Excel</a>
             {% if current_user.role in ["Менеджер", "Админ"] %}
             <button type="button" class="btn-remove-item" onclick="deleteInvoice({{ inv.id }})" title="Удалить">🗑️</button>
             {% endif %}

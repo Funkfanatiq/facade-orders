@@ -1,0 +1,172 @@
+"""
+Генератор ТОРГ-12 через openpyxl + Excel-шаблон.
+Заполняет шаблон ТОРГ-12 (образец 11 от 12.07.2016) данными счёта.
+Поддерживает вывод в xlsx и PDF (автоконвертация через LibreOffice или xlsx2pdf).
+"""
+import io
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+
+# Путь к шаблону (рядом с этим модулем)
+_TEMPLATE_PATH = Path(__file__).parent / "torg12_template.xlsx"
+
+
+def _fmt_num(x):
+    try:
+        return f"{float(x or 0):.2f}".replace(".", ",")
+    except (TypeError, ValueError):
+        return "0,00"
+
+
+def _org_string(config):
+    parts = [
+        config.get("COMPANY_NAME", ""),
+        config.get("COMPANY_ADDRESS", ""),
+        f"ИНН {config.get('COMPANY_INN', '')}",
+        f"р/с {config.get('COMPANY_ACCOUNT', '')} в {config.get('COMPANY_BANK', '')}",
+    ]
+    return ", ".join(p for p in parts if p)
+
+
+def _buyer_string(counterparty):
+    parts = [counterparty.full_name or counterparty.name]
+    if counterparty.address or counterparty.legal_address:
+        parts.append(counterparty.address or counterparty.legal_address)
+    if counterparty.inn:
+        parts.append(f"ИНН {counterparty.inn}")
+    return ", ".join(p for p in parts if p)
+
+
+def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
+    """
+    Заполняет Excel-шаблон ТОРГ-12 и возвращает BytesIO с xlsx.
+    """
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        raise ImportError("Установите openpyxl: pip install openpyxl")
+
+    path = Path(template_path or _TEMPLATE_PATH)
+    if not path.exists():
+        raise FileNotFoundError(f"Шаблон ТОРГ-12 не найден: {path}")
+
+    wb = load_workbook(path)
+    ws = wb.active
+
+    inv_num = str(invoice.invoice_number or "")
+    inv_dt = (invoice.invoice_date or __import__("datetime").date.today()).strftime("%d.%m.%Y")
+    basis = f"Счет на оплату № {inv_num} от {inv_dt}"
+
+    org = _org_string(config)
+    buyer = _buyer_string(counterparty)
+
+    # Верхний блок — пишем в левую ячейку объединённой области
+    ws["B3"] = org
+    ws["B6"] = buyer
+    ws["D10"] = org
+    ws["D12"] = buyer
+    ws["D14"] = basis
+
+    # Номер и дата
+    ws["D8"] = f"{inv_num} от {inv_dt}"
+
+    # ОКПО (если есть в шаблоне)
+    okpo = config.get("COMPANY_OKPO") or ""
+    if okpo:
+        ws["AM13"] = okpo
+
+    # Форма по ОКУД
+    ws["AK15"] = "0330212"
+
+    # Таблица товаров: данные с строки 22
+    # Колонки: B=№, C=наименование, H=ед.изм, O=кол-во, Q=цена, S=сумма
+    DATA_START_ROW = 22
+    DEFAULT_DATA_ROWS = 6  # строк в шаблоне для товаров
+    total_sum = 0.0
+    total_qty = 0.0
+
+    items = list(invoice.items)
+    if len(items) > DEFAULT_DATA_ROWS:
+        # Вставляем дополнительные строки
+        insert_count = len(items) - DEFAULT_DATA_ROWS
+        ws.insert_rows(DATA_START_ROW + DEFAULT_DATA_ROWS, insert_count)
+
+    for i, it in enumerate(items):
+        row = DATA_START_ROW + i
+        qty = float(it.quantity or 0)
+        prc = float(it.price or 0)
+        s = round(qty * prc, 2)
+        total_sum += s
+        total_qty += qty
+
+        ws.cell(row=row, column=2, value=i + 1)
+        ws.cell(row=row, column=3, value=str(it.name or ""))
+        ws.cell(row=row, column=8, value=str(it.unit or "шт"))
+        ws.cell(row=row, column=15, value=_fmt_num(qty))
+        ws.cell(row=row, column=17, value=_fmt_num(prc))
+        ws.cell(row=row, column=19, value=_fmt_num(s))
+
+    last_data_row = DATA_START_ROW + len(items)
+    ws.cell(row=last_data_row, column=2, value="Всего")
+    ws.cell(row=last_data_row, column=15, value=_fmt_num(total_qty))
+    ws.cell(row=last_data_row, column=17, value="х")
+    ws.cell(row=last_data_row, column=19, value=_fmt_num(total_sum))
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+def _xlsx_to_pdf(xlsx_buf):
+    """
+    Конвертирует xlsx (BytesIO) в PDF (BytesIO).
+    Сначала пробует LibreOffice (надёжно для сложных форм), затем xlsx2pdf.
+    """
+    xlsx_buf.seek(0)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        xlsx_path = os.path.join(tmpdir, "torg12.xlsx")
+        pdf_path = os.path.join(tmpdir, "torg12.pdf")
+
+        with open(xlsx_path, "wb") as f:
+            f.write(xlsx_buf.read())
+
+        # 1. LibreOffice headless (лучшее качество)
+        for cmd in ("libreoffice", "soffice"):
+            try:
+                result = subprocess.run(
+                    [cmd, "--headless", "--convert-to", "pdf", "--outdir", tmpdir, xlsx_path],
+                    capture_output=True,
+                    timeout=30,
+                )
+                if result.returncode == 0 and os.path.exists(pdf_path):
+                    with open(pdf_path, "rb") as f:
+                        return io.BytesIO(f.read())
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+
+        # 2. xlsx2pdf (запасной вариант)
+        try:
+            from xlsx2pdf import xlsx2pdf
+            xlsx2pdf(xlsx_path, pdf_path)
+            if os.path.exists(pdf_path):
+                with open(pdf_path, "rb") as f:
+                    return io.BytesIO(f.read())
+        except (ImportError, Exception):
+            pass
+
+    raise RuntimeError(
+        "Не удалось конвертировать Excel в PDF. Установите LibreOffice "
+        "(libreoffice --headless) или pip install xlsx2pdf"
+    )
+
+
+def generate_torg12_pdf(invoice, counterparty, config, template_path=None):
+    """
+    Заполняет шаблон ТОРГ-12 и возвращает PDF (BytesIO).
+    Excel → автоматическая конвертация в PDF.
+    """
+    xlsx_buf = generate_torg12_xlsx(invoice, counterparty, config, template_path)
+    return _xlsx_to_pdf(xlsx_buf)

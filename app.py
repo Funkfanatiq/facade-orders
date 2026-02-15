@@ -1332,6 +1332,41 @@ def invoice_torg12(invoice_id):
     return resp
 
 
+@app.route("/invoice/<int:invoice_id>/torg12/xps")
+@login_required
+def invoice_torg12_xps(invoice_id):
+    """ТОРГ-12 — XPS (требуется LibreOffice в Docker)."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    inv = Invoice.query.get_or_404(invoice_id)
+    cp = inv.counterparty
+    if not cp:
+        flash("Контрагент по счёту не найден", "error")
+        return redirect(url_for("dashboard"))
+    try:
+        from torg12_excel_openpyxl import generate_torg12_xps
+        buf = generate_torg12_xps(inv, cp, app.config)
+    except FileNotFoundError as e:
+        flash(str(e), "error")
+        return redirect(url_for("counterparty_card", counterparty_id=cp.id))
+    except RuntimeError as e:
+        flash(str(e) + " Выдаю Excel.", "warning")
+        from torg12_excel_openpyxl import generate_torg12_xlsx
+        buf = generate_torg12_xlsx(inv, cp, app.config)
+        mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        filename = f"torg12_{inv.invoice_number}.xlsx"
+        resp = send_file(buf, mimetype=mimetype, as_attachment=True, download_name=filename)
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+    resp = send_file(
+        buf, mimetype="application/vnd.ms-xpsdocument",
+        as_attachment=True, download_name=f"torg12_{inv.invoice_number}.xps"
+    )
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
+
+
 @app.route("/invoice/<int:invoice_id>/torg12/xlsx")
 @login_required
 def invoice_torg12_xlsx(invoice_id):

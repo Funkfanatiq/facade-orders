@@ -135,53 +135,68 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     return buf
 
 
-def _xlsx_to_pdf(xlsx_buf):
+def _xlsx_convert(xlsx_buf, target_format, out_ext):
     """
-    Конвертирует xlsx (BytesIO) в PDF (BytesIO).
-    Сначала пробует LibreOffice (надёжно для сложных форм), затем xlsx2pdf.
+    Конвертирует xlsx в PDF или XPS через LibreOffice или (для PDF) xlsx2pdf.
+    target_format: "pdf" или "xps"
+    out_ext: "pdf" или "xps"
     """
     xlsx_buf.seek(0)
     with tempfile.TemporaryDirectory() as tmpdir:
         xlsx_path = os.path.join(tmpdir, "torg12.xlsx")
-        pdf_path = os.path.join(tmpdir, "torg12.pdf")
+        out_path = os.path.join(tmpdir, f"torg12.{out_ext}")
 
         with open(xlsx_path, "wb") as f:
             f.write(xlsx_buf.read())
 
-        # 1. LibreOffice headless (лучшее качество)
+        # 1. LibreOffice headless (pdf и xps)
         for cmd in ("libreoffice", "soffice"):
             try:
                 result = subprocess.run(
-                    [cmd, "--headless", "--convert-to", "pdf", "--outdir", tmpdir, xlsx_path],
+                    [cmd, "--headless", "--convert-to", target_format, "--outdir", tmpdir, xlsx_path],
                     capture_output=True,
                     timeout=30,
                 )
-                if result.returncode == 0 and os.path.exists(pdf_path):
-                    with open(pdf_path, "rb") as f:
+                if result.returncode == 0 and os.path.exists(out_path):
+                    with open(out_path, "rb") as f:
                         return io.BytesIO(f.read())
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 continue
 
-        # 2. xlsx2pdf (запасной вариант)
-        try:
-            from xlsx2pdf import xlsx2pdf
-            xlsx2pdf(xlsx_path, pdf_path)
-            if os.path.exists(pdf_path):
-                with open(pdf_path, "rb") as f:
-                    return io.BytesIO(f.read())
-        except (ImportError, Exception):
-            pass
+        # 2. xlsx2pdf только для PDF
+        if target_format == "pdf":
+            try:
+                from xlsx2pdf import xlsx2pdf
+                xlsx2pdf(xlsx_path, out_path)
+                if os.path.exists(out_path):
+                    with open(out_path, "rb") as f:
+                        return io.BytesIO(f.read())
+            except (ImportError, Exception):
+                pass
 
     raise RuntimeError(
-        "Не удалось конвертировать Excel в PDF. Установите LibreOffice "
-        "(libreoffice --headless) или pip install xlsx2pdf"
+        f"Не удалось конвертировать в {target_format.upper()}. "
+        f"{'Для XPS нужен Docker с LibreOffice.' if target_format == 'xps' else 'Установите LibreOffice или pip install xlsx2pdf'}"
     )
 
 
+def _xlsx_to_pdf(xlsx_buf):
+    """Конвертирует xlsx в PDF."""
+    return _xlsx_convert(xlsx_buf, "pdf", "pdf")
+
+
+def _xlsx_to_xps(xlsx_buf):
+    """Конвертирует xlsx в XPS (требуется LibreOffice в Docker)."""
+    return _xlsx_convert(xlsx_buf, "xps", "xps")
+
+
 def generate_torg12_pdf(invoice, counterparty, config, template_path=None):
-    """
-    Заполняет шаблон ТОРГ-12 и возвращает PDF (BytesIO).
-    Excel → автоматическая конвертация в PDF.
-    """
+    """Заполняет шаблон ТОРГ-12 и возвращает PDF (BytesIO)."""
     xlsx_buf = generate_torg12_xlsx(invoice, counterparty, config, template_path)
     return _xlsx_to_pdf(xlsx_buf)
+
+
+def generate_torg12_xps(invoice, counterparty, config, template_path=None):
+    """Заполняет шаблон ТОРГ-12 и возвращает XPS (BytesIO). Требуется LibreOffice."""
+    xlsx_buf = generate_torg12_xlsx(invoice, counterparty, config, template_path)
+    return _xlsx_to_xps(xlsx_buf)

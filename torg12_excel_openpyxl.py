@@ -81,7 +81,9 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     ws["AK15"] = "0330212"
 
     # Таблица товаров: данные с строки 22
-    # Колонки: B=№, C=наименование, H=ед.изм, O=кол-во, Q=цена, S=сумма
+    # Merged cells: C22:F22 имя, H22:K22 ед., N22:P22 кол-во, R22:U22 сумма
+    # Пишем ТОЛЬКО в top-left ячейку merge (иначе MergedCell read-only)
+    # B=2 №, C=3 имя, H=8 ед., N=14 кол-во, Q=17 цена (не в merge), R=18 сумма
     DATA_START_ROW = 22
     DEFAULT_DATA_ROWS = 6  # строк в шаблоне для товаров
     total_sum = 0.0
@@ -104,15 +106,15 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
         ws.cell(row=row, column=2, value=i + 1)
         ws.cell(row=row, column=3, value=str(it.name or ""))
         ws.cell(row=row, column=8, value=str(it.unit or "шт"))
-        ws.cell(row=row, column=15, value=_fmt_num(qty))
+        ws.cell(row=row, column=14, value=_fmt_num(qty))
         ws.cell(row=row, column=17, value=_fmt_num(prc))
-        ws.cell(row=row, column=19, value=_fmt_num(s))
+        ws.cell(row=row, column=18, value=_fmt_num(s))
 
     last_data_row = DATA_START_ROW + len(items)
     ws.cell(row=last_data_row, column=2, value="Всего")
-    ws.cell(row=last_data_row, column=15, value=_fmt_num(total_qty))
+    ws.cell(row=last_data_row, column=14, value=_fmt_num(total_qty))
     ws.cell(row=last_data_row, column=17, value="х")
-    ws.cell(row=last_data_row, column=19, value=_fmt_num(total_sum))
+    ws.cell(row=last_data_row, column=18, value=_fmt_num(total_sum))
 
     buf = io.BytesIO()
     wb.save(buf)

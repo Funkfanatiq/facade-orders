@@ -1303,40 +1303,6 @@ def _unit_to_okei(unit):
 @app.route("/invoice/<int:invoice_id>/torg12")
 @login_required
 def invoice_torg12(invoice_id):
-    """ТОРГ-12 — PDF (Excel-шаблон + автоконвертация в PDF)."""
-    if current_user.role not in ["Менеджер", "Админ"]:
-        flash("Доступ запрещен", "error")
-        return redirect(url_for("dashboard"))
-    inv = Invoice.query.get_or_404(invoice_id)
-    cp = inv.counterparty
-    if not cp:
-        flash("Контрагент по счёту не найден", "error")
-        return redirect(url_for("dashboard"))
-    try:
-        from torg12_excel_openpyxl import generate_torg12_pdf
-        buf = generate_torg12_pdf(inv, cp, app.config)
-    except FileNotFoundError as e:
-        flash(str(e), "error")
-        return redirect(url_for("counterparty_card", counterparty_id=cp.id))
-    except RuntimeError as e:
-        flash(f"{e} Используется упрощённая форма.", "warning")
-        from torg12_pdf_platypus import generate_torg12_pdf as platypus_pdf
-        font_name = _get_pdf_font()
-        buf = platypus_pdf(
-            inv, cp, app.config, font_name,
-            amount_to_words=_amount_to_words_rub,
-            unit_to_okei=_unit_to_okei,
-        )
-    resp = send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=f"torg12_{inv.invoice_number}.pdf")
-    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    resp.headers["Pragma"] = "no-cache"
-    resp.headers["Expires"] = "0"
-    return resp
-
-
-@app.route("/invoice/<int:invoice_id>/torg12/xlsx")
-@login_required
-def invoice_torg12_xlsx(invoice_id):
     """ТОРГ-12 — Excel (шаблон openpyxl)."""
     if current_user.role not in ["Менеджер", "Админ"]:
         flash("Доступ запрещен", "error")
@@ -1357,6 +1323,8 @@ def invoice_torg12_xlsx(invoice_id):
         as_attachment=True, download_name=f"torg12_{inv.invoice_number}.xlsx"
     )
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
     return resp
 
 

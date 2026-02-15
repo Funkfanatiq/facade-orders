@@ -1,12 +1,9 @@
 """
 Генератор ТОРГ-12 через openpyxl + Excel-шаблон.
 Заполняет шаблон ТОРГ-12 (образец 11 от 12.07.2016) данными счёта.
-Поддерживает вывод в xlsx и PDF (автоконвертация через LibreOffice или xlsx2pdf).
+Вывод: Excel (xlsx).
 """
 import io
-import os
-import subprocess
-import tempfile
 from pathlib import Path
 
 # Путь к шаблону (рядом с этим модулем)
@@ -69,6 +66,8 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
 
     inv_num = str(invoice.invoice_number or "")
     inv_dt = (invoice.invoice_date or __import__("datetime").date.today()).strftime("%d.%m.%Y")
+    # Дата составления = дата создания документа ТОРГ-12 (сегодня)
+    doc_dt_str = __import__("datetime").date.today().strftime("%d.%m.%Y")
     basis = f"Счет на оплату № {inv_num} от {inv_dt}"
 
     org = _org_string(config)
@@ -81,9 +80,10 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     ws["D12"] = buyer
     ws["D14"] = basis
 
-    # Номер документа (B8:C8) и Дата составления (D8:AI8)
-    ws["B8"] = inv_num
-    ws["D8"] = inv_dt
+    # Номер документа = номер счёта, Дата составления = день отгрузки
+    # Ячейки: K17 (top-left K17:N17), O17 (top-left O17:R17)
+    ws["K17"] = inv_num
+    ws["O17"] = doc_dt_str
 
     # ОКПО (если есть в шаблоне)
     okpo = config.get("COMPANY_OKPO") or ""
@@ -133,70 +133,3 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     wb.save(buf)
     buf.seek(0)
     return buf
-
-
-def _xlsx_convert(xlsx_buf, target_format, out_ext):
-    """
-    Конвертирует xlsx в PDF или XPS через LibreOffice или (для PDF) xlsx2pdf.
-    target_format: "pdf" или "xps"
-    out_ext: "pdf" или "xps"
-    """
-    xlsx_buf.seek(0)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        xlsx_path = os.path.join(tmpdir, "torg12.xlsx")
-        out_path = os.path.join(tmpdir, f"torg12.{out_ext}")
-
-        with open(xlsx_path, "wb") as f:
-            f.write(xlsx_buf.read())
-
-        # 1. LibreOffice headless (pdf и xps)
-        for cmd in ("libreoffice", "soffice"):
-            try:
-                result = subprocess.run(
-                    [cmd, "--headless", "--convert-to", target_format, "--outdir", tmpdir, xlsx_path],
-                    capture_output=True,
-                    timeout=30,
-                )
-                if result.returncode == 0 and os.path.exists(out_path):
-                    with open(out_path, "rb") as f:
-                        return io.BytesIO(f.read())
-            except (FileNotFoundError, subprocess.TimeoutExpired):
-                continue
-
-        # 2. xlsx2pdf только для PDF
-        if target_format == "pdf":
-            try:
-                from xlsx2pdf import xlsx2pdf
-                xlsx2pdf(xlsx_path, out_path)
-                if os.path.exists(out_path):
-                    with open(out_path, "rb") as f:
-                        return io.BytesIO(f.read())
-            except (ImportError, Exception):
-                pass
-
-    raise RuntimeError(
-        f"Не удалось конвертировать в {target_format.upper()}. "
-        f"{'Для XPS нужен Docker с LibreOffice.' if target_format == 'xps' else 'Установите LibreOffice или pip install xlsx2pdf'}"
-    )
-
-
-def _xlsx_to_pdf(xlsx_buf):
-    """Конвертирует xlsx в PDF."""
-    return _xlsx_convert(xlsx_buf, "pdf", "pdf")
-
-
-def _xlsx_to_xps(xlsx_buf):
-    """Конвертирует xlsx в XPS (требуется LibreOffice в Docker)."""
-    return _xlsx_convert(xlsx_buf, "xps", "xps")
-
-
-def generate_torg12_pdf(invoice, counterparty, config, template_path=None):
-    """Заполняет шаблон ТОРГ-12 и возвращает PDF (BytesIO)."""
-    xlsx_buf = generate_torg12_xlsx(invoice, counterparty, config, template_path)
-    return _xlsx_to_pdf(xlsx_buf)
-
-
-def generate_torg12_xps(invoice, counterparty, config, template_path=None):
-    """Заполняет шаблон ТОРГ-12 и возвращает XPS (BytesIO). Требуется LibreOffice."""
-    xlsx_buf = generate_torg12_xlsx(invoice, counterparty, config, template_path)
-    return _xlsx_to_xps(xlsx_buf)

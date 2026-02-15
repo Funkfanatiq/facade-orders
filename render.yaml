@@ -1,0 +1,9 @@
+# Render Blueprint — Docker с LibreOffice (ТОРГ-12 Excel→PDF)
+# Использование: New > Blueprint → подключить репозиторий
+# DATABASE_URL и SECRET_KEY добавьте в Environment вручную после создания
+services:
+  - type: web
+    name: facade-orders
+    runtime: docker
+    repo: https://github.com/Funkfanatiq/facade-orders
+    plan: free

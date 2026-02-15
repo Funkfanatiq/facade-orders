@@ -1303,7 +1303,7 @@ def _unit_to_okei(unit):
 @app.route("/invoice/<int:invoice_id>/torg12")
 @login_required
 def invoice_torg12(invoice_id):
-    """ТОРГ-12 — Excel (шаблон openpyxl)."""
+    """ТОРГ-12 — PDF (xlsx2pdf без Docker), при ошибке — Excel."""
     if current_user.role not in ["Менеджер", "Админ"]:
         flash("Доступ запрещен", "error")
         return redirect(url_for("dashboard"))
@@ -1312,6 +1312,38 @@ def invoice_torg12(invoice_id):
     if not cp:
         flash("Контрагент по счёту не найден", "error")
         return redirect(url_for("dashboard"))
+    try:
+        from torg12_excel_openpyxl import generate_torg12_xlsx, generate_torg12_pdf
+        buf = generate_torg12_pdf(inv, cp, app.config)
+        mimetype = "application/pdf"
+        filename = f"torg12_{inv.invoice_number}.pdf"
+    except FileNotFoundError as e:
+        flash(str(e), "error")
+        return redirect(url_for("counterparty_card", counterparty_id=cp.id))
+    except RuntimeError:
+        from torg12_excel_openpyxl import generate_torg12_xlsx
+        buf = generate_torg12_xlsx(inv, cp, app.config)
+        mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        filename = f"torg12_{inv.invoice_number}.xlsx"
+    resp = send_file(buf, mimetype=mimetype, as_attachment=True, download_name=filename)
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
+
+@app.route("/invoice/<int:invoice_id>/torg12/xlsx")
+@login_required
+def invoice_torg12_xlsx(invoice_id):
+    """ТОРГ-12 — только Excel (если нужен явно xlsx)."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    inv = Invoice.query.get_or_404(invoice_id)
+    cp = inv.counterparty
+    if not cp:
+        flash("Контрагент по счёту не найден", "error")
+        return redirect(url_for("counterparty_card", counterparty_id=cp.id))
     try:
         from torg12_excel_openpyxl import generate_torg12_xlsx
         buf = generate_torg12_xlsx(inv, cp, app.config)
@@ -1323,8 +1355,6 @@ def invoice_torg12(invoice_id):
         as_attachment=True, download_name=f"torg12_{inv.invoice_number}.xlsx"
     )
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    resp.headers["Pragma"] = "no-cache"
-    resp.headers["Expires"] = "0"
     return resp
 
 

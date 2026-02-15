@@ -37,7 +37,7 @@ class Config:
     COMPANY_BIK = os.environ.get('COMPANY_BIK') or '044030786'
     COMPANY_ACCOUNT = os.environ.get('COMPANY_ACCOUNT') or '40802810932390000451'
     COMPANY_CORR_ACCOUNT = os.environ.get('COMPANY_CORR_ACCOUNT') or '30101810600000000786'
-    COMPANY_OKPO = os.environ.get('COMPANY_OKPO') or ''
+    COMPANY_OKPO = os.environ.get('COMPANY_OKPO') or '0115043810'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 

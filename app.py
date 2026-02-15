@@ -1313,7 +1313,7 @@ def invoice_torg12(invoice_id):
         flash("Контрагент по счёту не найден", "error")
         return redirect(url_for("dashboard"))
     try:
-        from torg12_excel_openpyxl import generate_torg12_xlsx, generate_torg12_pdf
+        from torg12_excel_openpyxl import generate_torg12_pdf
         buf = generate_torg12_pdf(inv, cp, app.config)
         mimetype = "application/pdf"
         filename = f"torg12_{inv.invoice_number}.pdf"
@@ -1321,10 +1321,16 @@ def invoice_torg12(invoice_id):
         flash(str(e), "error")
         return redirect(url_for("counterparty_card", counterparty_id=cp.id))
     except RuntimeError:
-        from torg12_excel_openpyxl import generate_torg12_xlsx
-        buf = generate_torg12_xlsx(inv, cp, app.config)
-        mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        filename = f"torg12_{inv.invoice_number}.xlsx"
+        flash("Excel→PDF не сработал, выдаю упрощённую форму.", "warning")
+        from torg12_pdf_platypus import generate_torg12_pdf as platypus_pdf
+        font_name = _get_pdf_font()
+        buf = platypus_pdf(
+            inv, cp, app.config, font_name,
+            amount_to_words=_amount_to_words_rub,
+            unit_to_okei=_unit_to_okei,
+        )
+        mimetype = "application/pdf"
+        filename = f"torg12_{inv.invoice_number}.pdf"
     resp = send_file(buf, mimetype=mimetype, as_attachment=True, download_name=filename)
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     resp.headers["Pragma"] = "no-cache"

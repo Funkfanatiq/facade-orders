@@ -33,11 +33,17 @@ def _fmt_num(x):
         return "0,00"
 
 
-def _put_qty_price_sum(ws, row, col_qty, col_prc, col_sum, qty, prc, s):
-    """Записать количество, цену, сумму. prc=None для строки «Всего» (ставим «х»)."""
+def _put_qty_price_sum(ws, row, col_qty, col_prc, col_sum, qty, prc, s, col_vat_rate=None, col_vat_amt=None, col_sum_vat=None):
+    """Записать кол-во, цену, сумму, НДС. prc=None для строки «Всего»."""
     ws.cell(row=row, column=col_qty, value=_fmt_num(qty))
     ws.cell(row=row, column=col_prc, value="х" if prc is None else _fmt_num(prc))
     ws.cell(row=row, column=col_sum, value=_fmt_num(s))
+    if col_vat_rate is not None:
+        ws.cell(row=row, column=col_vat_rate, value="х" if prc is None else "0%")
+    if col_vat_amt is not None:
+        ws.cell(row=row, column=col_vat_amt, value=_fmt_num(0))
+    if col_sum_vat is not None:
+        ws.cell(row=row, column=col_sum_vat, value=_fmt_num(s))
 
 
 def _org_string(config):
@@ -148,15 +154,17 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     # AM13 = номер (основание) — top-left merge AM13:AM14
     ws["AM13"] = inv_num
 
-    # Таблица товаров ТОРГ-12 — колонки по унифицированной форме:
-    # 1=B № | 2=C-F Товар | 3=H-K Ед.изм | 6=N Масса брутто | 7=O Кол-во нетто | 8=P-Q Цена | 9=R-U Сумма
-    # N22:P22 merged — пишем в N(14). R22:U22 merged — пишем в R(18).
+    # Таблица товаров — колонки по образцу (логические 10–15):
+    # 10=O Количество нетто, 11=P Цена, 12=R Сумма, 13=V НДС ставка, 14=AE НДС сумма, 15=AL Сумма с НДС
     COL_N = 2       # B
     COL_NAME = 3    # C
     COL_UNIT = 8    # H
-    COL_QTY = 14    # N (top-left merge = Кол-во)
-    COL_PRC = 17    # Q (Цена)
-    COL_SUM = 18    # R (Сумма)
+    COL_QTY = 15    # O (Количество нетто)
+    COL_PRC = 16    # P (Цена)
+    COL_SUM = 18    # R (Сумма без НДС)
+    COL_VAT_RATE = 22   # V (НДС ставка %)
+    COL_VAT_AMT = 31    # AE (НДС сумма)
+    COL_SUM_VAT = 38    # AL (Сумма с НДС)
     DATA_START_ROW = 23
     DEFAULT_DATA_ROWS = 6
     total_sum = 0.0
@@ -169,7 +177,7 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
         ws.insert_rows(insert_at, insert_count)
         for k in range(insert_count):
             r = insert_at + k
-            for start, end in [(3, 6), (8, 11), (14, 16), (18, 21)]:
+            for start, end in [(3, 6), (8, 11), (18, 21)]:  # без merge N-P: O,P — отдельные ячейки
                 try:
                     ws.merge_cells(start_row=r, start_column=start, end_row=r, end_column=end)
                 except Exception:
@@ -186,11 +194,13 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
         ws.cell(row=row, column=COL_N, value=i + 1)
         ws.cell(row=row, column=COL_NAME, value=str(it.name or ""))
         ws.cell(row=row, column=COL_UNIT, value=str(it.unit or "шт"))
-        _put_qty_price_sum(ws, row, COL_QTY, COL_PRC, COL_SUM, qty, prc, s)
+        _put_qty_price_sum(ws, row, COL_QTY, COL_PRC, COL_SUM, qty, prc, s,
+                           COL_VAT_RATE, COL_VAT_AMT, COL_SUM_VAT)
 
     last_data_row = DATA_START_ROW + len(items)
     ws.cell(row=last_data_row, column=COL_N, value="Всего")
-    _put_qty_price_sum(ws, last_data_row, COL_QTY, COL_PRC, COL_SUM, total_qty, None, total_sum)
+    _put_qty_price_sum(ws, last_data_row, COL_QTY, COL_PRC, COL_SUM, total_qty, None, total_sum,
+                       COL_VAT_RATE, COL_VAT_AMT, COL_SUM_VAT)
 
     # Рамки для верхнего блока (грузоотправитель, грузополучатель, поставщик, плательщик)
     _apply_border(ws, 3, 2, 15, 35)
@@ -198,8 +208,8 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     _apply_border(ws, 2, 37, 17, 39)
     # Рамки для блока «Номер документа» / «Дата составления»
     _apply_border(ws, 16, 11, 17, 22)
-    # Рамки для таблицы товаров (заголовки + данные + итого)
-    _apply_border(ws, 20, 2, last_data_row, 21)
+    # Рамки для таблицы товаров (до колонки AM включительно)
+    _apply_border(ws, 20, 2, last_data_row, 39)
 
     buf = io.BytesIO()
     wb.save(buf)

@@ -166,16 +166,16 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     # AM13 = номер (основание) — top-left merge AM13:AM14
     ws["AM13"] = inv_num
 
-    # Таблица — по наименованиям (torg12_excel_dims, MERGED_CELLS)
-    # Товар C-F, Ед.изм H-K, Нетто O, Цена P-Q, Сумма R-U, НДС V-AD/AE-AK, Сумма с НДС AL
+    # Таблица — по указанию пользователя: 22=Количество, 24=Цена, 26=Общая сумма; код по ОКЕИ 055
     COL_N = 2       # B — Номер по порядку
     COL_NAME = 3    # C — наименование, характеристика, сорт, артикул товара
-    COL_UNIT = 8    # H — Единица измерения, наименование (merge H23:K23)
-    COL_QTY = 15    # O — Количество (масса нетто)
-    COL_PRC = 17    # Q — Цена, руб. коп.
-    COL_SUM = 21    # U — Сумма без учета НДС
-    COL_VAT_RATE = 26   # Z — ставка, %
-    COL_VAT_AMT = 31    # AE — сумма (НДС)
+    COL_UNIT = 8    # H — Единица измерения, наименование (кв.м)
+    COL_OKEI = 10   # J — код по ОКЕИ (055 = м²)
+    COL_QTY = 22    # V — Количество
+    COL_PRC = 24    # X — Цена за квадратный метр
+    COL_SUM = 26    # Z — Общая сумма (без НДС)
+    COL_VAT_RATE = 28   # AB — ставка НДС, %
+    COL_VAT_AMT = 33    # AG — сумма НДС
     COL_SUM_VAT = 38    # AL — Сумма с учетом НДС
     DATA_START_ROW = 23
     DEFAULT_DATA_ROWS = 6
@@ -205,7 +205,8 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
 
         ws.cell(row=row, column=COL_N, value=i + 1)
         ws.cell(row=row, column=COL_NAME, value=str(it.name or ""))
-        ws.cell(row=row, column=COL_UNIT, value=str(it.unit or "шт"))
+        ws.cell(row=row, column=COL_UNIT, value=str(it.unit or "кв.м"))
+        ws.cell(row=row, column=COL_OKEI, value="055")
         _put_qty_price_sum(ws, row, COL_QTY, COL_PRC, COL_SUM, qty, prc, s,
                            COL_VAT_RATE, COL_VAT_AMT, COL_SUM_VAT)
 

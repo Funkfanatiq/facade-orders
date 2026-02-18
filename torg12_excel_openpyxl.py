@@ -33,6 +33,13 @@ def _fmt_num(x):
         return "0,00"
 
 
+def _put_qty_price_sum(ws, row, col_qty, col_prc, col_sum, qty, prc, s):
+    """Записать количество, цену, сумму. prc=None для строки «Всего» (ставим «х»)."""
+    ws.cell(row=row, column=col_qty, value=_fmt_num(qty))
+    ws.cell(row=row, column=col_prc, value="х" if prc is None else _fmt_num(prc))
+    ws.cell(row=row, column=col_sum, value=_fmt_num(s))
+
+
 def _org_string(config):
     """Полная строка реквизитов организации для грузоотправителя/поставщика."""
     parts = [
@@ -121,19 +128,37 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     ws["K17"] = inv_num
     ws["O17"] = doc_dt_str
 
-    # ОКПО (если есть в шаблоне)
+    # Правый блок «Коды»: подпись в AL, значение в AM (колонка 39)
     okpo = config.get("COMPANY_OKPO") or ""
+    cp_okpo = getattr(counterparty, "okpo", None) or ""
+    # AM3 = Форма по ОКУД
+    ws["AM3"] = "0330212"
+    # AM4 = по ОКПО (грузоотправитель)
     if okpo:
-        ws["AM13"] = okpo
+        ws["AM4"] = okpo
+    # AM7 = по ОКПО (грузополучатель)
+    if cp_okpo:
+        ws["AM7"] = cp_okpo
+    # AM9 = по ОКПО (поставщик) — top-left merge AM9:AM10
+    if okpo:
+        ws["AM9"] = okpo
+    # AM11 = по ОКПО (плательщик) — top-left merge AM11:AM12
+    if cp_okpo:
+        ws["AM11"] = cp_okpo
+    # AM13 = номер (основание) — top-left merge AM13:AM14
+    ws["AM13"] = inv_num
 
-    # Форма по ОКУД
-    ws["AK15"] = "0330212"
-
-    # Таблица товаров: данные с строки 22
-    # Merged: C22:F22 имя, H22:K22 ед., N22:P22 кол-во, Q=цена, R22:U22 сумма
-    # Пишем в top-left объединённой ячейки (иначе MergedCell read-only)
+    # Таблица товаров ТОРГ-12 — колонки по унифицированной форме:
+    # 1=B № | 2=C-F Товар | 3=H-K Ед.изм | 6=N Масса брутто | 7=O Кол-во нетто | 8=P-Q Цена | 9=R-U Сумма
+    # N22:P22 merged — пишем в N(14). R22:U22 merged — пишем в R(18).
+    COL_N = 2       # B
+    COL_NAME = 3    # C
+    COL_UNIT = 8    # H
+    COL_QTY = 14    # N (top-left merge N22:P22 = Кол-во)
+    COL_PRC = 17    # Q (Цена, P-Q; P в merge N-P, пишем в Q)
+    COL_SUM = 18    # R (top-left merge R22:U22 = Сумма)
     DATA_START_ROW = 22
-    DEFAULT_DATA_ROWS = 6  # строк в шаблоне для товаров
+    DEFAULT_DATA_ROWS = 6
     total_sum = 0.0
     total_qty = 0.0
 
@@ -142,7 +167,6 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     if insert_count > 0:
         insert_at = DATA_START_ROW + DEFAULT_DATA_ROWS
         ws.insert_rows(insert_at, insert_count)
-        # Для новых строк добавляем merge, чтобы колонки не сползали
         for k in range(insert_count):
             r = insert_at + k
             for start, end in [(3, 6), (8, 11), (14, 16), (18, 21)]:
@@ -159,21 +183,19 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
         total_sum += s
         total_qty += qty
 
-        ws.cell(row=row, column=2, value=i + 1)
-        ws.cell(row=row, column=3, value=str(it.name or ""))
-        ws.cell(row=row, column=8, value=str(it.unit or "шт"))
-        ws.cell(row=row, column=14, value=_fmt_num(qty))
-        ws.cell(row=row, column=17, value=_fmt_num(prc))
-        ws.cell(row=row, column=18, value=_fmt_num(s))
+        ws.cell(row=row, column=COL_N, value=i + 1)
+        ws.cell(row=row, column=COL_NAME, value=str(it.name or ""))
+        ws.cell(row=row, column=COL_UNIT, value=str(it.unit or "шт"))
+        _put_qty_price_sum(ws, row, COL_QTY, COL_PRC, COL_SUM, qty, prc, s)
 
     last_data_row = DATA_START_ROW + len(items)
-    ws.cell(row=last_data_row, column=2, value="Всего")
-    ws.cell(row=last_data_row, column=14, value=_fmt_num(total_qty))
-    ws.cell(row=last_data_row, column=17, value="х")
-    ws.cell(row=last_data_row, column=18, value=_fmt_num(total_sum))
+    ws.cell(row=last_data_row, column=COL_N, value="Всего")
+    _put_qty_price_sum(ws, last_data_row, COL_QTY, COL_PRC, COL_SUM, total_qty, None, total_sum)
 
     # Рамки для верхнего блока (грузоотправитель, грузополучатель, поставщик, плательщик)
     _apply_border(ws, 3, 2, 15, 35)
+    # Рамки для правого блока «Коды» (AK=37, AL=38, AM=39)
+    _apply_border(ws, 2, 37, 17, 39)
     # Рамки для блока «Номер документа» / «Дата составления»
     _apply_border(ws, 16, 11, 17, 22)
     # Рамки для таблицы товаров (заголовки + данные + итого)

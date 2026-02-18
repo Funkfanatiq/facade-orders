@@ -170,7 +170,7 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     COL_N = 2       # B — Номер по порядку
     COL_NAME = 3    # C — наименование, характеристика, сорт, артикул товара
     COL_UNIT = 8    # H — Единица измерения, наименование (кв.м)
-    COL_OKEI = 10   # J — код по ОКЕИ (055 = м²)
+    # COL_OKEI = 10 — J в merge H23:K23, писать нельзя; пишем "055" в единицу (топ-левая H)
     COL_QTY = 22    # V — Количество
     COL_PRC = 24    # X — Цена за квадратный метр
     COL_SUM = 26    # Z — Общая сумма (без НДС)
@@ -205,8 +205,10 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
 
         ws.cell(row=row, column=COL_N, value=i + 1)
         ws.cell(row=row, column=COL_NAME, value=str(it.name or ""))
-        ws.cell(row=row, column=COL_UNIT, value=str(it.unit or "кв.м"))
-        ws.cell(row=row, column=COL_OKEI, value="055")
+        # Ед.изм: H — топ merge H23:K23; код ОКЕИ 055 — J в merge, пишем в H
+        unit = str(it.unit or "кв.м")
+        sqm = ("кв" in unit.lower() or "м²" in unit or unit == "м2")
+        ws.cell(row=row, column=COL_UNIT, value=f"{unit} (055)" if sqm else unit)
         _put_qty_price_sum(ws, row, COL_QTY, COL_PRC, COL_SUM, qty, prc, s,
                            COL_VAT_RATE, COL_VAT_AMT, COL_SUM_VAT)
 

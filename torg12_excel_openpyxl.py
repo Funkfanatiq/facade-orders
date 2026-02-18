@@ -14,13 +14,16 @@ _THIN = "thin"
 
 
 def _apply_border(ws, min_row, min_col, max_row, max_col, style=_THIN):
-    """Применить рамки ко всем ячейкам в диапазоне."""
+    """Применить рамки ко всем ячейкам в диапазоне. MergedCell пропускаем (read-only)."""
     try:
         from openpyxl.styles import Border, Side
+        from openpyxl.cell.cell import MergedCell
         side = Side(border_style=style, color="000000")
         border = Border(left=side, top=side, right=side, bottom=side)
         for row in ws.iter_rows(min_row=min_row, min_col=min_col, max_row=max_row, max_col=max_col):
             for cell in row:
+                if isinstance(cell, MergedCell):
+                    continue
                 cell.border = border
     except Exception:
         pass
@@ -46,17 +49,17 @@ def _amount_to_words_rub(amount):
 
 
 def _cell_top_left(ws, row, col):
-    """Для merged cell возвращает колонку top-left; иначе col."""
+    """Для merged cell возвращает (min_row, min_col); иначе (row, col)."""
     for m in ws.merged_cells.ranges:
         if m.min_row <= row <= m.max_row and m.min_col <= col <= m.max_col:
-            return m.min_col
-    return col
+            return (m.min_row, m.min_col)
+    return (row, col)
 
 
 def _put_cell(ws, row, col, value):
     """Пишет в top-left merge, иначе в ячейку (обход MergedCell read-only)."""
-    c = _cell_top_left(ws, row, col)
-    ws.cell(row=row, column=c, value=value)
+    r, c = _cell_top_left(ws, row, col)
+    ws.cell(row=r, column=c, value=value)
 
 
 def _put_qty_price_sum(ws, row, col_qty, col_prc, col_sum, qty, prc, s, col_vat_rate=None, col_vat_amt=None, col_sum_vat=None):
@@ -148,37 +151,30 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     org = _org_string(config)
     buyer = _buyer_string(counterparty)
 
-    # Верхний блок — пишем в левую ячейку объединённой области
-    ws["B3"] = org
-    ws["B6"] = buyer
-    ws["D10"] = org
-    ws["D12"] = buyer
-    ws["D14"] = basis
+    # Верхний блок — _put_cell для обхода MergedCell
+    _put_cell(ws, 3, 2, org)   # B3
+    _put_cell(ws, 6, 2, buyer)  # B6
+    _put_cell(ws, 10, 4, org)   # D10
+    _put_cell(ws, 12, 4, buyer)  # D12
+    _put_cell(ws, 14, 4, basis)  # D14
 
     # Номер документа = номер счёта, Дата составления = день отгрузки
-    # Ячейки: K17 (top-left K17:N17), O17 (top-left O17:R17)
-    ws["K17"] = inv_num
-    ws["O17"] = doc_dt_str
+    _put_cell(ws, 17, 11, inv_num)   # K17
+    _put_cell(ws, 17, 15, doc_dt_str)  # O17
 
-    # Правый блок «Коды»: подпись в AL, значение в AM (колонка 39)
+    # Правый блок «Коды»: AM = колонка 39
     okpo = config.get("COMPANY_OKPO") or ""
     cp_okpo = getattr(counterparty, "okpo", None) or ""
-    # AM3 = Форма по ОКУД
-    ws["AM3"] = "0330212"
-    # AM4 = по ОКПО (грузоотправитель)
+    _put_cell(ws, 3, 39, "0330212")
     if okpo:
-        ws["AM4"] = okpo
-    # AM7 = по ОКПО (грузополучатель)
+        _put_cell(ws, 4, 39, okpo)
     if cp_okpo:
-        ws["AM7"] = cp_okpo
-    # AM9 = по ОКПО (поставщик) — top-left merge AM9:AM10
+        _put_cell(ws, 7, 39, cp_okpo)
     if okpo:
-        ws["AM9"] = okpo
-    # AM11 = по ОКПО (плательщик) — top-left merge AM11:AM12
+        _put_cell(ws, 9, 39, okpo)
     if cp_okpo:
-        ws["AM11"] = cp_okpo
-    # AM13 = номер (основание) — top-left merge AM13:AM14
-    ws["AM13"] = inv_num
+        _put_cell(ws, 11, 39, cp_okpo)
+    _put_cell(ws, 13, 39, inv_num)
 
     # Таблица — по указанию пользователя: 22=Количество, 24=Цена, 26=Общая сумма; код по ОКЕИ 055
     COL_N = 2       # B — Номер по порядку
@@ -218,17 +214,17 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
         total_sum += s
         total_qty += qty
 
-        ws.cell(row=row, column=COL_N, value=i + 1)
-        ws.cell(row=row, column=COL_NAME, value=str(it.name or ""))
+        _put_cell(ws, row, COL_N, i + 1)
+        _put_cell(ws, row, COL_NAME, str(it.name or ""))
         # Ед.изм: H — топ merge H23:K23; код ОКЕИ 055 — J в merge, пишем в H
         unit = str(it.unit or "кв.м")
         sqm = ("кв" in unit.lower() or "м²" in unit or unit == "м2")
-        ws.cell(row=row, column=COL_UNIT, value=f"{unit} (055)" if sqm else unit)
+        _put_cell(ws, row, COL_UNIT, f"{unit} (055)" if sqm else unit)
         _put_qty_price_sum(ws, row, COL_QTY, COL_PRC, COL_SUM, qty, prc, s,
                            COL_VAT_RATE, COL_VAT_AMT, COL_SUM_VAT)
 
     last_data_row = DATA_START_ROW + len(items)
-    ws.cell(row=last_data_row, column=COL_N, value="Всего")
+    _put_cell(ws, last_data_row, COL_N, "Всего")
     _put_qty_price_sum(ws, last_data_row, COL_QTY, COL_PRC, COL_SUM, total_qty, None, total_sum,
                        COL_VAT_RATE, COL_VAT_AMT, COL_SUM_VAT)
 
@@ -242,7 +238,7 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     _apply_border(ws, 20, 2, last_data_row, 39)
 
     # Сумма прописью — «Всего отпущено на сумму» (строка 31)
-    ws["B31"] = f"Всего отпущено на сумму {_amount_to_words_rub(total_sum)}"
+    _put_cell(ws, 31, 2, f"Всего отпущено на сумму {_amount_to_words_rub(total_sum)}")
 
     buf = io.BytesIO()
     wb.save(buf)

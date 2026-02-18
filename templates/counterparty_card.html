@@ -383,6 +383,7 @@
       var content = document.getElementById('cp-tab-' + tabName);
       if (content) content.classList.add('active');
       if (btn) btn.classList.add('active');
+      history.replaceState(null, '', window.location.pathname + '?tab=' + tabName);
     }
     function openEditModal() {
       document.getElementById('edit-modal-overlay').classList.add('show');
@@ -393,14 +394,14 @@
     function deleteInvoice(id) {
       if (!confirm('Удалить счёт? Оплаты, привязанные к нему, станут общими.')) return;
       fetch('/invoice/' + id + '/delete', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(data) {
-        if (data.ok) window.location.reload();
+        if (data.ok) window.location.href = window.location.pathname + '?tab=invoices';
         else alert(data.error || 'Ошибка');
       }).catch(function() { alert('Ошибка'); });
     }
     function deletePayment(id) {
       if (!confirm('Удалить оплату?')) return;
       fetch('/payment/' + id + '/delete', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(data) {
-        if (data.ok) window.location.reload();
+        if (data.ok) window.location.href = window.location.pathname + '?tab=invoices';
         else alert(data.error || 'Ошибка');
       }).catch(function() { alert('Ошибка'); });
     }

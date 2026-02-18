@@ -180,7 +180,7 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     COL_N = 2       # B — Номер по порядку
     COL_NAME = 3    # C — наименование, характеристика, сорт, артикул товара
     COL_UNIT = 8    # H — Единица измерения, наименование (кв.м)
-    # COL_OKEI = 10 — J в merge H23:K23, писать нельзя; пишем "055" в единицу (топ-левая H)
+    COL_OKEI = 12   # L — код по ОКЕИ (055 = м²)
     # Merge row 23: V-W(22), X-Y(24), Z-AD(26), AE-AH(31), AI-AK(35), AL-AO(38)
     COL_QTY = 22    # V — Количество
     COL_PRC = 24    # X — Цена
@@ -216,10 +216,9 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
 
         _put_cell(ws, row, COL_N, i + 1)
         _put_cell(ws, row, COL_NAME, str(it.name or ""))
-        # Ед.изм: H — топ merge H23:K23; код ОКЕИ 055 — J в merge, пишем в H
         unit = str(it.unit or "кв.м")
-        sqm = ("кв" in unit.lower() or "м²" in unit or unit == "м2")
-        _put_cell(ws, row, COL_UNIT, f"{unit} (055)" if sqm else unit)
+        _put_cell(ws, row, COL_UNIT, unit)
+        _put_cell(ws, row, COL_OKEI, "055")
         _put_qty_price_sum(ws, row, COL_QTY, COL_PRC, COL_SUM, qty, prc, s,
                            COL_VAT_RATE, COL_VAT_AMT, COL_SUM_VAT)
 
@@ -237,8 +236,8 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     # Рамки для таблицы товаров (до колонки AM включительно)
     _apply_border(ws, 20, 2, last_data_row, 39)
 
-    # Сумма прописью — «Всего отпущено на сумму» (строка 31)
-    _put_cell(ws, 31, 2, f"Всего отпущено на сумму {_amount_to_words_rub(total_sum)}")
+    # Сумма прописью — «Всего отпущено на сумму» (строка 38)
+    _put_cell(ws, 38, 2, f"Всего отпущено на сумму {_amount_to_words_rub(total_sum)}")
 
     buf = io.BytesIO()
     wb.save(buf)

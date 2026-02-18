@@ -33,6 +33,18 @@ def _fmt_num(x):
         return "0,00"
 
 
+def _amount_to_words_rub(amount):
+    """Сумма прописью: 92701.00 -> Девяносто две тысячи семьсот один рубль 00 копеек."""
+    try:
+        from num2words import num2words
+        s = num2words(amount, lang="ru", to="currency", currency="RUB")
+        return s.replace("-", " ").capitalize() if s else f"{amount:.2f}".replace(".", ",")
+    except Exception:
+        rub = int(amount)
+        kop = round((amount - rub) * 100)
+        return f"{rub} руб. {kop:02d} коп."
+
+
 def _put_qty_price_sum(ws, row, col_qty, col_prc, col_sum, qty, prc, s, col_vat_rate=None, col_vat_amt=None, col_sum_vat=None):
     """Записать кол-во, цену, сумму, НДС. prc=None для строки «Всего»."""
     ws.cell(row=row, column=col_qty, value=_fmt_num(qty))
@@ -154,17 +166,17 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     # AM13 = номер (основание) — top-left merge AM13:AM14
     ws["AM13"] = inv_num
 
-    # Таблица товаров — колонки по образцу (логические 10–15):
-    # 10=O Количество нетто, 11=P Цена, 12=R Сумма, 13=V НДС ставка, 14=AE НДС сумма, 15=AL Сумма с НДС
-    COL_N = 2       # B
-    COL_NAME = 3    # C
-    COL_UNIT = 8    # H
-    COL_QTY = 15    # O (Количество нетто)
-    COL_PRC = 16    # P (Цена)
-    COL_SUM = 18    # R (Сумма без НДС)
-    COL_VAT_RATE = 22   # V (НДС ставка %)
-    COL_VAT_AMT = 31    # AE (НДС сумма)
-    COL_SUM_VAT = 38    # AL (Сумма с НДС)
+    # Таблица — по наименованиям (torg12_excel_dims, MERGED_CELLS)
+    # Товар C-F, Ед.изм H-K, Нетто O, Цена P-Q, Сумма R-U, НДС V-AD/AE-AK, Сумма с НДС AL
+    COL_N = 2       # B — Номер по порядку
+    COL_NAME = 3    # C — наименование, характеристика, сорт, артикул товара
+    COL_UNIT = 8    # H — Единица измерения, наименование (merge H23:K23)
+    COL_QTY = 15    # O — Количество (масса нетто)
+    COL_PRC = 17    # Q — Цена, руб. коп.
+    COL_SUM = 21    # U — Сумма без учета НДС
+    COL_VAT_RATE = 26   # Z — ставка, %
+    COL_VAT_AMT = 31    # AE — сумма (НДС)
+    COL_SUM_VAT = 38    # AL — Сумма с учетом НДС
     DATA_START_ROW = 23
     DEFAULT_DATA_ROWS = 6
     total_sum = 0.0
@@ -210,6 +222,9 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     _apply_border(ws, 16, 11, 17, 22)
     # Рамки для таблицы товаров (до колонки AM включительно)
     _apply_border(ws, 20, 2, last_data_row, 39)
+
+    # Сумма прописью — «Всего отпущено на сумму» (строка 31)
+    ws["B31"] = f"Всего отпущено на сумму {_amount_to_words_rub(total_sum)}"
 
     buf = io.BytesIO()
     wb.save(buf)

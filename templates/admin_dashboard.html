@@ -397,6 +397,7 @@
                     <thead>
                         <tr>
                             <th>№</th>
+                            <th>№ счёта</th>
                             <th>Клиент</th>
                             <th>Тип</th>
                             <th>Площадь</th>
@@ -427,6 +428,7 @@
                             {% endif %}
                             <tr data-order-id="{{ o.id }}" class="{{ base_class }} {% if highlight_class %}{{ highlight_class }}{% endif %}">
                                 <td>{{ o.order_id }}</td>
+                                <td>{% if o.invoice_number and o.counterparty_id %}<a href="{{ url_for('counterparty_card', counterparty_id=o.counterparty_id) }}?tab=invoices" style="color:inherit;text-decoration:none;">{{ o.invoice_number }}</a>{% elif o.invoice_number %}{{ o.invoice_number }}{% else %}—{% endif %}</td>
                                 <td>{{ o.client }}</td>
                                 <td>{{ o.facade_type or '-' }}</td>
                                 <td>{{ "%.2f"|format(o.area) if o.area else '-' }} м²</td>

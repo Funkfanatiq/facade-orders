@@ -23,6 +23,7 @@ class User(db.Model, UserMixin):
 class Order(db.Model):
     id         = db.Column(db.Integer, primary_key=True)
     order_id   = db.Column(db.String(64), nullable=False)
+    invoice_number = db.Column(db.String(32), nullable=True)  # № счёта — привязка к выставленному счёту
     client     = db.Column(db.String(128), nullable=False)
     counterparty_id = db.Column(db.Integer, db.ForeignKey('counterparty.id'), nullable=True)  # связь с контрагентом
     days       = db.Column(db.Integer, nullable=False)

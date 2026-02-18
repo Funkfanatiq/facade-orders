@@ -153,6 +153,33 @@ def _ensure_invoice_order_ids_column():
         print(f"⚠️ Проверка/добавление order_ids в invoice: {e}")
 
 
+def _ensure_order_invoice_number_column():
+    """Добавляет колонку invoice_number в order для привязки к счёту."""
+    try:
+        with db.engine.connect() as conn:
+            backend = db.engine.url.get_backend_name()
+            if backend == "postgresql":
+                r = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'order' AND column_name = 'invoice_number'
+                """))
+                if r.fetchone() is None:
+                    conn.execute(text('ALTER TABLE "order" ADD COLUMN invoice_number VARCHAR(32)'))
+                    conn.commit()
+                    print("✅ Колонка order.invoice_number добавлена")
+                else:
+                    conn.commit()
+            else:
+                r = conn.execute(text('PRAGMA table_info("order")'))
+                cols = [row[1] for row in r.fetchall()]
+                if "invoice_number" not in cols:
+                    conn.execute(text('ALTER TABLE "order" ADD COLUMN invoice_number VARCHAR(32)'))
+                    conn.commit()
+                    print("✅ Колонка order.invoice_number добавлена")
+    except Exception as e:
+        print(f"⚠️ Проверка/добавление invoice_number: {e}")
+
+
 # Инициализация базы данных при запуске (с retry для Render PostgreSQL)
 def init_database():
     """Инициализация базы данных. Retry при SSL/сетевых ошибках (Render)."""
@@ -175,6 +202,7 @@ def init_database():
                 # Добавляем колонку sort_order в price_list_item, если её ещё нет
                 _ensure_pricelist_sort_order_column()
                 _ensure_invoice_order_ids_column()
+                _ensure_order_invoice_number_column()
 
                 # Проверяем количество пользователей
                 user_count = User.query.count()
@@ -664,12 +692,18 @@ def dashboard():
 
     if request.method == "POST" and current_user.role == "Менеджер":
         order_id = (request.form.get("order_id") or "").strip()
+        invoice_number = (request.form.get("invoice_number") or "").strip()
         client = (request.form.get("client") or "").strip()
         counterparty_id = request.form.get("counterparty_id", type=int)
         if not order_id:
             flash("Укажите номер заказа", "error")
             return redirect(url_for("dashboard"))
-        if counterparty_id:
+        if invoice_number and not client:
+            inv = Invoice.query.filter(Invoice.invoice_number == invoice_number).first()
+            if inv and inv.counterparty:
+                client = inv.counterparty.name
+                counterparty_id = inv.counterparty.id
+        if counterparty_id and not client:
             cp = Counterparty.query.get(counterparty_id)
             if cp:
                 client = cp.name
@@ -734,6 +768,7 @@ def dashboard():
 
         order = Order(
             order_id=order_id,
+            invoice_number=invoice_number or None,
             client=client,
             counterparty_id=counterparty_id if counterparty_id else None,
             days=days,
@@ -1298,6 +1333,22 @@ def _unit_to_okei(unit):
     if u in ("шт", "штук"): return "796"
     if u in ("п.м", "п.м.", "пм", "пог.м"): return "018"
     return "796"
+
+
+@app.route("/api/invoice-by-number/<invoice_number>")
+@login_required
+def api_invoice_by_number(invoice_number):
+    """Поиск счёта по номеру — для автозаполнения клиента в заказе."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return jsonify({"ok": False, "error": "Доступ запрещен"}), 403
+    inv = Invoice.query.filter(Invoice.invoice_number == invoice_number.strip()).first()
+    if not inv or not inv.counterparty:
+        return jsonify({"ok": False, "error": "Счёт не найден"}), 404
+    return jsonify({
+        "ok": True,
+        "client": inv.counterparty.name,
+        "counterparty_id": inv.counterparty.id,
+    })
 
 
 @app.route("/invoice/<int:invoice_id>/torg12")

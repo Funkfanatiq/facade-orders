@@ -45,17 +45,31 @@ def _amount_to_words_rub(amount):
         return f"{rub} руб. {kop:02d} коп."
 
 
+def _cell_top_left(ws, row, col):
+    """Для merged cell возвращает колонку top-left; иначе col."""
+    for m in ws.merged_cells.ranges:
+        if m.min_row <= row <= m.max_row and m.min_col <= col <= m.max_col:
+            return m.min_col
+    return col
+
+
+def _put_cell(ws, row, col, value):
+    """Пишет в top-left merge, иначе в ячейку (обход MergedCell read-only)."""
+    c = _cell_top_left(ws, row, col)
+    ws.cell(row=row, column=c, value=value)
+
+
 def _put_qty_price_sum(ws, row, col_qty, col_prc, col_sum, qty, prc, s, col_vat_rate=None, col_vat_amt=None, col_sum_vat=None):
     """Записать кол-во, цену, сумму, НДС. prc=None для строки «Всего»."""
-    ws.cell(row=row, column=col_qty, value=_fmt_num(qty))
-    ws.cell(row=row, column=col_prc, value="х" if prc is None else _fmt_num(prc))
-    ws.cell(row=row, column=col_sum, value=_fmt_num(s))
+    _put_cell(ws, row, col_qty, _fmt_num(qty))
+    _put_cell(ws, row, col_prc, "х" if prc is None else _fmt_num(prc))
+    _put_cell(ws, row, col_sum, _fmt_num(s))
     if col_vat_rate is not None:
-        ws.cell(row=row, column=col_vat_rate, value="х" if prc is None else "0%")
+        _put_cell(ws, row, col_vat_rate, "х" if prc is None else "0%")
     if col_vat_amt is not None:
-        ws.cell(row=row, column=col_vat_amt, value=_fmt_num(0))
+        _put_cell(ws, row, col_vat_amt, _fmt_num(0))
     if col_sum_vat is not None:
-        ws.cell(row=row, column=col_sum_vat, value=_fmt_num(s))
+        _put_cell(ws, row, col_sum_vat, _fmt_num(s))
 
 
 def _org_string(config):
@@ -171,12 +185,13 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     COL_NAME = 3    # C — наименование, характеристика, сорт, артикул товара
     COL_UNIT = 8    # H — Единица измерения, наименование (кв.м)
     # COL_OKEI = 10 — J в merge H23:K23, писать нельзя; пишем "055" в единицу (топ-левая H)
+    # Merge row 23: V-W(22), X-Y(24), Z-AD(26), AE-AH(31), AI-AK(35), AL-AO(38)
     COL_QTY = 22    # V — Количество
-    COL_PRC = 24    # X — Цена за квадратный метр
-    COL_SUM = 26    # Z — Общая сумма (без НДС)
-    COL_VAT_RATE = 28   # AB — ставка НДС, %
-    COL_VAT_AMT = 33    # AG — сумма НДС
-    COL_SUM_VAT = 38    # AL — Сумма с учетом НДС
+    COL_PRC = 24    # X — Цена
+    COL_SUM = 26    # Z — Общая сумма
+    COL_VAT_RATE = 31   # AE — ставка НДС (28 в merge Z-AD → пишем в top-left 31)
+    COL_VAT_AMT = 35    # AI — сумма НДС (33 в merge AE-AH → top-left 35)
+    COL_SUM_VAT = 38    # AL — Сумма с НДС
     DATA_START_ROW = 23
     DEFAULT_DATA_ROWS = 6
     total_sum = 0.0

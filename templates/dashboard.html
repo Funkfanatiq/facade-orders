@@ -219,7 +219,7 @@
     .counterparty-form-actions button[type="button"] { background: #4CAF50; color: #fff; }
     .counterparty-form-actions button[type="button"]:hover { background: #45A049; }
     .counterparty-link { text-decoration: none; color: #333; display: block; }
-    .counterparty-link:hover { color: #1976D2; }
+    .counterparty-link:hover { color: #333; }
     .counterparty-link .cp-info { color: #666; font-weight: normal; }
     .pricelist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; }
     @media (max-width: 900px) { .pricelist-grid { grid-template-columns: 1fr; } }
@@ -263,8 +263,8 @@
   {% endwith %}
 
   {% if current_user.role == "Производство" %}
-  <div style="background: #e3f2fd; padding: 12px; margin: 20px; border-radius: 8px; border-left: 4px solid #2196f3;">
-    <p style="margin: 0; color: #1976d2; font-weight: 500;">
+  <div style="background: #f1f8e9; padding: 12px; margin: 20px; border-radius: 8px; border-left: 4px solid #4CAF50;">
+    <p style="margin: 0; color: #333; font-weight: 500;">
       📋 Показаны заказы, прошедшие фрезеровку и шлифовку. После отметки упаковки или отгрузки заказ перемещается в конец списка.
     </p>
   </div>

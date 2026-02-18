@@ -240,6 +240,20 @@
             transform: translateX(20px);
         }
         
+        .btn-torg12 {
+            display: inline-block;
+            padding: 4px 10px;
+            background: #4CAF50;
+            color: #fff;
+            border-radius: 4px;
+            font-size: 12px;
+            text-decoration: none;
+            margin-right: 6px;
+        }
+        .btn-torg12:hover {
+            background: #45A049;
+            color: #fff;
+        }
         .delete-btn {
             background: none;
             color: #6e6e73;
@@ -475,6 +489,9 @@
                                     {% endif %}
                                 </td>
                                 <td>
+                                    {% if invoice_for_order.get(o.id) %}
+                                    <a href="{{ url_for('invoice_torg12', invoice_id=invoice_for_order[o.id].id) }}" class="btn-torg12" target="_blank" title="ТОРГ-12 к счёту {{ o.invoice_number }}">ТОРГ-12</a>
+                                    {% endif %}
                                     <button onclick="deleteOrder({{ o.id }})" class="delete-btn">🗑️</button>
                                 </td>
                             </tr>

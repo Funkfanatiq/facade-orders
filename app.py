@@ -1489,7 +1489,17 @@ def render_admin_dashboard():
 
     orders = Order.query.order_by(Order.due_date).all()
     
-    # Получаем информацию о хранилище
+    # Заказы с привязанным счётом → счёт для ТОРГ-12
+    invoice_for_order = {}
+    for o in orders:
+        if o.invoice_number:
+            q = Invoice.query.filter(Invoice.invoice_number == o.invoice_number)
+            if o.counterparty_id:
+                q = q.filter(Invoice.counterparty_id == o.counterparty_id)
+            inv = q.first()
+            if inv:
+                invoice_for_order[o.id] = inv
+    
     storage_usage = get_storage_usage_mb()
     storage_info = {
         'current_mb': round(storage_usage, 2),
@@ -1497,7 +1507,7 @@ def render_admin_dashboard():
         'percentage': round((storage_usage / STORAGE_LIMIT_MB) * 100, 1)
     }
     
-    return render_template("admin_dashboard.html", orders=orders, datetime=datetime, current_user=current_user, storage_info=storage_info)
+    return render_template("admin_dashboard.html", orders=orders, invoice_for_order=invoice_for_order, datetime=datetime, current_user=current_user, storage_info=storage_info)
 
 @app.route("/delete_order/<int:order_id>", methods=["DELETE"])
 @login_required

@@ -154,10 +154,10 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     COL_N = 2       # B
     COL_NAME = 3    # C
     COL_UNIT = 8    # H
-    COL_QTY = 14    # N (top-left merge N22:P22 = Кол-во)
-    COL_PRC = 17    # Q (Цена, P-Q; P в merge N-P, пишем в Q)
-    COL_SUM = 18    # R (top-left merge R22:U22 = Сумма)
-    DATA_START_ROW = 22
+    COL_QTY = 14    # N (top-left merge = Кол-во)
+    COL_PRC = 17    # Q (Цена)
+    COL_SUM = 18    # R (Сумма)
+    DATA_START_ROW = 23
     DEFAULT_DATA_ROWS = 6
     total_sum = 0.0
     total_qty = 0.0

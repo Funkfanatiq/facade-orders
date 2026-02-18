@@ -1809,10 +1809,22 @@ def update_polishing():
         order.polishing_1 = status
         db.session.commit()
         
-        return jsonify({
+        resp = {
             'success': True,
             'message': f"✅ Статус шлифовки заказа {order.order_id} обновлен"
-        })
+        }
+        # При отметке как шлифованный — возвращаем данные заказа для добавления в таблицу упаковки
+        if status:
+            days_left = (order.due_date - datetime.now(timezone.utc).date()).days
+            resp['order'] = {
+                'id': order.id,
+                'order_id': order.order_id,
+                'client': order.client,
+                'days_left': days_left,
+                'is_urgent': is_urgent_order(order),
+                'paid': bool(order.paid),
+            }
+        return jsonify(resp)
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": f"❌ Ошибка сервера: {str(e)}"}), 500

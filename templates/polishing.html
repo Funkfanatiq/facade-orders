@@ -407,6 +407,49 @@
       }
     }
 
+    // Добавление заказа в таблицу упаковки (после отметки шлифовки)
+    function addOrderToPackagingTable(order) {
+      const tbody = document.querySelector('#packaging-table tbody');
+      if (!tbody) return;
+      if (document.querySelector(`#packaging-table tr[data-order-id="${order.id}"]`)) return; // уже есть
+
+      const daysLeft = order.days_left;
+      const isUrgent = order.is_urgent;
+      const isWarning = daysLeft <= 6 && !isUrgent;
+      let rowClass = '';
+      if (isUrgent) rowClass = 'urgent-order';
+      else if (isWarning) rowClass = 'warning-order';
+
+      let daysClass = 'days-normal';
+      if (daysLeft <= 3) daysClass = 'days-urgent';
+      else if (daysLeft <= 6) daysClass = 'days-warning';
+
+      let statusHtml = '<span class="status-indicator status-normal"></span>Ожидает';
+      if (isUrgent) statusHtml = '<span class="status-indicator status-urgent"></span>Срочный';
+      else if (isWarning) statusHtml = '<span class="status-indicator status-warning"></span>Скоро срок';
+
+      const tr = document.createElement('tr');
+      tr.dataset.orderId = order.id;
+      tr.dataset.paid = order.paid ? 'true' : 'false';
+      tr.className = rowClass;
+      tr.innerHTML = `
+        <td>${escapeHtml(order.order_id)}</td>
+        <td>${escapeHtml(order.client)}</td>
+        <td><span class="days-left ${daysClass}">${daysLeft}</span></td>
+        <td>${statusHtml}</td>
+        <td><label class="switch"><input type="checkbox" name="packaging"><span class="slider"></span></label></td>
+        <td><label class="switch"><input type="checkbox" name="shipment"><span class="slider"></span></label></td>
+      `;
+      tbody.appendChild(tr);
+      sortPackagingTable();
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
     // Обновление статуса в таблице (упаковка)
     function updatePackagingTableStatus(orderId, fieldName, status) {
       const row = document.querySelector(`#packaging-table tr[data-order-id="${orderId}"]`);
@@ -467,6 +510,12 @@
             console.log(result.message);
             updatePolishingTableStatus(orderId, status);
             sortPolishingTable();
+            if (status && result.order) {
+              addOrderToPackagingTable(result.order);
+            } else if (!status) {
+              const packRow = document.querySelector(`#packaging-table tr[data-order-id="${orderId}"]`);
+              if (packRow) packRow.remove();
+            }
           } else {
             alert('Ошибка при обновлении статуса: ' + (result.message || 'Неизвестная ошибка'));
             e.target.checked = !status;
@@ -479,83 +528,48 @@
       });
     });
 
-    // Обработчик изменения слайдеров упаковки
-    document.querySelectorAll('input[name="packaging"]').forEach(checkbox => {
-      checkbox.addEventListener('change', async (e) => {
-        const row = e.target.closest('tr');
-        const orderId = row.getAttribute('data-order-id');
-        const status = e.target.checked;
+    // Обработчики упаковки и отгрузки (делегирование — работают и для динамически добавленных строк)
+    document.getElementById('packaging-table').addEventListener('change', async (e) => {
+      if (e.target.name !== 'packaging' && e.target.name !== 'shipment') return;
 
-        try {
-          const response = await fetch('/update_stage', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              order_id: orderId, 
-              field_name: 'packaging',
-              value: status 
-            })
-          });
+      const row = e.target.closest('tr');
+      const orderId = row.getAttribute('data-order-id');
+      const isPaid = row.getAttribute('data-paid') === 'true';
+      const status = e.target.checked;
+      const fieldName = e.target.name;
 
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          const result = await response.text();
-          console.log(result);
-          updatePackagingTableStatus(orderId, 'packaging', status);
-          sortPackagingTable();
-        } catch (error) {
-          console.error('Ошибка:', error);
-          alert('Ошибка при обновлении статуса упаковки: ' + error.message);
-          e.target.checked = !status;
+      if (fieldName === 'shipment' && status && !isPaid) {
+        const confirmed = confirm('Заказ не оплачен, вы уверены что хотите отгрузить?');
+        if (!confirmed) {
+          e.target.checked = false;
+          return;
         }
-      });
-    });
+      }
 
-    // Обработчик изменения слайдеров отгрузки
-    document.querySelectorAll('input[name="shipment"]').forEach(checkbox => {
-      checkbox.addEventListener('change', async (e) => {
-        const row = e.target.closest('tr');
-        const orderId = row.getAttribute('data-order-id');
-        const isPaid = row.getAttribute('data-paid') === 'true';
-        const status = e.target.checked;
+      try {
+        const response = await fetch('/update_stage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            order_id: orderId, 
+            field_name: fieldName,
+            value: status 
+          })
+        });
 
-        // Если пытаются отметить отгруженным и заказ не оплачен
-        if (status && !isPaid) {
-          const confirmed = confirm('Заказ не оплачен, вы уверены что хотите отгрузить?');
-          if (!confirmed) {
-            // Отменяем изменение
-            e.target.checked = false;
-            return;
-          }
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        try {
-          const response = await fetch('/update_stage', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              order_id: orderId, 
-              field_name: 'shipment',
-              value: status 
-            })
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          const result = await response.text();
-          console.log(result);
-          updatePackagingTableStatus(orderId, 'shipment', status);
-          sortPackagingTable();
-        } catch (error) {
-          console.error('Ошибка:', error);
-          alert('Ошибка при обновлении статуса отгрузки: ' + error.message);
-          e.target.checked = !status;
-        }
-      });
+        const result = await response.text();
+        console.log(result);
+        updatePackagingTableStatus(orderId, fieldName, status);
+        sortPackagingTable();
+      } catch (error) {
+        console.error('Ошибка:', error);
+        alert('Ошибка при обновлении статуса: ' + error.message);
+        e.target.checked = !status;
+      }
     });
 
     // Сортируем таблицы при загрузке страницы

@@ -490,7 +490,7 @@
                                 </td>
                                 <td>
                                     {% if invoice_for_order.get(o.id) %}
-                                    <a href="{{ url_for('invoice_torg12', invoice_id=invoice_for_order[o.id].id) }}" class="btn-torg12" target="_blank" title="ТОРГ-12 к счёту {{ o.invoice_number }}">ТОРГ-12</a>
+                                    <a href="{{ url_for('invoice_torg12', invoice_id=invoice_for_order[o.id].id) }}" class="btn-torg12" download title="ТОРГ-12 к счёту {{ o.invoice_number }}">ТОРГ-12</a>
                                     {% endif %}
                                     <button onclick="deleteOrder({{ o.id }})" class="delete-btn">🗑️</button>
                                 </td>

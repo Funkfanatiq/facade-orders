@@ -157,30 +157,30 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     org = _org_string(config)
     buyer = _buyer_string(counterparty)
 
-    # Верхний блок — _put_cell для обхода MergedCell (грузоотправитель, грузополучатель в 8 строке, поставщик, плательщик)
+    # Верхний блок — по принципу строк 3–5: грузоотправитель, грузополучатель, поставщик, плательщик, основание
     _put_cell(ws, 3, 2, org)   # B3 — грузоотправитель
-    _put_cell(ws, 8, 4, buyer)  # D8 — грузополучатель
-    _put_cell(ws, 10, 4, org)  # D10 — поставщик
-    _put_cell(ws, 12, 4, buyer)  # D12
-    _put_cell(ws, 14, 4, basis)  # D14
+    _put_cell(ws, 4, 2, buyer)  # B4 — грузополучатель
+    _put_cell(ws, 5, 2, org)   # B5 — поставщик
+    _put_cell(ws, 6, 2, buyer)  # B6 — плательщик
+    _put_cell(ws, 7, 2, basis)  # B7 — основание
 
     # Номер документа = номер счёта, Дата составления = день отгрузки
     _put_cell(ws, 17, 11, inv_num)   # K17
     _put_cell(ws, 17, 15, doc_dt_str)  # O17
 
-    # Правый блок «Коды»: AM = колонка 39
+    # Правый блок «Коды»: AM = колонка 39 (по строкам 3–7)
     okpo = config.get("COMPANY_OKPO") or ""
     cp_okpo = getattr(counterparty, "okpo", None) or ""
     _put_cell(ws, 3, 39, "0330212")
     if okpo:
         _put_cell(ws, 4, 39, okpo)
     if cp_okpo:
-        _put_cell(ws, 7, 39, cp_okpo)
+        _put_cell(ws, 5, 39, cp_okpo)
     if okpo:
-        _put_cell(ws, 9, 39, okpo)
+        _put_cell(ws, 6, 39, okpo)
     if cp_okpo:
-        _put_cell(ws, 11, 39, cp_okpo)
-    _put_cell(ws, 13, 39, inv_num)
+        _put_cell(ws, 7, 39, cp_okpo)
+    _put_cell(ws, 8, 39, inv_num)
 
     # Таблица — по указанию пользователя: 22=Количество, 24=Цена, 26=Общая сумма; код по ОКЕИ 055
     COL_N = 2       # B — Номер по порядку

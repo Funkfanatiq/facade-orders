@@ -36,7 +36,8 @@ app.config.from_object('config.Config')
 
 # Для Render.com и других прокси: Flask должен доверять X-Forwarded-* заголовкам,
 # иначе редиректы генерируют http:// вместо https:// и возникает ERR_TOO_MANY_REDIRECTS
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
+# x_for=1, x_proto=1, x_host=1 — один прокси; если не помогает, попробовать 2
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=2, x_host=2, x_proto=2)
 
 # Импортируем модели после инициализации Flask
 from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty, PriceListItem, Invoice, InvoiceItem, Payment, PRICE_CATEGORIES
@@ -470,11 +471,14 @@ def load_user(user_id):
 
 @app.before_request
 def clear_session_if_not_logged_in():
+    # Не трогаем сессию на login, static и uploads — снижение риска петли редиректов
+    ep = request.endpoint or ''
+    if ep in ('login', 'static') or request.path.startswith('/uploads/'):
+        return
     try:
         if not current_user.is_authenticated:
             session.clear()
-    except AttributeError:
-        # Если current_user еще не инициализирован
+    except (AttributeError, Exception):
         session.clear()
 
 @app.errorhandler(500)

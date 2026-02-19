@@ -28,6 +28,9 @@ class Config:
 
     SQLALCHEMY_DATABASE_URI = _make_database_uri()
 
+    # Для Render: HTTPS в редиректах, иначе возможна петля редиректов
+    PREFERRED_URL_SCHEME = 'https' if os.environ.get('DATABASE_URL') else 'http'
+
     # Реквизиты организации (продавца) для счёта, ТОРГ-12 и др.
     COMPANY_NAME = os.environ.get('COMPANY_NAME') or 'ИП Урядников Ярослав Юрьевич'
     COMPANY_INN = os.environ.get('COMPANY_INN') or '781136464040'

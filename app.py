@@ -6,6 +6,8 @@ from flask_migrate import Migrate
 from sqlalchemy import or_, text
 from datetime import datetime, timedelta, timezone, date
 from calendar import monthrange
+from collections import namedtuple
+import json
 import os
 import time
 import io
@@ -513,81 +515,139 @@ def is_urgent_order(order):
     days_left = (order.due_date - datetime.now(timezone.utc).date()).days
     return days_left <= URGENT_DAYS_THRESHOLD
 
+PoolItem = namedtuple('PoolItem', ['order', 'facade_type', 'thickness', 'area'])
+
+
+def _order_needs_milling(order):
+    """Заказ нуждается в фрезеровке (целиком или частично)."""
+    if order.milling:
+        return False
+    if order.facade_type == "покраска" or not order.area or order.area <= 0:
+        return False
+    if order.facade_type != "смешанный":
+        return True
+    pending = _get_pending_items(order)
+    return len(pending) > 0
+
+
+def _get_pending_items(order):
+    """Возвращает список (facade_type, thickness, area) для незавершённых частей заказа."""
+    if order.facade_type == "смешанный":
+        mixed = []
+        if order.mixed_facade_data:
+            try:
+                mixed = json.loads(order.mixed_facade_data) or []
+            except (TypeError, json.JSONDecodeError):
+                return []
+        done_by_key = {}
+        mdp = getattr(order, 'milling_done_parts', None)
+        if mdp:
+            try:
+                for d in json.loads(mdp) or []:
+                    th = d.get("thickness")
+                    k = (d.get("type"), th if th is not None else None)
+                    done_by_key[k] = done_by_key.get(k, 0) + float(d.get("area", 0))
+            except (TypeError, json.JSONDecodeError):
+                pass
+        needed_by_key = {}
+        for m in mixed:
+            t = m.get("type")
+            th = float(m["thickness"]) if m.get("thickness") is not None else None
+            a = float(m.get("area", 0))
+            if a <= 0:
+                continue
+            k = (t, th)
+            needed_by_key[k] = needed_by_key.get(k, 0) + a
+        items = []
+        for (t, th), needed in needed_by_key.items():
+            remaining = needed - done_by_key.get((t, th), 0)
+            if remaining > 0.001:
+                items.append((t, th, remaining))
+        return items
+    # Обычный заказ
+    t = order.facade_type
+    th = float(order.thickness) if order.thickness is not None else None
+    a = float(order.area or 0)
+    if not t or a <= 0:
+        return []
+    return [(t, th, a)]
+
+
 def generate_daily_pool():
     """
     Формирует оптимизированный пул заказов для фрезеровки:
-    1. Приоритет срочным заказам (игнорируют оптимизацию)
-    2. Оптимизация остатков листов МДФ
-    3. Группировка по типу фасада
-    4. Лист МДФ: 2750×2050 = 5.6375 м²
+    1. Разбивка смешанных заказов на части по (тип, толщина)
+    2. Приоритет завершению частично отфрезерованных смешанных заказов
+    3. Группировка по (тип, толщина), сортировка по толщине
+    4. Лимит 4 листа МДФ (22.55 м²)
     """
-    # Константы для МДФ листа 2750×2050 мм
-    SHEET_AREA = 2.75 * 2.05  # 5.6375 м²
+    SHEET_AREA = 2.75 * 2.05
     MAX_SHEET_COUNT = 4
-    LARGE_ORDER_THRESHOLD = SHEET_AREA * MAX_SHEET_COUNT  # 22.55 м²
-    OPTIMAL_UTILIZATION = 0.85  # 85% использования листа считается хорошим
-    ACCEPTABLE_WASTE = 0.3  # Допустимые остатки в м²
+    LARGE_ORDER_THRESHOLD = SHEET_AREA * MAX_SHEET_COUNT
 
-    # Получаем все незафрезерованные заказы (покраска минует фрезеровку — не в пуле)
     candidates = Order.query.filter(
-        Order.milling == False,
         Order.shipment == False,
-        Order.facade_type != "покраска",
         Order.area != None,
         Order.area > 0
     ).order_by(Order.due_date.asc()).all()
 
-    if not candidates:
+    # Собираем все незавершённые элементы
+    all_items = []
+    for o in candidates:
+        if not _order_needs_milling(o):
+            continue
+        for t, th, a in _get_pending_items(o):
+            all_items.append(PoolItem(order=o, facade_type=t, thickness=th, area=a))
+
+    if not all_items:
         return []
 
-    # Проверяем срочные заказы
-    urgent_orders = [o for o in candidates if is_urgent_order(o)]
-    
-    # Если есть срочные заказы - берём первый срочный, игнорируя оптимизацию
-    if urgent_orders:
-        urgent_order = urgent_orders[0]
-        # Если срочный заказ очень большой - отдельный пул
-        if urgent_order.area >= LARGE_ORDER_THRESHOLD:
-            return [urgent_order]
-        
-        # Для срочного заказа просто добавляем заказы того же типа до 4 листов
-        def _same_type(a, b):
-            if a == b: return True
-            if a == "смешанный" and b == "фрезерованный": return True
-            if a == "фрезерованный" and b == "смешанный": return True
+    # Группируем по (тип, толщина)
+    groups = {}
+    for pi in all_items:
+        key = (pi.facade_type, pi.thickness)
+        if key not in groups:
+            groups[key] = []
+        groups[key].append(pi)
+
+    # Смешанные заказы с частично выполненными частями — приоритет
+    def has_partially_done(order):
+        if order.facade_type != "смешанный":
             return False
-        same_type_urgent = [o for o in urgent_orders if _same_type(o.facade_type, urgent_order.facade_type)]
-        pool = []
-        total_area = 0
-        
-        for order in same_type_urgent:
-            if total_area + order.area <= LARGE_ORDER_THRESHOLD:
-                pool.append(order)
-                total_area += order.area
-            else:
-                break
-        
-        return pool
+        mdp = getattr(order, 'milling_done_parts', None)
+        if not mdp:
+            return False
+        try:
+            done = json.loads(mdp) or []
+            return len(done) > 0
+        except (TypeError, json.JSONDecodeError):
+            return False
 
-    # Обычная оптимизация для несрочных заказов
-    first_order = candidates[0]
-    target_facade_type = first_order.facade_type
+    # Сортируем группы: 1) с частично выполненными, 2) по толщине, 3) по срочности
+    def group_priority(items):
+        has_partial = any(has_partially_done(pi.order) for pi in items)
+        min_due = min(pi.order.due_date for pi in items)
+        th = items[0].thickness
+        th_num = float(th) if th is not None else 0
+        return (0 if has_partial else 1, th_num, min_due)
 
-    # Если первый заказ очень большой (>4 листов) - делаем отдельный пул
-    if first_order.area >= LARGE_ORDER_THRESHOLD:
-        return [first_order]
+    sorted_groups = sorted(groups.values(), key=group_priority)
 
-    # Получаем заказы того же типа (смешанный ≈ фрезерованный для пула)
-    def _match_type(o, target):
-        if o.facade_type == target: return True
-        if target in ("фрезерованный", "смешанный") and o.facade_type in ("фрезерованный", "смешанный"): return True
-        return False
-    same_type_orders = [o for o in candidates if _match_type(o, target_facade_type)]
-    
-    # Алгоритм оптимизации: ищем лучшую комбинацию заказов
-    best_combination = find_optimal_combination(same_type_orders, SHEET_AREA, MAX_SHEET_COUNT)
-    
-    return best_combination if best_combination else [first_order]
+    # Берём первую группу и формируем пул
+    first_group = sorted_groups[0]
+    first_group_sorted = sorted(first_group, key=lambda pi: (pi.order.due_date, -pi.area))
+
+    pool = []
+    total_area = 0
+    for pi in first_group_sorted:
+        if total_area + pi.area <= LARGE_ORDER_THRESHOLD:
+            pool.append(pi)
+            total_area += pi.area
+
+    # Сортируем пул по толщине (уже одна толщина в группе, но для единообразия)
+    pool.sort(key=lambda pi: (float(pi.thickness) if pi.thickness is not None else 0, pi.order.due_date))
+
+    return pool
 
 def find_optimal_combination(orders, sheet_area, max_sheets):
     """
@@ -734,7 +794,7 @@ def login():
                 if user.role == "Монитор":
                     return redirect(url_for("monitor"))
                 elif user.role == "Фрезеровка":
-                    return redirect(url_for("milling_station"))
+                    return redirect(url_for("milling_pool"))
                 elif user.role == "Шлифовка":
                     return redirect(url_for("polishing_station"))
                 return redirect(url_for("dashboard"))
@@ -762,7 +822,7 @@ def dashboard():
     if current_user.role == "Монитор":
         return redirect(url_for("monitor"))
     if current_user.role == "Фрезеровка":
-        return redirect(url_for("milling_station"))
+        return redirect(url_for("milling_pool"))
     if current_user.role == "Шлифовка":
         return redirect(url_for("polishing_station"))
     
@@ -1752,42 +1812,8 @@ def monitor():
 @app.route("/milling", methods=["GET", "POST"])
 @login_required
 def milling_station():
-    if current_user.role != "Фрезеровка":
-        return redirect(url_for("dashboard"))
-
-    pool = generate_daily_pool()
-    
-    # Добавляем информацию об оптимизации и срочности
-    pool_info = {
-        'is_urgent': any(is_urgent_order(order) for order in pool) if pool else False,
-        'efficiency': 0,
-        'waste': 0
-    }
-    
-    # Добавляем информацию о срочности для каждого заказа
-    order_urgency = {}
-    for order in pool:
-        days_left = (order.due_date - datetime.now(timezone.utc).date()).days
-        order_urgency[order.id] = {
-            'is_urgent': is_urgent_order(order),
-            'days_left': days_left
-        }
-    
-    if pool:
-        total_area = sum(order.area for order in pool)
-        sheet_area = SHEET_AREA
-        sheets_needed = total_area / sheet_area
-        full_sheets = int(sheets_needed)
-        partial_sheet = sheets_needed - full_sheets
-        
-        if partial_sheet > 0:
-            pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
-            pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
-        else:
-            pool_info['waste'] = 0
-            pool_info['efficiency'] = 100
-    
-    return render_template("milling.html", orders=pool, pool_info=pool_info, order_urgency=order_urgency)
+    """Перенаправление на пул заказов (рабочее место объединено с пулом)"""
+    return redirect(url_for("milling_pool"))
 
 @app.route("/mark_pool_complete", methods=["POST"])
 @login_required
@@ -1796,8 +1822,35 @@ def mark_pool_complete():
         return "⛔ Нет доступа", 403
 
     pool = generate_daily_pool()
-    for order in pool:
-        order.milling = True
+    for pi in pool:
+        o = pi.order
+        if o.facade_type == "смешанный":
+            done = []
+            mdp = getattr(o, 'milling_done_parts', None)
+            try:
+                done = json.loads(mdp or "[]") or []
+            except (TypeError, json.JSONDecodeError):
+                pass
+            done.append({"type": pi.facade_type, "thickness": pi.thickness, "area": pi.area})
+            o.milling_done_parts = json.dumps(done)
+            # Проверяем, все ли части завершены
+            mixed = json.loads(o.mixed_facade_data or "[]") or []
+            done_by_key = {}
+            for d in done:
+                k = (d.get("type"), d.get("thickness") if d.get("thickness") is not None else None)
+                done_by_key[k] = done_by_key.get(k, 0) + float(d.get("area", 0))
+            all_done = True
+            for m in mixed:
+                t, th = m.get("type"), m.get("thickness") if m.get("thickness") is not None else None
+                a = float(m.get("area", 0))
+                if done_by_key.get((t, th), 0) < a - 0.001:
+                    all_done = False
+                    break
+            if all_done:
+                o.milling = True
+                o.milling_done_parts = None
+        else:
+            o.milling = True
 
     db.session.commit()
     
@@ -1806,7 +1859,7 @@ def mark_pool_complete():
         return {"success": True, "message": "✅ Пул заказов завершён"}
     
     flash("✅ Пул заказов завершён. Загружается следующий...")
-    return redirect(url_for("milling_station"))
+    return redirect(url_for("milling_pool"))
 
 @app.route("/milling-pool")
 @login_required
@@ -1817,24 +1870,28 @@ def milling_pool():
 
     pool = generate_daily_pool()
     
-    # Добавляем информацию об оптимизации и срочности
+    earliest_due = min(pi.order.due_date for pi in pool) if pool else None
     pool_info = {
-        'is_urgent': any(is_urgent_order(order) for order in pool) if pool else False,
+        'is_urgent': any(is_urgent_order(pi.order) for pi in pool) if pool else False,
         'efficiency': 0,
-        'waste': 0
+        'waste': 0,
+        'facade_type': pool[0].facade_type if pool else None,
+        'thickness': pool[0].thickness if pool else None,
+        'earliest_due': earliest_due,
     }
     
-    # Добавляем информацию о срочности для каждого заказа
     order_urgency = {}
-    for order in pool:
-        days_left = (order.due_date - datetime.now(timezone.utc).date()).days
-        order_urgency[order.id] = {
-            'is_urgent': is_urgent_order(order),
-            'days_left': days_left
-        }
+    for pi in pool:
+        o = pi.order
+        if o.id not in order_urgency:
+            days_left = (o.due_date - datetime.now(timezone.utc).date()).days
+            order_urgency[o.id] = {
+                'is_urgent': is_urgent_order(o),
+                'days_left': days_left
+            }
     
     if pool:
-        total_area = sum(order.area for order in pool)
+        total_area = sum(pi.area for pi in pool)
         sheet_area = SHEET_AREA
         sheets_needed = total_area / sheet_area
         full_sheets = int(sheets_needed)
@@ -1847,7 +1904,7 @@ def milling_pool():
             pool_info['waste'] = 0
             pool_info['efficiency'] = 100
     
-    return render_template("milling_pool.html", orders=pool, pool_info=pool_info, order_urgency=order_urgency)
+    return render_template("milling_pool.html", pool_items=pool, pool_info=pool_info, order_urgency=order_urgency)
 
 @app.route("/milling-orders")
 @login_required
@@ -1859,9 +1916,9 @@ def milling_orders():
     # Получаем все заказы для отображения
     orders = Order.query.filter(Order.shipment == False).order_by(Order.due_date.asc()).all()
     
-    # Получаем текущий пул
+    # Получаем текущий пул (pool_items)
     current_pool = generate_daily_pool()
-    pool_order_ids = [order.id for order in current_pool]
+    pool_order_ids = list({pi.order.id for pi in current_pool})
     
     # Добавляем информацию о срочности для каждого заказа
     order_urgency = {}
@@ -1900,24 +1957,27 @@ def update_milling_manual():
         if not order:
             return jsonify({"success": False, "message": "❌ Заказ не найден"}), 404
         
-        order.milling = status
+        if status:
+            order.milling = True
+            order.milling_done_parts = None
+        else:
+            order.milling = False
+            order.milling_done_parts = None
         db.session.commit()
         
-        # Пересчитываем пул после изменения
         new_pool = generate_daily_pool()
         pool_info = {
-            'is_urgent': any(is_urgent_order(order) for order in new_pool) if new_pool else False,
+            'is_urgent': any(is_urgent_order(pi.order) for pi in new_pool) if new_pool else False,
             'efficiency': 0,
             'waste': 0
         }
         
         if new_pool:
-            total_area = sum(order.area for order in new_pool)
+            total_area = sum(pi.area for pi in new_pool)
             sheet_area = SHEET_AREA
             sheets_needed = total_area / sheet_area
             full_sheets = int(sheets_needed)
             partial_sheet = sheets_needed - full_sheets
-            
             if partial_sheet > 0:
                 pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
                 pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
@@ -1929,15 +1989,10 @@ def update_milling_manual():
             'success': True,
             'message': f"✅ Статус заказа {order.order_id} обновлен",
             'new_pool': [
-                {
-                    'id': o.id,
-                    'order_id': o.order_id,
-                    'client': o.client,
-                    'area': o.area,
-                    'facade_type': o.facade_type,
-                    'due_date': o.due_date.strftime('%Y-%m-%d'),
-                    'is_urgent': is_urgent_order(o)
-                } for o in new_pool
+                {'id': pi.order.id, 'order_id': pi.order.order_id, 'client': pi.order.client,
+                 'area': pi.area, 'facade_type': pi.facade_type, 'thickness': pi.thickness,
+                 'due_date': pi.order.due_date.strftime('%Y-%m-%d'), 'is_urgent': is_urgent_order(pi.order)}
+                for pi in new_pool
             ],
             'pool_info': pool_info
         })

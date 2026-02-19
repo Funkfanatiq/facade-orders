@@ -129,7 +129,6 @@
   </div>
 
   <div class="tabs">
-    <a href="{{ url_for('milling_station') }}" class="tab">📋 Рабочее место</a>
     <a href="{{ url_for('milling_pool') }}" class="tab active">📋 Пул заказов</a>
     <a href="{{ url_for('milling_orders') }}" class="tab">📋 Управление заказами</a>
   </div>
@@ -143,20 +142,21 @@
   {% endwith %}
 
   <div class="form-box" style="margin-top: 20px;">
-    {% if orders %}
-    {% set total_area = orders|sum(attribute='area') %}
+    {% if pool_items %}
+    {% set total_area = pool_items|sum(attribute='area') %}
     {% set sheet_area = 5.6375 %}
     {% set sheets_needed = (total_area / sheet_area) %}
     {% set full_sheets = sheets_needed|int %}
     {% set partial_sheet = sheets_needed - full_sheets %}
-    {% set earliest_order = orders|min(attribute='due_date') %}
+    {% set earliest_due = pool_info.earliest_due %}
 
     <div class="pool-info {{ 'urgent' if pool_info.is_urgent else 'normal' }}">
       <h3 style="margin: 0 0 10px 0; color: {% if pool_info.is_urgent %}#cc0000{% else %}#2c5aa0{% endif %};">
         {% if pool_info.is_urgent %}🚨 СРОЧНЫЙ ПУЛ ЗАКАЗОВ{% else %}📋 Оптимизированный пул заказов{% endif %}
       </h3>
-      <p style="margin: 5px 0;"><strong>Тип фасада:</strong> {{ orders[0].facade_type }}</p>
-      <p style="margin: 5px 0;"><strong>Количество заказов:</strong> {{ orders|length }}</p>
+      <p style="margin: 5px 0;"><strong>Тип фасада:</strong> {{ pool_info.facade_type or pool_items[0].facade_type }}</p>
+      <p style="margin: 5px 0;"><strong>Толщина:</strong> {% if pool_items[0].thickness %}{{ pool_items[0].thickness|int }} мм{% else %}—{% endif %}</p>
+      <p style="margin: 5px 0;"><strong>Позиций:</strong> {{ pool_items|length }}</p>
       <p style="margin: 5px 0;"><strong>Общая площадь:</strong> {{ "%.2f"|format(total_area) }} м²</p>
       <p style="margin: 5px 0;"><strong>Листов МДФ:</strong>
         {{ full_sheets }}{% if partial_sheet > 0 %} + {{ "%.1f"|format(partial_sheet) }}{% endif %}
@@ -178,35 +178,45 @@
       {% endif %}
       <p style="margin: 5px 0;"><strong>Срок сдачи:</strong>
         <span style="color: {% if pool_info.is_urgent %}#cc0000{% else %}inherit{% endif %};">
-          {{ earliest_order.due_date.strftime('%Y-%m-%d') }}
+          {{ earliest_due.strftime('%Y-%m-%d') }}
         </span>
       </p>
     </div>
 
-    <h3>Заказы в пуле</h3>
+    <h3>Позиции в пуле</h3>
     <table>
       <thead>
         <tr>
           <th>№ заказа</th>
           <th>Клиент</th>
-          <th>Тип фасада</th>
+          <th>Тип</th>
+          <th>Толщина</th>
           <th>Площадь (м²)</th>
           <th>Срок сдачи</th>
           <th>Дней до сдачи</th>
+          <th>Файлы</th>
         </tr>
       </thead>
       <tbody>
-        {% for o in orders %}
-          {% set days_left = order_urgency[o.id].days_left %}
-          {% set is_urgent = order_urgency[o.id].is_urgent %}
+        {% for pi in pool_items %}
+          {% set days_left = order_urgency[pi.order.id].days_left %}
+          {% set is_urgent = order_urgency[pi.order.id].is_urgent %}
           <tr class="{{ 'row-urgent' if is_urgent else 'row-normal' }}">
-            <td>{{ o.order_id }}</td>
-            <td>{{ o.client }}</td>
-            <td>{{ o.facade_type }}</td>
-            <td>{{ "%.2f"|format(o.area) }}</td>
-            <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
+            <td>{{ pi.order.order_id }}</td>
+            <td>{{ pi.order.client }}</td>
+            <td>{{ pi.facade_type }}</td>
+            <td>{% if pi.thickness %}{{ pi.thickness|int }} мм{% else %}—{% endif %}</td>
+            <td>{{ "%.2f"|format(pi.area) }}</td>
+            <td>{{ pi.order.due_date.strftime('%Y-%m-%d') }}</td>
             <td style="color: {% if days_left <= 3 %}#cc0000{% elif days_left <= 6 %}#ff6600{% else %}#333{% endif %}; font-weight: bold;">
               {{ days_left }}
+            </td>
+            <td>
+              {% if pi.order.filenames %}
+                {% for fn in pi.order.filenames.split(';') %}
+                  {% if fn %}<a href="{{ url_for('uploaded_file', filename=fn) }}" target="_blank">📎 {{ fn }}</a><br>{% endif %}
+                {% endfor %}
+              {% else %}—{% endif %}
             </td>
           </tr>
         {% endfor %}

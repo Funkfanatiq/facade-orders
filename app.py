@@ -692,14 +692,13 @@ def dashboard():
 
     if request.method == "POST" and current_user.role == "Менеджер":
         order_id = (request.form.get("order_id") or "").strip()
-        invoice_number = (request.form.get("invoice_number") or "").strip()
         client = (request.form.get("client") or "").strip()
         counterparty_id = request.form.get("counterparty_id", type=int)
         if not order_id:
             flash("Укажите номер заказа", "error")
             return redirect(url_for("dashboard"))
-        if invoice_number and not client:
-            inv = Invoice.query.filter(Invoice.invoice_number == invoice_number).first()
+        if order_id and not client:
+            inv = Invoice.query.filter(Invoice.invoice_number == order_id).first()
             if inv and inv.counterparty:
                 client = inv.counterparty.name
                 counterparty_id = inv.counterparty.id
@@ -768,7 +767,7 @@ def dashboard():
 
         order = Order(
             order_id=order_id,
-            invoice_number=invoice_number or None,
+            invoice_number=order_id,
             client=client,
             counterparty_id=counterparty_id if counterparty_id else None,
             days=days,
@@ -1489,11 +1488,12 @@ def render_admin_dashboard():
 
     orders = Order.query.order_by(Order.due_date).all()
     
-    # Заказы с привязанным счётом → счёт для ТОРГ-12
+    # Заказы: № заказа = № счёта. Поиск счёта для ТОРГ-12 по order_id
     invoice_for_order = {}
     for o in orders:
-        if o.invoice_number:
-            q = Invoice.query.filter(Invoice.invoice_number == o.invoice_number)
+        inv_num = o.invoice_number or o.order_id
+        if inv_num:
+            q = Invoice.query.filter(Invoice.invoice_number == inv_num)
             if o.counterparty_id:
                 q = q.filter(Invoice.counterparty_id == o.counterparty_id)
             inv = q.first()

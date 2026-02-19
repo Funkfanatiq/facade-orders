@@ -285,9 +285,7 @@
   <div class="form-box">
     <h3>Добавить заказ</h3>
     <form method="POST" enctype="multipart/form-data" id="add-order-form">
-      <input type="text" name="order_id" placeholder="№ заказа" required>
-      <label for="invoice_number" style="display:block; margin-top:8px; font-weight:500;">№ счёта</label>
-      <input type="text" name="invoice_number" id="invoice_number" placeholder="Введите номер счёта — заполнит клиента автоматически">
+      <input type="text" name="order_id" id="order_id_input" placeholder="№ заказа (совпадает с № счёта — заполнит клиента)" required>
       <label for="client_name" style="display:block; margin-top:8px; font-weight:500;">Клиент</label>
       <input type="text" name="client" id="client_name" list="client_datalist" placeholder="Введите имя или выберите из списка" required>
       <datalist id="client_datalist">
@@ -321,7 +319,7 @@
 
   <table>
     <tr>
-      <th>№</th><th>№ счёта</th><th>Клиент</th><th>Срок</th>
+      <th>№ заказа</th><th>Клиент</th><th>Срок</th>
       <th>Фрезеровка</th><th>Шлифовка</th><th>Упаковка</th><th>Отгрузка</th><th>Оплата</th><th>Файлы</th>
       {% if current_user.role == "Менеджер" %}<th>Удалить</th>{% endif %}
     </tr>
@@ -338,7 +336,6 @@
       {% endif %}
       <tr data-order-id="{{ o.id }}" class="{{ base_class }} {% if highlight_class %}{{ highlight_class }}{% endif %}">
         <td>{{ o.order_id }}</td>
-        <td>{% if o.invoice_number and o.counterparty_id %}<a href="{{ url_for('counterparty_card', counterparty_id=o.counterparty_id) }}?tab=invoices" style="color:inherit;text-decoration:none;">{{ o.invoice_number }}</a>{% elif o.invoice_number %}{{ o.invoice_number }}{% else %}—{% endif %}</td>
         <td>{% set cp_id = o.counterparty_id or cp_id_for_client.get(o.client) %}{% if cp_id %}<a href="{{ url_for('counterparty_card', counterparty_id=cp_id) }}" style="color:inherit;text-decoration:none;">{{ o.client }}</a>{% else %}{{ o.client }}{% endif %}</td>
         <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
         {% if current_user.role in ["Менеджер", "Производство"] %}
@@ -635,7 +632,7 @@
     (function() {
       var clientName = document.getElementById('client_name');
       var counterpartyId = document.getElementById('counterparty_id');
-      var invoiceInput = document.getElementById('invoice_number');
+      var orderIdInput = document.getElementById('order_id_input');
       var nameToId = {};
       try {
         var arr = {{ counterparties_json|tojson }};
@@ -649,8 +646,8 @@
         clientName.addEventListener('input', syncCounterpartyId);
         clientName.addEventListener('change', syncCounterpartyId);
       }
-      if (invoiceInput && clientName && counterpartyId) {
-        invoiceInput.addEventListener('blur', function() {
+      if (orderIdInput && clientName && counterpartyId) {
+        orderIdInput.addEventListener('blur', function() {
           var num = this.value.trim();
           if (!num) return;
           fetch('/api/invoice-by-number/' + encodeURIComponent(num))

@@ -442,7 +442,14 @@
                             <tr data-order-id="{{ o.id }}" class="{{ base_class }} {% if highlight_class %}{{ highlight_class }}{% endif %}">
                                 <td>{{ o.order_id }}</td>
                                 <td>{{ o.client }}</td>
-                                <td>{{ o.facade_type or '-' }}</td>
+                                <td>
+                                  {% if o.facade_type == 'смешанный' and o.mixed_facade_data %}
+                                    {% set mixed = o.mixed_facade_data|fromjson if o.mixed_facade_data else [] %}
+                                    Смешанный: {% for m in mixed %}{{ m.type }} {{ "%.2f"|format(m.area) }} м² {{ m.thickness or '-' }} мм{% if not loop.last %} | {% endif %}{% endfor %}
+                                  {% else %}
+                                    {{ o.facade_type or '-' }}
+                                  {% endif %}
+                                </td>
                                 <td>{{ "%.2f"|format(o.area) if o.area else '-' }} м²</td>
                                 <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
                                 <td>

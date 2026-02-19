@@ -180,6 +180,31 @@ def _ensure_order_invoice_number_column():
         print(f"⚠️ Проверка/добавление invoice_number: {e}")
 
 
+def _ensure_mixed_facade_data_column():
+    """Добавляет колонку mixed_facade_data в order для смешанных фасадов."""
+    try:
+        with db.engine.connect() as conn:
+            backend = db.engine.url.get_backend_name()
+            if backend == "postgresql":
+                r = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'order' AND column_name = 'mixed_facade_data'
+                """))
+                if r.fetchone() is None:
+                    conn.execute(text('ALTER TABLE "order" ADD COLUMN mixed_facade_data TEXT'))
+                    conn.commit()
+                    print("✅ Колонка order.mixed_facade_data добавлена")
+            else:
+                r = conn.execute(text('PRAGMA table_info("order")'))
+                cols = [row[1] for row in r.fetchall()]
+                if "mixed_facade_data" not in cols:
+                    conn.execute(text('ALTER TABLE "order" ADD COLUMN mixed_facade_data TEXT'))
+                    conn.commit()
+                    print("✅ Колонка order.mixed_facade_data добавлена")
+    except Exception as e:
+        print(f"⚠️ Проверка mixed_facade_data: {e}")
+
+
 # Инициализация базы данных при запуске (с retry для Render PostgreSQL)
 def init_database():
     """Инициализация базы данных. Retry при SSL/сетевых ошибках (Render)."""
@@ -203,6 +228,7 @@ def init_database():
                 _ensure_pricelist_sort_order_column()
                 _ensure_invoice_order_ids_column()
                 _ensure_order_invoice_number_column()
+                _ensure_mixed_facade_data_column()
 
                 # Проверяем количество пользователей
                 user_count = User.query.count()
@@ -365,6 +391,17 @@ def cleanup_old_orders():
 def zip_filter(a, b):
     return zip(a, b)
 
+@app.template_filter("fromjson")
+def fromjson_filter(s):
+    """Парсит JSON-строку в Python-объект."""
+    if not s:
+        return []
+    try:
+        import json
+        return json.loads(s)
+    except Exception:
+        return []
+
 @login_manager.user_loader
 def load_user(user_id):
     try:
@@ -461,7 +498,12 @@ def generate_daily_pool():
             return [urgent_order]
         
         # Для срочного заказа просто добавляем заказы того же типа до 4 листов
-        same_type_urgent = [o for o in urgent_orders if o.facade_type == urgent_order.facade_type]
+        def _same_type(a, b):
+            if a == b: return True
+            if a == "смешанный" and b == "фрезерованный": return True
+            if a == "фрезерованный" and b == "смешанный": return True
+            return False
+        same_type_urgent = [o for o in urgent_orders if _same_type(o.facade_type, urgent_order.facade_type)]
         pool = []
         total_area = 0
         
@@ -482,8 +524,12 @@ def generate_daily_pool():
     if first_order.area >= LARGE_ORDER_THRESHOLD:
         return [first_order]
 
-    # Получаем заказы того же типа
-    same_type_orders = [o for o in candidates if o.facade_type == target_facade_type]
+    # Получаем заказы того же типа (смешанный ≈ фрезерованный для пула)
+    def _match_type(o, target):
+        if o.facade_type == target: return True
+        if target in ("фрезерованный", "смешанный") and o.facade_type in ("фрезерованный", "смешанный"): return True
+        return False
+    same_type_orders = [o for o in candidates if _match_type(o, target_facade_type)]
     
     # Алгоритм оптимизации: ищем лучшую комбинацию заказов
     best_combination = find_optimal_combination(same_type_orders, SHEET_AREA, MAX_SHEET_COUNT)
@@ -721,6 +767,7 @@ def dashboard():
         
         facade_type = request.form.get("facade_type") or None
         area = request.form.get("area")
+        mixed_facade_data = request.form.get("mixed_facade_data") or None
         
         try:
             area = float(area) if area else None
@@ -729,6 +776,16 @@ def dashboard():
         except ValueError:
             flash("Неверная площадь", "error")
             return redirect(url_for("dashboard"))
+        
+        if facade_type == "смешанный" and mixed_facade_data:
+            try:
+                import json
+                items = json.loads(mixed_facade_data)
+                if not items or not isinstance(items, list):
+                    raise ValueError("Некорректные данные смешанного фасада")
+            except (json.JSONDecodeError, ValueError):
+                flash("Ошибка в данных смешанного фасада", "error")
+                return redirect(url_for("dashboard"))
         
         due_date = datetime.now(timezone.utc).date() + timedelta(days=days)
 
@@ -779,7 +836,8 @@ def dashboard():
             filenames=";".join(filenames),
             filepaths=";".join(filepaths),
             facade_type=facade_type,
-            area=area
+            area=area,
+            mixed_facade_data=mixed_facade_data if facade_type == "смешанный" else None
         )
 
         db.session.add(order)

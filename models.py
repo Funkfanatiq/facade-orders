@@ -5,8 +5,8 @@ from flask_login import UserMixin
 
 db = SQLAlchemy()
 
-# Возможные типы фасадов
-facade_choices = ["фрезерованный", "плоский", "шпон"]
+# Возможные типы фасадов (смешанный — с подтипами: плоский, фрезерованный, шпон)
+facade_choices = ["фрезерованный", "плоский", "шпон", "смешанный"]
 
 class User(db.Model, UserMixin):
     id       = db.Column(db.Integer, primary_key=True)
@@ -38,8 +38,9 @@ class Order(db.Model):
     filenames  = db.Column(db.Text)  # Пример: "чертёж.pdf;заметка.txt"
     filepaths  = db.Column(db.Text)  # Пример: "uploads/чертёж.pdf;uploads/заметка.txt"
 
-    facade_type = db.Column(db.String(32), nullable=True)  # фрезерованный / плоский / шпон
-    area        = db.Column(db.Float, nullable=True)       # площадь в м²
+    facade_type = db.Column(db.String(32), nullable=True)  # фрезерованный / плоский / шпон / смешанный
+    area        = db.Column(db.Float, nullable=True)       # площадь в м² (для смешанного — сумма)
+    mixed_facade_data = db.Column(db.Text, nullable=True)  # JSON: [{"type":"плоский","area":1.5,"thickness":18},...]
 
     counterparty = db.relationship('Counterparty', backref=db.backref('orders', lazy=True))
 

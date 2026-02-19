@@ -295,13 +295,25 @@
       </datalist>
       <input type="hidden" name="counterparty_id" id="counterparty_id" value="">
       <input type="number" name="days" placeholder="Срок (в днях)" required>
-      <select name="facade_type" required>
+      <select name="facade_type" id="facade_type_select" required>
         <option value="">— Тип фасада —</option>
         <option value="фрезерованный">Фрезерованный</option>
         <option value="плоский">Плоский</option>
         <option value="шпон">Шпон</option>
+        <option value="смешанный">Смешанный</option>
       </select>
-      <input type="number" name="area" placeholder="Площадь (м²)" step="0.01" required>
+      <div id="area-single-wrap">
+        <input type="number" name="area" id="area_input" placeholder="Площадь (м²)" step="0.01">
+      </div>
+      <div id="mixed-facade-wrap" style="display:none; margin-top:12px;">
+        <p style="font-weight:500; margin-bottom:8px;">Типы фасадов, площадь и толщина:</p>
+        <table id="mixed-facade-table" style="width:100%; border-collapse:collapse; margin-bottom:8px;">
+          <thead><tr><th>Тип</th><th>Площадь (м²)</th><th>Толщина (мм)</th><th></th></tr></thead>
+          <tbody id="mixed-facade-tbody"></tbody>
+        </table>
+        <button type="button" id="add-mixed-row-btn" style="padding:6px 12px; font-size:13px;">➕ Добавить</button>
+        <input type="hidden" name="mixed_facade_data" id="mixed_facade_data_input">
+      </div>
       <input type="file" name="files" multiple>
       <button type="submit">Добавить</button>
     </form>
@@ -661,6 +673,62 @@
             .catch(function() {});
         });
       }
+    })();
+    (function() {
+      var facadeSelect = document.getElementById('facade_type_select');
+      var areaSingleWrap = document.getElementById('area-single-wrap');
+      var areaInput = document.getElementById('area_input');
+      var mixedWrap = document.getElementById('mixed-facade-wrap');
+      var mixedTbody = document.getElementById('mixed-facade-tbody');
+      var addRowBtn = document.getElementById('add-mixed-row-btn');
+      var mixedDataInput = document.getElementById('mixed_facade_data_input');
+      var addForm = document.getElementById('add-order-form');
+      if (!facadeSelect || !mixedWrap) return;
+      function toggleMixed() {
+        var isMixed = facadeSelect.value === 'смешанный';
+        areaSingleWrap.style.display = isMixed ? 'none' : 'block';
+        mixedWrap.style.display = isMixed ? 'block' : 'none';
+        areaInput.required = !isMixed;
+        if (isMixed && mixedTbody.querySelectorAll('tr').length === 0) addMixedRow();
+      }
+      function addMixedRow() {
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td><select class="mixed-type"><option value="плоский">Плоский</option><option value="фрезерованный">Фрезерованный</option><option value="шпон">Шпон</option></select></td>' +
+          '<td><input type="number" class="mixed-area" step="0.01" min="0.01" placeholder="м²" style="width:70px;"></td>' +
+          '<td><input type="number" class="mixed-thickness" step="1" min="1" placeholder="мм" style="width:60px;"></td>' +
+          '<td><button type="button" class="mixed-remove">✕</button></td>';
+        tr.querySelector('.mixed-remove').onclick = function() { tr.remove(); };
+        mixedTbody.appendChild(tr);
+      }
+      addRowBtn.addEventListener('click', addMixedRow);
+      facadeSelect.addEventListener('change', toggleMixed);
+      if (addForm) {
+        addForm.addEventListener('submit', function(ev) {
+          if (facadeSelect.value === 'смешанный') {
+            var items = [];
+            var totalArea = 0;
+            mixedTbody.querySelectorAll('tr').forEach(function(tr) {
+              var typeSel = tr.querySelector('.mixed-type');
+              var areaInp = tr.querySelector('.mixed-area');
+              var thInp = tr.querySelector('.mixed-thickness');
+              if (!typeSel || !areaInp) return;
+              var a = parseFloat(areaInp.value) || 0;
+              if (a <= 0) return;
+              var th = parseFloat(thInp && thInp.value ? thInp.value : 0) || null;
+              items.push({type: typeSel.value, area: a, thickness: th});
+              totalArea += a;
+            });
+            if (items.length === 0) {
+              ev.preventDefault();
+              alert('Добавьте хотя бы одну позицию для смешанного заказа');
+              return false;
+            }
+            mixedDataInput.value = JSON.stringify(items);
+            areaInput.value = totalArea.toFixed(2);
+          }
+        });
+      }
+      toggleMixed();
     })();
     (function() {
       var searchInput = document.getElementById('counterparty-search');

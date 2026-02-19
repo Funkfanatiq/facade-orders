@@ -180,6 +180,56 @@ def _ensure_order_invoice_number_column():
         print(f"⚠️ Проверка/добавление invoice_number: {e}")
 
 
+def _ensure_thickness_column():
+    """Добавляет колонку thickness в order для толщины фасада (мм)."""
+    try:
+        with db.engine.connect() as conn:
+            backend = db.engine.url.get_backend_name()
+            if backend == "postgresql":
+                r = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'order' AND column_name = 'thickness'
+                """))
+                if r.fetchone() is None:
+                    conn.execute(text('ALTER TABLE "order" ADD COLUMN thickness REAL'))
+                    conn.commit()
+                    print("✅ Колонка order.thickness добавлена")
+            else:
+                r = conn.execute(text('PRAGMA table_info("order")'))
+                cols = [row[1] for row in r.fetchall()]
+                if "thickness" not in cols:
+                    conn.execute(text('ALTER TABLE "order" ADD COLUMN thickness REAL'))
+                    conn.commit()
+                    print("✅ Колонка order.thickness добавлена")
+    except Exception as e:
+        print(f"⚠️ Проверка thickness: {e}")
+
+
+def _ensure_invoice_item_thickness_column():
+    """Добавляет колонку thickness в invoice_item."""
+    try:
+        with db.engine.connect() as conn:
+            backend = db.engine.url.get_backend_name()
+            if backend == "postgresql":
+                r = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'invoice_item' AND column_name = 'thickness'
+                """))
+                if r.fetchone() is None:
+                    conn.execute(text('ALTER TABLE invoice_item ADD COLUMN thickness REAL'))
+                    conn.commit()
+                    print("✅ Колонка invoice_item.thickness добавлена")
+            else:
+                r = conn.execute(text('PRAGMA table_info("invoice_item")'))
+                cols = [row[1] for row in r.fetchall()]
+                if "thickness" not in cols:
+                    conn.execute(text('ALTER TABLE invoice_item ADD COLUMN thickness REAL'))
+                    conn.commit()
+                    print("✅ Колонка invoice_item.thickness добавлена")
+    except Exception as e:
+        print(f"⚠️ Проверка invoice_item.thickness: {e}")
+
+
 def _ensure_mixed_facade_data_column():
     """Добавляет колонку mixed_facade_data в order для смешанных фасадов."""
     try:
@@ -228,7 +278,9 @@ def init_database():
                 _ensure_pricelist_sort_order_column()
                 _ensure_invoice_order_ids_column()
                 _ensure_order_invoice_number_column()
+                _ensure_thickness_column()
                 _ensure_mixed_facade_data_column()
+                _ensure_invoice_item_thickness_column()
 
                 # Проверяем количество пользователей
                 user_count = User.query.count()
@@ -767,7 +819,13 @@ def dashboard():
         
         facade_type = request.form.get("facade_type") or None
         area = request.form.get("area")
+        thickness = request.form.get("thickness")
         mixed_facade_data = request.form.get("mixed_facade_data") or None
+        
+        try:
+            thickness = float(thickness) if thickness else None
+        except (ValueError, TypeError):
+            thickness = None
         
         try:
             area = float(area) if area else None
@@ -837,6 +895,7 @@ def dashboard():
             filepaths=";".join(filepaths),
             facade_type=facade_type,
             area=area,
+            thickness=thickness if facade_type != "смешанный" else None,
             mixed_facade_data=mixed_facade_data if facade_type == "смешанный" else None
         )
 
@@ -1211,7 +1270,11 @@ def invoice_create(counterparty_id):
         except (TypeError, ValueError):
             price = 0.0
         unit = (it.get("unit") or "").strip() or "шт"
-        db.session.add(InvoiceItem(invoice_id=inv.id, name=name, unit=unit, quantity=qty, price=price, price_list_item_id=it.get("price_list_item_id")))
+        try:
+            thickness = float(it.get("thickness")) if it.get("thickness") else None
+        except (TypeError, ValueError):
+            thickness = None
+        db.session.add(InvoiceItem(invoice_id=inv.id, name=name, unit=unit, quantity=qty, price=price, thickness=thickness, price_list_item_id=it.get("price_list_item_id")))
     db.session.commit()
     return jsonify({"ok": True, "invoice_id": inv.id, "invoice_number": inv.invoice_number})
 
@@ -1513,6 +1576,7 @@ def render_admin_dashboard():
         
         facade_type = request.form.get("facade_type") or None
         area = request.form.get("area")
+        thickness = request.form.get("thickness")
         
         try:
             area = float(area) if area else None
@@ -1521,6 +1585,11 @@ def render_admin_dashboard():
         except ValueError:
             flash("Неверная площадь", "error")
             return redirect(url_for("dashboard"))
+        
+        try:
+            thickness = float(thickness) if thickness else None
+        except (ValueError, TypeError):
+            thickness = None
         
         due_date = datetime.now(timezone.utc).date() + timedelta(days=days)
 
@@ -1536,7 +1605,8 @@ def render_admin_dashboard():
             filenames="",
             filepaths="",
             facade_type=facade_type,
-            area=area
+            area=area,
+            thickness=thickness
         )
 
         db.session.add(order)

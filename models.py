@@ -40,6 +40,7 @@ class Order(db.Model):
 
     facade_type = db.Column(db.String(32), nullable=True)  # фрезерованный / плоский / шпон / смешанный
     area        = db.Column(db.Float, nullable=True)       # площадь в м² (для смешанного — сумма)
+    thickness   = db.Column(db.Float, nullable=True)      # толщина в мм (для фрезерованный/плоский/шпон)
     mixed_facade_data = db.Column(db.Text, nullable=True)  # JSON: [{"type":"плоский","area":1.5,"thickness":18},...]
 
     counterparty = db.relationship('Counterparty', backref=db.backref('orders', lazy=True))
@@ -164,6 +165,7 @@ class InvoiceItem(db.Model):
     unit = db.Column(db.String(32), nullable=True)     # Ед. изм.
     quantity = db.Column(db.Float, nullable=False, default=1.0)
     price = db.Column(db.Float, nullable=False)       # Цена за ед.
+    thickness = db.Column(db.Float, nullable=True)    # Толщина в мм (для справки, в PDF и ТОРГ-12 не выводится)
     price_list_item_id = db.Column(db.Integer, db.ForeignKey('price_list_item.id'), nullable=True)  # Ссылка на прайс или NULL для ручных
     invoice = db.relationship('Invoice', backref=db.backref('items', lazy=True, cascade='all, delete-orphan'))
 

@@ -447,7 +447,7 @@
                                     {% set mixed = o.mixed_facade_data|fromjson if o.mixed_facade_data else [] %}
                                     Смешанный: {% for m in mixed %}{{ m.type }} {{ "%.2f"|format(m.area) }} м² {{ m.thickness or '-' }} мм{% if not loop.last %} | {% endif %}{% endfor %}
                                   {% else %}
-                                    {{ o.facade_type or '-' }}
+                                    {{ o.facade_type or '-' }}{% if o.thickness %} {{ o.thickness|int }} мм{% endif %}
                                   {% endif %}
                                 </td>
                                 <td>{{ "%.2f"|format(o.area) if o.area else '-' }} м²</td>

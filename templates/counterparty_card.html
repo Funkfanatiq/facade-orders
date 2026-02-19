@@ -167,6 +167,7 @@
           {% endfor %}
         </select>
         <input type="number" id="invoice-qty-pricelist" placeholder="Кол-во" step="0.01" min="0.01" value="1" style="width:70px;">
+        <input type="number" id="invoice-thickness-pricelist" placeholder="Толщина, мм" step="1" min="1" style="width:90px;" title="Толщина (для справки)">
         <button type="button" class="btn-add-item" onclick="addFromPricelist()">Добавить</button>
       </div>
       <div class="invoice-add-row" style="border-top:1px solid #eee; padding-top:12px; margin-top:8px;">
@@ -174,10 +175,11 @@
         <input type="text" id="invoice-manual-unit" class="unit-input" placeholder="Ед." value="м²">
         <input type="number" id="invoice-manual-qty" placeholder="Кол-во" step="0.01" min="0.01" value="1" style="width:70px;">
         <input type="number" id="invoice-manual-price" class="price-input" placeholder="Цена" step="0.01" min="0">
+        <input type="number" id="invoice-manual-thickness" placeholder="Толщина, мм" step="1" min="1" style="width:90px;" title="Толщина (для справки)">
         <button type="button" class="btn-add-item" onclick="addManualItem()">Добавить вручную</button>
       </div>
       <table class="invoice-items-table" id="invoice-items-table">
-        <thead><tr><th>№</th><th>Наименование</th><th>Ед.</th><th>Кол-во</th><th>Цена, ₽</th><th>Сумма, ₽</th><th></th></tr></thead>
+        <thead><tr><th>№</th><th>Наименование</th><th>Ед.</th><th>Кол-во</th><th>Цена, ₽</th><th>Сумма, ₽</th><th>Толщина, мм</th><th></th></tr></thead>
         <tbody id="invoice-items-tbody"></tbody>
       </table>
       <p class="invoice-empty-msg" id="invoice-empty-msg">Позиций пока нет</p>
@@ -425,7 +427,8 @@
       var name = opt.getAttribute('data-name');
       var price = parseFloat(opt.getAttribute('data-price')) || 0;
       var unit = opt.getAttribute('data-unit') || 'шт';
-      invoiceItems.push({ name: name, unit: unit, quantity: qty, price: price, price_list_item_id: parseInt(opt.value, 10) });
+      var thickness = parseFloat(document.getElementById('invoice-thickness-pricelist').value) || null;
+      invoiceItems.push({ name: name, unit: unit, quantity: qty, price: price, thickness: thickness, price_list_item_id: parseInt(opt.value, 10) });
       renderInvoiceItems();
     }
     function addManualItem() {
@@ -434,7 +437,8 @@
       var unit = document.getElementById('invoice-manual-unit').value.trim() || 'м²';
       var qty = parseFloat(document.getElementById('invoice-manual-qty').value) || 1;
       var price = parseFloat(document.getElementById('invoice-manual-price').value) || 0;
-      invoiceItems.push({ name: name, unit: unit, quantity: qty, price: price, price_list_item_id: null });
+      var thickness = parseFloat(document.getElementById('invoice-manual-thickness').value) || null;
+      invoiceItems.push({ name: name, unit: unit, quantity: qty, price: price, thickness: thickness, price_list_item_id: null });
       renderInvoiceItems();
       document.getElementById('invoice-manual-name').value = '';
       document.getElementById('invoice-manual-price').value = '';
@@ -456,8 +460,9 @@
         var sum = (it.quantity * it.price).toFixed(2).replace('.', ',');
         var priceStr = (it.price || 0).toFixed(2).replace('.', ',');
         var qtyStr = (it.quantity || 0).toString().replace('.', ',');
+        var thVal = (it.thickness != null && it.thickness !== '') ? it.thickness : '';
         var tr = document.createElement('tr');
-        tr.innerHTML = '<td>' + (i + 1) + '</td><td>' + (it.name || '') + '</td><td>' + (it.unit || 'шт') + '</td><td>' + qtyStr + '</td><td>' + priceStr + '</td><td>' + sum + '</td><td><button type="button" class="btn-remove-item" onclick="removeInvoiceItem(' + i + ')">Удалить</button></td>';
+        tr.innerHTML = '<td>' + (i + 1) + '</td><td>' + (it.name || '') + '</td><td>' + (it.unit || 'шт') + '</td><td>' + qtyStr + '</td><td>' + priceStr + '</td><td>' + sum + '</td><td><input type="number" class="item-thickness" data-idx="' + i + '" placeholder="мм" step="1" min="1" value="' + thVal + '" style="width:60px;"></td><td><button type="button" class="btn-remove-item" onclick="removeInvoiceItem(' + i + ')">Удалить</button></td>';
         tbody.appendChild(tr);
       });
     }
@@ -471,6 +476,13 @@
         alert('Добавьте хотя бы одну позицию');
         return;
       }
+      document.querySelectorAll('.item-thickness').forEach(function(inp) {
+        var idx = parseInt(inp.getAttribute('data-idx'), 10);
+        if (!isNaN(idx) && invoiceItems[idx] !== undefined) {
+          var v = parseFloat(inp.value);
+          invoiceItems[idx].thickness = (v > 0 ? v : null);
+        }
+      });
       fetch('/counterparty/' + counterpartyId + '/invoice/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

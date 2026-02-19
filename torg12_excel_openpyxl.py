@@ -157,12 +157,10 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     org = _org_string(config)
     buyer = _buyer_string(counterparty)
 
-    # Верхний блок — _put_cell для обхода MergedCell
-    # Грузоотправитель B3, Грузополучатель B6 и D7 (по образцу: метка B7:C7, данные D7:AI7)
-    _put_cell(ws, 3, 2, org)   # B3
-    _put_cell(ws, 6, 2, buyer)  # B6
-    _put_cell(ws, 7, 4, buyer)  # D7 — данные грузополучателя (образец: D7:AI7)
-    _put_cell(ws, 10, 4, org)   # D10
+    # Верхний блок — _put_cell для обхода MergedCell (грузоотправитель, грузополучатель в 8 строке, поставщик, плательщик)
+    _put_cell(ws, 3, 2, org)   # B3 — грузоотправитель
+    _put_cell(ws, 8, 4, buyer)  # D8 — грузополучатель
+    _put_cell(ws, 10, 4, org)  # D10 — поставщик
     _put_cell(ws, 12, 4, buyer)  # D12
     _put_cell(ws, 14, 4, basis)  # D14
 
@@ -237,12 +235,12 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     _put_qty_price_sum(ws, last_data_row, COL_QTY, COL_PRC, COL_SUM, total_qty, None, total_sum,
                        COL_VAT_RATE, COL_VAT_AMT, COL_SUM_VAT)
 
-    # Рамки для печати как на образце
+    # Рамки для печати как на образце (без границ в столбцах «в одном месте», «масса брутто» — N:U)
     _apply_border(ws, 3, 2, 15, 35)
     _apply_border(ws, 2, 37, 17, 39)
     _apply_border(ws, 16, 11, 17, 22)
-    _apply_border(ws, 20, 2, last_data_row, 39)
-    _apply_border(ws, 36 + row_offset, 2, 47 + row_offset, 40)
+    _apply_border(ws, 20, 2, last_data_row, 13)   # B–M: №, товар, ед.изм
+    _apply_border(ws, 20, 22, last_data_row, 39)  # V–AM: кол-во, цена, сумма, НДС (без N–U)
 
     # Печать: сетка и границы как на образце
     try:

@@ -1458,16 +1458,42 @@ def _unit_to_okei(unit):
 @app.route("/api/invoice-by-number/<invoice_number>")
 @login_required
 def api_invoice_by_number(invoice_number):
-    """Поиск счёта по номеру — для автозаполнения клиента в заказе."""
+    """Поиск счёта по номеру — для автозаполнения клиента и фасадов в заказе."""
     if current_user.role not in ["Менеджер", "Админ"]:
         return jsonify({"ok": False, "error": "Доступ запрещен"}), 403
     inv = Invoice.query.filter(Invoice.invoice_number == invoice_number.strip()).first()
     if not inv or not inv.counterparty:
         return jsonify({"ok": False, "error": "Счёт не найден"}), 404
+
+    # Фасады из номенклатуры счёта (только плоский, фрезерованный, шпон)
+    facade_types = ["плоский", "фрезерованный", "шпон"]
+    aggregated = {}  # (type, thickness) -> area
+    for it in inv.items:
+        cat = None
+        if it.price_list_item_id:
+            pli = PriceListItem.query.get(it.price_list_item_id)
+            if pli and pli.category in facade_types:
+                cat = pli.category
+        if not cat:
+            continue
+        qty = float(it.quantity or 0)
+        if qty <= 0:
+            continue
+        th = float(it.thickness) if it.thickness is not None else None
+        key = (cat, th)
+        aggregated[key] = aggregated.get(key, 0) + qty
+
+    facade_items = [
+        {"type": t, "area": round(a, 2), "thickness": th}
+        for (t, th), a in aggregated.items()
+    ]
+    facade_items.sort(key=lambda x: (x["type"], x["thickness"] or 0))
+
     return jsonify({
         "ok": True,
         "client": inv.counterparty.name,
         "counterparty_id": inv.counterparty.id,
+        "facade_items": facade_items,
     })
 
 

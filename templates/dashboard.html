@@ -669,6 +669,9 @@
               if (data.ok) {
                 clientName.value = data.client;
                 counterpartyId.value = String(data.counterparty_id);
+                if (data.facade_items && data.facade_items.length > 0 && typeof window.applyFacadeFromInvoice === 'function') {
+                  window.applyFacadeFromInvoice(data.facade_items);
+                }
               }
             })
             .catch(function() {});
@@ -703,6 +706,33 @@
       }
       addRowBtn.addEventListener('click', addMixedRow);
       facadeSelect.addEventListener('change', toggleMixed);
+      window.applyFacadeFromInvoice = function(items) {
+        if (!items || items.length === 0) return;
+        if (items.length === 1) {
+          facadeSelect.value = items[0].type;
+          areaInput.value = items[0].area;
+          document.getElementById('thickness_input').value = items[0].thickness || '';
+          areaSingleWrap.style.display = 'block';
+          mixedWrap.style.display = 'none';
+          areaInput.required = true;
+        } else {
+          facadeSelect.value = 'смешанный';
+          areaSingleWrap.style.display = 'none';
+          mixedWrap.style.display = 'block';
+          areaInput.required = false;
+          mixedTbody.innerHTML = '';
+          var totalArea = 0;
+          items.forEach(function(it) {
+            var tr = document.createElement('tr');
+            var thVal = it.thickness != null ? it.thickness : '';
+            tr.innerHTML = '<td><select class="mixed-type"><option value="плоский"' + (it.type === 'плоский' ? ' selected' : '') + '>Плоский</option><option value="фрезерованный"' + (it.type === 'фрезерованный' ? ' selected' : '') + '>Фрезерованный</option><option value="шпон"' + (it.type === 'шпон' ? ' selected' : '') + '>Шпон</option></select></td><td><input type="number" class="mixed-area" step="0.01" min="0.01" value="' + it.area + '" style="width:70px;"></td><td><input type="number" class="mixed-thickness" step="1" min="1" placeholder="мм" value="' + thVal + '" style="width:60px;"></td><td><button type="button" class="mixed-remove">✕</button></td>';
+            tr.querySelector('.mixed-remove').onclick = function() { tr.remove(); };
+            mixedTbody.appendChild(tr);
+            totalArea += it.area;
+          });
+          areaInput.value = totalArea.toFixed(2);
+        }
+      };
       if (addForm) {
         addForm.addEventListener('submit', function(ev) {
           if (facadeSelect.value === 'смешанный') {

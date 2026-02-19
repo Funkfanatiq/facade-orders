@@ -14,12 +14,14 @@ _THIN = "thin"
 
 
 def _apply_border(ws, min_row, min_col, max_row, max_col, style=_THIN):
-    """Применить рамки ко всем ячейкам в диапазоне. MergedCell пропускаем (read-only)."""
+    """Применить рамки ко всем ячейкам в диапазоне для печати как на образце."""
     try:
         from openpyxl.styles import Border, Side
         from openpyxl.cell.cell import MergedCell
+        
         side = Side(border_style=style, color="000000")
         border = Border(left=side, top=side, right=side, bottom=side)
+        
         for row in ws.iter_rows(min_row=min_row, min_col=min_col, max_row=max_row, max_col=max_col):
             for cell in row:
                 if isinstance(cell, MergedCell):
@@ -102,7 +104,10 @@ def _org_string(config):
 
 def _buyer_string(counterparty):
     """Реквизиты грузополучателя/плательщика."""
-    parts = [counterparty.full_name or counterparty.name]
+    name_part = (counterparty.full_name or counterparty.name or "").strip()
+    if not name_part:
+        name_part = str(getattr(counterparty, "name", "") or "—")
+    parts = [name_part]
     addr = counterparty.address or counterparty.legal_address
     if addr:
         parts.append(addr)
@@ -123,7 +128,8 @@ def _buyer_string(counterparty):
         parts.append(f"БИК {counterparty.bik}")
     if counterparty.corr_account:
         parts.append(f"к/с {counterparty.corr_account}")
-    return ", ".join(p for p in parts if p)
+    result = ", ".join(p for p in parts if p)
+    return result if result.strip() else name_part or "—"
 
 
 def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
@@ -152,8 +158,10 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     buyer = _buyer_string(counterparty)
 
     # Верхний блок — _put_cell для обхода MergedCell
+    # Грузоотправитель B3, Грузополучатель B6 и D7 (по образцу: метка B7:C7, данные D7:AI7)
     _put_cell(ws, 3, 2, org)   # B3
     _put_cell(ws, 6, 2, buyer)  # B6
+    _put_cell(ws, 7, 4, buyer)  # D7 — данные грузополучателя (образец: D7:AI7)
     _put_cell(ws, 10, 4, org)   # D10
     _put_cell(ws, 12, 4, buyer)  # D12
     _put_cell(ws, 14, 4, basis)  # D14
@@ -206,6 +214,8 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
                 except Exception:
                     pass
 
+    row_offset = insert_count
+
     for i, it in enumerate(items):
         row = DATA_START_ROW + i
         qty = float(it.quantity or 0)
@@ -227,17 +237,22 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     _put_qty_price_sum(ws, last_data_row, COL_QTY, COL_PRC, COL_SUM, total_qty, None, total_sum,
                        COL_VAT_RATE, COL_VAT_AMT, COL_SUM_VAT)
 
-    # Рамки для верхнего блока (грузоотправитель, грузополучатель, поставщик, плательщик)
+    # Рамки для печати как на образце
     _apply_border(ws, 3, 2, 15, 35)
-    # Рамки для правого блока «Коды» (AK=37, AL=38, AM=39)
     _apply_border(ws, 2, 37, 17, 39)
-    # Рамки для блока «Номер документа» / «Дата составления»
     _apply_border(ws, 16, 11, 17, 22)
-    # Рамки для таблицы товаров (до колонки AM включительно)
     _apply_border(ws, 20, 2, last_data_row, 39)
+    _apply_border(ws, 36 + row_offset, 2, 47 + row_offset, 40)
 
-    # Сумма прописью — «Всего отпущено на сумму» (строка 38)
-    _put_cell(ws, 38, 2, f"Всего отпущено на сумму {_amount_to_words_rub(total_sum)}")
+    # Печать: сетка и границы как на образце
+    try:
+        ws.sheet_view.showGridLines = True
+        ws.print_options.gridLines = True
+    except Exception:
+        pass
+
+    # Сумма прописью — «Всего отпущено на сумму» (строка смещается при вставке товаров)
+    _put_cell(ws, 38 + row_offset, 2, f"Всего отпущено на сумму {_amount_to_words_rub(total_sum)}")
 
     buf = io.BytesIO()
     wb.save(buf)

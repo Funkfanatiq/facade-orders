@@ -2,6 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Фрезеровка | Управление заказами</title>
   <style>
     body {
@@ -18,11 +19,50 @@
       justify-content: space-between;
       align-items: center;
     }
-    table {
-      width: 95%;
-      margin: 20px auto;
+    .top-bar h2 { margin: 0; font-size: 20px; }
+    .tabs {
+      display: flex;
       background: #fff;
+      border-radius: 12px;
+      padding: 4px;
+      margin: 20px 20px 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      gap: 4px;
+    }
+    .tab {
+      flex: 1;
+      padding: 12px 20px;
+      text-align: center;
+      cursor: pointer;
+      border-radius: 8px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      background: #f2f2f2;
+      color: #555;
+      border: none;
+      font-size: 15px;
+      text-decoration: none;
+      display: block;
+    }
+    .tab:hover { background: #e8e8e8; color: #333; }
+    .tab.active {
+      background: #757575;
+      color: #fff;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+    .tab.active:hover { color: #fff; }
+    .form-box {
+      background: #fff;
+      margin: 20px;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    .form-box h3 { margin: 0 0 16px 0; font-size: 18px; }
+    table {
+      width: 100%;
       border-collapse: collapse;
+      background: #fff;
     }
     th, td {
       padding: 12px;
@@ -30,9 +70,13 @@
       text-align: center;
       vertical-align: middle;
     }
-    th {
-      background-color: #f2f2f2;
+    th { background-color: #f2f2f2; }
+    a {
+      text-decoration: none;
+      color: #4CAF50;
+      font-size: 14px;
     }
+    a:hover { text-decoration: underline; }
     .switch {
       position: relative;
       display: inline-block;
@@ -72,11 +116,11 @@
       transform: translateX(20px);
     }
     .in-pool {
-      background-color: #e8f5e8 !important;
+      background-color: #d4edda !important;
       border-left: 4px solid #4CAF50;
     }
     .urgent-order {
-      background-color: #ffe6e6 !important;
+      background-color: #f8d7da !important;
       border-left: 4px solid #ff4444;
     }
     .warning-order {
@@ -102,73 +146,80 @@
 </head>
 <body>
   <div class="top-bar">
-    <h2>Фрезеровка | Управление заказами</h2>
+    <h2>🔧 Фрезеровка</h2>
     <div>
-      <a href="{{ url_for('milling_pool') }}" style="margin-right: 20px; color: #4CAF50;">📋 Пул заказов</a>
       {{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a>
     </div>
   </div>
 
-  <table id="all-table">
-    <thead>
-      <tr>
-        <th>№ Заказа</th>
-        <th>Клиент</th>
-        <th>Тип фасада</th>
-        <th>Площадь (м²)</th>
-        <th>Срок</th>
-        <th>Статус</th>
-        <th>Фрезеровка</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for o in orders %}
-        {% set days_left = order_urgency[o.id].days_left %}
-        {% set is_urgent = order_urgency[o.id].is_urgent %}
-        {% set in_pool = o.id in pool_order_ids %}
-        {% set row_class = "" %}
-        {% if o.milling %}
-          {% set row_class = "completed" %}
-        {% elif in_pool %}
-          {% set row_class = "in-pool" %}
-        {% elif is_urgent %}
-          {% set row_class = "urgent-order" %}
-        {% elif days_left <= 6 %}
-          {% set row_class = "warning-order" %}
-        {% endif %}
-        
-        <tr data-order-id="{{ o.id }}" class="{{ row_class }}">
-          <td>{{ o.order_id }}</td>
-          <td>{{ o.client }}</td>
-          <td>{{ o.facade_type }}</td>
-          <td>{{ "%.2f"|format(o.area) }}</td>
-          <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
-          <td>
-            {% if o.milling %}
-              <span class="status-indicator status-normal"></span>Завершен
-            {% elif in_pool %}
-              <span class="status-indicator status-pool"></span>В пуле
-            {% elif is_urgent %}
-              <span class="status-indicator status-urgent"></span>Срочный
-            {% elif days_left <= 6 %}
-              <span class="status-indicator status-warning"></span>Скоро срок
-            {% else %}
-              <span class="status-indicator status-normal"></span>Ожидает
-            {% endif %}
-          </td>
-          <td>
-            <label class="switch">
-              <input type="checkbox" name="milling" {% if o.milling %}checked{% endif %}>
-              <span class="slider"></span>
-            </label>
-          </td>
+  <div class="tabs">
+    <a href="{{ url_for('milling_station') }}" class="tab">📋 Рабочее место</a>
+    <a href="{{ url_for('milling_pool') }}" class="tab">📋 Пул заказов</a>
+    <a href="{{ url_for('milling_orders') }}" class="tab active">📋 Управление заказами</a>
+  </div>
+
+  <div class="form-box" style="margin-top: 20px;">
+    <h3>Все заказы на фрезеровку</h3>
+    <table id="all-table">
+      <thead>
+        <tr>
+          <th>№ заказа</th>
+          <th>Клиент</th>
+          <th>Тип фасада</th>
+          <th>Площадь (м²)</th>
+          <th>Срок</th>
+          <th>Статус</th>
+          <th>Фрезеровка</th>
         </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+        {% for o in orders %}
+          {% set days_left = order_urgency[o.id].days_left %}
+          {% set is_urgent = order_urgency[o.id].is_urgent %}
+          {% set in_pool = o.id in pool_order_ids %}
+          {% set row_class = "" %}
+          {% if o.milling %}
+            {% set row_class = "completed" %}
+          {% elif in_pool %}
+            {% set row_class = "in-pool" %}
+          {% elif is_urgent %}
+            {% set row_class = "urgent-order" %}
+          {% elif days_left <= 6 %}
+            {% set row_class = "warning-order" %}
+          {% endif %}
+
+          <tr data-order-id="{{ o.id }}" class="{{ row_class }}">
+            <td>{{ o.order_id }}</td>
+            <td>{{ o.client }}</td>
+            <td>{{ o.facade_type }}</td>
+            <td>{{ "%.2f"|format(o.area) }}</td>
+            <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
+            <td>
+              {% if o.milling %}
+                <span class="status-indicator status-normal"></span>Завершен
+              {% elif in_pool %}
+                <span class="status-indicator status-pool"></span>В пуле
+              {% elif is_urgent %}
+                <span class="status-indicator status-urgent"></span>Срочный
+              {% elif days_left <= 6 %}
+                <span class="status-indicator status-warning"></span>Скоро срок
+              {% else %}
+                <span class="status-indicator status-normal"></span>Ожидает
+              {% endif %}
+            </td>
+            <td>
+              <label class="switch">
+                <input type="checkbox" name="milling" {% if o.milling %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 
   <script>
-    // Обработчик изменения слайдеров фрезеровки
     document.querySelectorAll('input[name="milling"]').forEach(checkbox => {
       checkbox.addEventListener('change', async (e) => {
         const row = e.target.closest('tr');
@@ -182,59 +233,44 @@
             body: JSON.stringify({ order_id: orderId, status: status })
           });
 
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
           const result = await response.json();
-          
+
           if (result.success) {
-            console.log(result.message);
-            
-            // Обновляем статусы в таблице
-            updateTableStatus(orderId, status);
-            
+            updateTableStatus(row, orderId, status);
           } else {
-            alert('Ошибка при обновлении статуса: ' + (result.message || 'Неизвестная ошибка'));
-            e.target.checked = !status; // Возвращаем исходное состояние
+            alert('Ошибка: ' + (result.message || 'Неизвестная ошибка'));
+            e.target.checked = !status;
           }
         } catch (error) {
-          console.error('Ошибка:', error);
-          alert('Ошибка при обновлении статуса: ' + error.message);
-          e.target.checked = !status; // Возвращаем исходное состояние
+          alert('Ошибка: ' + error.message);
+          e.target.checked = !status;
         }
       });
     });
 
-    function updateTableStatus(orderId, status) {
-      const row = document.querySelector(`#all-table tr[data-order-id="${orderId}"]`);
-      if (row) {
-        if (status) {
-          row.className = 'completed';
-          const statusCell = row.querySelector('td:nth-child(6)');
-          statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Завершен';
+    function updateTableStatus(row, orderId, status) {
+      const statusCell = row.querySelector('td:nth-child(6)');
+      if (status) {
+        row.className = 'completed';
+        statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Завершен';
+      } else {
+        const dueText = row.querySelector('td:nth-child(5)').textContent;
+        const [y, m, d] = dueText.split('-').map(Number);
+        const due = new Date(y, m - 1, d);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        due.setHours(0, 0, 0, 0);
+        const daysLeft = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
+        if (daysLeft <= 3) {
+          row.className = 'urgent-order';
+          statusCell.innerHTML = '<span class="status-indicator status-urgent"></span>Срочный';
+        } else if (daysLeft <= 6) {
+          row.className = 'warning-order';
+          statusCell.innerHTML = '<span class="status-indicator status-warning"></span>Скоро срок';
         } else {
-          // Пересчитываем класс строки
-          const daysLeft = parseInt(row.querySelector('td:nth-child(5)').textContent.split('-')[2]);
-          const isUrgent = daysLeft <= 3;
-          const isWarning = daysLeft <= 6;
-          
-          if (isUrgent) {
-            row.className = 'urgent-order';
-          } else if (isWarning) {
-            row.className = 'warning-order';
-          } else {
-            row.className = '';
-          }
-          
-          const statusCell = row.querySelector('td:nth-child(6)');
-          if (isUrgent) {
-            statusCell.innerHTML = '<span class="status-indicator status-urgent"></span>Срочный';
-          } else if (isWarning) {
-            statusCell.innerHTML = '<span class="status-indicator status-warning"></span>Скоро срок';
-          } else {
-            statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Ожидает';
-          }
+          row.className = '';
+          statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Ожидает';
         }
       }
     }

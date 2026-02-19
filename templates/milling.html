@@ -2,28 +2,67 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Фрезеровка</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Фрезеровка | Рабочее место</title>
   <style>
     body {
       margin: 0;
+      background: #f9f9f9;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: #f2f4f6;
       color: #333;
     }
     .top-bar {
       background: #fff;
-      padding: 16px 24px;
+      padding: 16px;
       border-bottom: 1px solid #ddd;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    table {
-      width: 90%;
-      margin: 40px auto;
+    .top-bar h2 { margin: 0; font-size: 20px; }
+    .tabs {
+      display: flex;
       background: #fff;
+      border-radius: 12px;
+      padding: 4px;
+      margin: 20px 20px 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      gap: 4px;
+    }
+    .tab {
+      flex: 1;
+      padding: 12px 20px;
+      text-align: center;
+      cursor: pointer;
+      border-radius: 8px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      background: #f2f2f2;
+      color: #555;
+      border: none;
+      font-size: 15px;
+      text-decoration: none;
+      display: block;
+    }
+    .tab:hover { background: #e8e8e8; color: #333; }
+    .tab.active {
+      background: #757575;
+      color: #fff;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+    .tab.active:hover { color: #fff; }
+    .form-box {
+      background: #fff;
+      margin: 20px;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    .form-box h3 { margin: 0 0 16px 0; font-size: 18px; }
+    table {
+      width: 100%;
       border-collapse: collapse;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+      background: #fff;
     }
     th, td {
       padding: 12px;
@@ -31,37 +70,45 @@
       text-align: center;
       vertical-align: middle;
     }
-    th {
-      background-color: #f2f2f2;
-    }
+    th { background-color: #f2f2f2; }
     a {
       text-decoration: none;
       color: #4CAF50;
       font-size: 14px;
     }
+    a:hover { text-decoration: underline; }
     .btn-done {
-      display: block;
-      margin: 24px auto 60px;
-      padding: 10px 28px;
+      display: inline-block;
+      margin: 16px 0;
+      padding: 10px 24px;
       font-size: 15px;
       font-weight: 500;
-      background-color: #555;
+      background: #4CAF50;
       color: white;
       border: none;
       border-radius: 10px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
       cursor: pointer;
       transition: all 0.2s ease-in-out;
     }
     .btn-done:hover {
-      background-color: #444;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      background: #45A049;
       transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
     }
-    .btn-done:active {
-      background-color: #333;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.3) inset;
-      transform: scale(0.98);
+    .row-urgent { background-color: #f8d7da !important; }
+    .pool-info {
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      border: 1px solid #ddd;
+    }
+    .pool-info.urgent {
+      background: #ffe6e6;
+      border-color: #ff4444;
+    }
+    .pool-info.normal {
+      background: #e8f4fd;
+      border-color: #ddd;
     }
   </style>
   <script>
@@ -74,110 +121,111 @@
 </head>
 <body>
   <div class="top-bar">
-    <h2>Фрезеровка | Рабочее место</h2>
+    <h2>🔧 Фрезеровка</h2>
     <div>
-      <a href="{{ url_for('milling_pool') }}" style="margin-right: 20px; color: #4CAF50;">📋 Пул заказов</a>
-      <a href="{{ url_for('milling_orders') }}" style="margin-right: 20px; color: #4CAF50;">📋 Управление заказами</a>
       {{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a>
     </div>
   </div>
 
+  <div class="tabs">
+    <a href="{{ url_for('milling_station') }}" class="tab active">📋 Рабочее место</a>
+    <a href="{{ url_for('milling_pool') }}" class="tab">📋 Пул заказов</a>
+    <a href="{{ url_for('milling_orders') }}" class="tab">📋 Управление заказами</a>
+  </div>
+
   {% with messages = get_flashed_messages() %}
     {% if messages %}
-      <div style="text-align:center; color: green;">
-        {% for msg in messages %}
-          <p>{{ msg }}</p>
-        {% endfor %}
+      <div style="text-align:center; color: green; margin: 16px 20px;">
+        {% for msg in messages %}<p style="margin: 4px 0;">{{ msg }}</p>{% endfor %}
       </div>
     {% endif %}
   {% endwith %}
 
-  {% if orders %}
+  <div class="form-box" style="margin-top: 20px;">
+    {% if orders %}
     {% set total_area = orders|sum(attribute='area') %}
     {% set sheet_area = 5.6375 %}
     {% set sheets_needed = (total_area / sheet_area) %}
     {% set full_sheets = sheets_needed|int %}
     {% set partial_sheet = sheets_needed - full_sheets %}
     {% set earliest_order = orders|min(attribute='due_date') %}
-    
-    <div style="background: {% if pool_info.is_urgent %}#ffe6e6{% else %}#e8f4fd{% endif %}; margin: 20px; padding: 15px; border-radius: 8px; text-align: center; border: {% if pool_info.is_urgent %}2px solid #ff4444{% else %}1px solid #ddd{% endif %};">
+
+    <div class="pool-info {{ 'urgent' if pool_info.is_urgent else 'normal' }}">
       <h3 style="margin: 0 0 10px 0; color: {% if pool_info.is_urgent %}#cc0000{% else %}#2c5aa0{% endif %};">
         {% if pool_info.is_urgent %}🚨 СРОЧНЫЙ ПУЛ ЗАКАЗОВ{% else %}📋 Оптимизированный пул заказов{% endif %}
       </h3>
       <p style="margin: 5px 0;"><strong>Тип фасада:</strong> {{ orders[0].facade_type }}</p>
       <p style="margin: 5px 0;"><strong>Количество заказов:</strong> {{ orders|length }}</p>
       <p style="margin: 5px 0;"><strong>Общая площадь:</strong> {{ "%.2f"|format(total_area) }} м²</p>
-      <p style="margin: 5px 0;"><strong>Листов МДФ:</strong> 
-        {{ full_sheets }}{% if partial_sheet > 0 %} + {{ "%.1f"|format(partial_sheet) }}{% endif %} 
+      <p style="margin: 5px 0;"><strong>Листов МДФ:</strong>
+        {{ full_sheets }}{% if partial_sheet > 0 %} + {{ "%.1f"|format(partial_sheet) }}{% endif %}
         (лист = {{ "%.2f"|format(sheet_area) }} м²)
       </p>
       {% if not pool_info.is_urgent %}
-        <p style="margin: 5px 0;"><strong>Эффективность:</strong> 
+        <p style="margin: 5px 0;"><strong>Эффективность:</strong>
           <span style="color: {% if pool_info.efficiency >= 85 %}green{% elif pool_info.efficiency >= 70 %}orange{% else %}red{% endif %};">
             {{ "%.1f"|format(pool_info.efficiency) }}%
           </span>
         </p>
         {% if pool_info.waste > 0 %}
-          <p style="margin: 5px 0;"><strong>Остатки:</strong> 
+          <p style="margin: 5px 0;"><strong>Остатки:</strong>
             <span style="color: {% if pool_info.waste <= 0.5 %}green{% elif pool_info.waste <= 1.0 %}orange{% else %}red{% endif %};">
               {{ "%.2f"|format(pool_info.waste) }} м² ({{ "%.1f"|format(pool_info.waste/sheet_area*100) }}% листа)
             </span>
           </p>
         {% endif %}
       {% endif %}
-      <p style="margin: 5px 0;"><strong>Срок сдачи:</strong> 
+      <p style="margin: 5px 0;"><strong>Срок сдачи:</strong>
         <span style="color: {% if pool_info.is_urgent %}#cc0000{% else %}inherit{% endif %};">
           {{ earliest_order.due_date.strftime('%Y-%m-%d') }}
         </span>
       </p>
     </div>
-  {% endif %}
 
-  <table>
-    <thead>
-      <tr>
-        <th>№ заказа</th>
-        <th>Клиент</th>
-        <th>Тип фасада</th>
-        <th>Площадь</th>
-        <th>Срок</th>
-        <th>Файлы</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for order in orders %}
-        {% set urgency_info = order_urgency.get(order.id, {'is_urgent': false, 'days_left': 999}) %}
-        <tr style="{% if urgency_info.is_urgent %}background-color: #ffe6e6;{% endif %}">
-          <td>
-            {% if urgency_info.is_urgent %}🚨{% endif %} {{ order.order_id }}
-          </td>
-          <td>{{ order.client }}</td>
-          <td>{{ order.facade_type }}</td>
-          <td>{{ "%.2f"|format(order.area) }} м²</td>
-          <td style="color: {% if urgency_info.is_urgent %}#cc0000{% else %}inherit{% endif %};">
-            {{ order.due_date.strftime('%Y-%m-%d') }}
-            {% if urgency_info.is_urgent %}
-              <br><small style="color: #cc0000;">({{ urgency_info.days_left }} дн.)</small>
-            {% endif %}
-          </td>
-          <td>
-            {% if order.filepaths %}
-              {% set fps = order.filepaths.split(';') %}
-              {% set fns = order.filenames.split(';') %}
-              {% for fp, fn in fps|zip(fns) %}
-                <a href="{{ url_for('uploaded_file', filename=fp.split('/')[-1]) }}" target="_blank">📎 {{ fn }}</a><br>
-              {% endfor %}
-            {% else %}
-              —
-            {% endif %}
-          </td>
+    <h3>Заказы в пуле</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>№ заказа</th>
+          <th>Клиент</th>
+          <th>Тип фасада</th>
+          <th>Площадь</th>
+          <th>Срок</th>
+          <th>Файлы</th>
         </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+        {% for order in orders %}
+          {% set urgency_info = order_urgency.get(order.id, {'is_urgent': false, 'days_left': 999}) %}
+          <tr class="{{ 'row-urgent' if urgency_info.is_urgent else '' }}">
+            <td>{% if urgency_info.is_urgent %}🚨 {% endif %}{{ order.order_id }}</td>
+            <td>{{ order.client }}</td>
+            <td>{{ order.facade_type }}</td>
+            <td>{{ "%.2f"|format(order.area) }} м²</td>
+            <td style="color: {% if urgency_info.is_urgent %}#cc0000{% else %}inherit{% endif %};">
+              {{ order.due_date.strftime('%Y-%m-%d') }}
+              {% if urgency_info.is_urgent %}<br><small>({{ urgency_info.days_left }} дн.)</small>{% endif %}
+            </td>
+            <td>
+              {% if order.filepaths %}
+                {% set fps = order.filepaths.split(';') %}
+                {% set fns = order.filenames.split(';') %}
+                {% for fp, fn in fps|zip(fns) %}
+                  <a href="{{ url_for('uploaded_file', filename=fp.split('/')[-1]) }}" target="_blank">📎 {{ fn }}</a><br>
+                {% endfor %}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
 
-  <form id="done-form" method="POST" action="{{ url_for('mark_pool_complete') }}">
-    <button type="button" class="btn-done" onclick="confirmAndSubmit()">Готово</button>
-  </form>
+    <form id="done-form" method="POST" action="{{ url_for('mark_pool_complete') }}">
+      <button type="button" class="btn-done" onclick="confirmAndSubmit()">✓ Готово</button>
+    </form>
+    {% else %}
+    <p style="color: #666;">Нет заказов в пуле. Перейдите на вкладку <a href="{{ url_for('milling_pool') }}">Пул заказов</a>.</p>
+    {% endif %}
+  </div>
 </body>
 </html>

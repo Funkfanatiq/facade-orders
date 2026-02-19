@@ -42,7 +42,6 @@ class Order(db.Model):
     area        = db.Column(db.Float, nullable=True)       # площадь в м² (для смешанного — сумма)
     thickness   = db.Column(db.Float, nullable=True)      # толщина в мм (для фрезерованный/плоский/шпон)
     mixed_facade_data = db.Column(db.Text, nullable=True)  # JSON: [{"type":"плоский","area":1.5,"thickness":18},...]
-    milling_done_parts = db.Column(db.Text, nullable=True)  # JSON: [{"type":"плоский","thickness":16,"area":0.5},...] — для смешанного: какие части отфрезерованы
 
     counterparty = db.relationship('Counterparty', backref=db.backref('orders', lazy=True))
 

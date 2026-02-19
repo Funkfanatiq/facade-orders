@@ -235,8 +235,9 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     _put_qty_price_sum(ws, last_data_row, COL_QTY, COL_PRC, COL_SUM, total_qty, None, total_sum,
                        COL_VAT_RATE, COL_VAT_AMT, COL_SUM_VAT)
 
-    # Рамки для печати как на образце (без границ в столбцах «в одном месте», «масса брутто» — N:U)
-    _apply_border(ws, 3, 2, 15, 35)
+    # Рамки для печати (без 13–15 строки B–C, без столбцов 30–35 в строках 1–15)
+    _apply_border(ws, 3, 2, 12, 3)
+    _apply_border(ws, 3, 4, 15, 29)
     _apply_border(ws, 2, 37, 17, 39)
     _apply_border(ws, 16, 11, 17, 22)
     _apply_border(ws, 20, 2, last_data_row, 13)   # B–M: №, товар, ед.изм

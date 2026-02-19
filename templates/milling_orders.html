@@ -153,6 +153,7 @@
   </div>
 
   <div class="tabs">
+    <a href="{{ url_for('milling_station') }}" class="tab">📋 Рабочее место</a>
     <a href="{{ url_for('milling_pool') }}" class="tab">📋 Пул заказов</a>
     <a href="{{ url_for('milling_orders') }}" class="tab active">📋 Управление заказами</a>
   </div>
@@ -168,7 +169,6 @@
           <th>Площадь (м²)</th>
           <th>Срок</th>
           <th>Статус</th>
-          <th>Файлы</th>
           <th>Фрезеровка</th>
         </tr>
       </thead>
@@ -206,13 +206,6 @@
               {% else %}
                 <span class="status-indicator status-normal"></span>Ожидает
               {% endif %}
-            </td>
-            <td>
-              {% if o.filenames %}
-                {% for fn in o.filenames.split(';') %}
-                  {% if fn %}<a href="{{ url_for('uploaded_file', filename=fn) }}" target="_blank">📎 {{ fn }}</a><br>{% endif %}
-                {% endfor %}
-              {% else %}—{% endif %}
             </td>
             <td>
               <label class="switch">

@@ -673,13 +673,17 @@
         clientName.addEventListener('change', syncCounterpartyId);
       }
       if (orderIdInput && clientName && counterpartyId) {
+        var invoiceFetchInProgress = false;
+        var lastFetchedNum = '';
         orderIdInput.addEventListener('blur', function() {
           var num = this.value.trim();
-          if (!num) return;
+          if (!num || invoiceFetchInProgress || num === lastFetchedNum) return;
+          invoiceFetchInProgress = true;
           fetch('/api/invoice-by-number/' + encodeURIComponent(num))
             .then(function(r) { return r.json(); })
             .then(function(data) {
               if (data.ok) {
+                lastFetchedNum = num;
                 clientName.value = data.client;
                 counterpartyId.value = String(data.counterparty_id);
                 if (data.facade_items && data.facade_items.length > 0 && typeof window.applyFacadeFromInvoice === 'function') {
@@ -687,7 +691,8 @@
                 }
               }
             })
-            .catch(function() {});
+            .catch(function() {})
+            .finally(function() { invoiceFetchInProgress = false; });
         });
       }
     })();
@@ -825,16 +830,19 @@
       }
     })();
     {% endif %}
+    var statusDebounce = {};
     document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
       cb.addEventListener('change', () => {
         const row = cb.closest('tr');
         const orderId = row.getAttribute('data-order-id');
-
-        const milling = row.querySelector('input[name="milling"]')?.checked ? 1 : 0;
-        const polishing_1 = row.querySelector('input[name="polishing_1"]')?.checked ? 1 : 0;
-        const packaging = row.querySelector('input[name="packaging"]')?.checked ? 1 : 0;
-        const shipment = row.querySelector('input[name="shipment"]')?.checked ? 1 : 0;
-        const paid = row.querySelector('input[name="paid"]')?.checked ? 1 : 0;
+        if (!orderId) return;
+        clearTimeout(statusDebounce[orderId]);
+        statusDebounce[orderId] = setTimeout(() => {
+          const milling = row.querySelector('input[name="milling"]')?.checked ? 1 : 0;
+          const polishing_1 = row.querySelector('input[name="polishing_1"]')?.checked ? 1 : 0;
+          const packaging = row.querySelector('input[name="packaging"]')?.checked ? 1 : 0;
+          const shipment = row.querySelector('input[name="shipment"]')?.checked ? 1 : 0;
+          const paid = row.querySelector('input[name="paid"]')?.checked ? 1 : 0;
 
         fetch(`/update_status/${orderId}`, {
           method: 'POST',
@@ -882,6 +890,7 @@
             alert("❌ Ошибка при сохранении");
           }
         });
+        }, 400);
       });
     });
     

@@ -2,6 +2,7 @@ from flask import Flask, render_template, redirect, url_for, request, flash, ses
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_migrate import Migrate
 from sqlalchemy import or_, text
 from datetime import datetime, timedelta, timezone, date
@@ -33,6 +34,9 @@ load_dotenv()
 app = Flask(__name__)
 app.config.from_object('config.Config')
 
+# Для Render.com и других прокси: Flask должен доверять X-Forwarded-* заголовкам,
+# иначе редиректы генерируют http:// вместо https:// и возникает ERR_TOO_MANY_REDIRECTS
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
 
 # Импортируем модели после инициализации Flask
 from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty, PriceListItem, Invoice, InvoiceItem, Payment, PRICE_CATEGORIES

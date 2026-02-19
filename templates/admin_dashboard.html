@@ -547,12 +547,15 @@
             event.target.classList.add('active');
         }
         
-        // Обновление статуса заказов
+        // Обновление статуса заказов (debounce 400ms для снижения нагрузки)
+        var statusDebounce = {};
         document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
             cb.addEventListener('change', () => {
                 const row = cb.closest('tr');
                 const orderId = row.getAttribute('data-order-id');
-
+                if (!orderId) return;
+                clearTimeout(statusDebounce[orderId]);
+                statusDebounce[orderId] = setTimeout(() => {
                 const milling = row.querySelector('input[name="milling"]')?.checked ? 1 : 0;
                 const polishing_1 = row.querySelector('input[name="polishing_1"]')?.checked ? 1 : 0;
                 const packaging = row.querySelector('input[name="packaging"]')?.checked ? 1 : 0;
@@ -586,6 +589,7 @@
                         alert("❌ Ошибка при сохранении");
                     }
                 });
+                }, 400);
             });
         });
         

@@ -157,16 +157,16 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     org = _org_string(config)
     buyer = _buyer_string(counterparty)
 
-    # Верхний блок — с грузополучателя на 7 строку и выше
+    # Верхний блок — _put_cell для обхода MergedCell (грузоотправитель, грузополучатель в 8 строке, поставщик, плательщик)
     _put_cell(ws, 3, 2, org)   # B3 — грузоотправитель
-    _put_cell(ws, 7, 4, buyer)  # D7 — грузополучатель
-    _put_cell(ws, 9, 4, org)   # D9 — поставщик
-    _put_cell(ws, 11, 4, buyer)  # D11 — плательщик
-    _put_cell(ws, 13, 4, basis)  # D13 — основание
+    _put_cell(ws, 8, 4, buyer)  # D8 — грузополучатель
+    _put_cell(ws, 10, 4, org)  # D10 — поставщик
+    _put_cell(ws, 12, 4, buyer)  # D12
+    _put_cell(ws, 14, 4, basis)  # D14
 
     # Номер документа = номер счёта, Дата составления = день отгрузки
-    _put_cell(ws, 16, 11, inv_num)   # K16
-    _put_cell(ws, 16, 15, doc_dt_str)  # O16
+    _put_cell(ws, 17, 11, inv_num)   # K17
+    _put_cell(ws, 17, 15, doc_dt_str)  # O17
 
     # Правый блок «Коды»: AM = колонка 39
     okpo = config.get("COMPANY_OKPO") or ""
@@ -177,10 +177,10 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     if cp_okpo:
         _put_cell(ws, 7, 39, cp_okpo)
     if okpo:
-        _put_cell(ws, 8, 39, okpo)
+        _put_cell(ws, 9, 39, okpo)
     if cp_okpo:
-        _put_cell(ws, 10, 39, cp_okpo)
-    _put_cell(ws, 12, 39, inv_num)
+        _put_cell(ws, 11, 39, cp_okpo)
+    _put_cell(ws, 13, 39, inv_num)
 
     # Таблица — по указанию пользователя: 22=Количество, 24=Цена, 26=Общая сумма; код по ОКЕИ 055
     COL_N = 2       # B — Номер по порядку
@@ -235,10 +235,10 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     _put_qty_price_sum(ws, last_data_row, COL_QTY, COL_PRC, COL_SUM, total_qty, None, total_sum,
                        COL_VAT_RATE, COL_VAT_AMT, COL_SUM_VAT)
 
-    # Рамки для печати (без столбцов 30–37 в верхнем блоке, без N:U в таблице)
-    _apply_border(ws, 3, 2, 15, 29)
-    _apply_border(ws, 2, 37, 16, 39)
-    _apply_border(ws, 15, 11, 16, 22)
+    # Рамки для печати как на образце (без границ в столбцах «в одном месте», «масса брутто» — N:U)
+    _apply_border(ws, 3, 2, 15, 35)
+    _apply_border(ws, 2, 37, 17, 39)
+    _apply_border(ws, 16, 11, 17, 22)
     _apply_border(ws, 20, 2, last_data_row, 13)   # B–M: №, товар, ед.изм
     _apply_border(ws, 20, 22, last_data_row, 39)  # V–AM: кол-во, цена, сумма, НДС (без N–U)
 

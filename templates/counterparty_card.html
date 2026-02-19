@@ -154,7 +154,7 @@
       <div class="invoice-add-row">
         <select id="invoice-pricelist-select" style="min-width:260px;">
           <option value="">— Выбрать из прайса —</option>
-          {% set grid_cats = [('плоский', 'Плоские'), ('фрезерованный', 'Фрезерованные'), ('шпон', 'Шпон'), ('услуги по покраске', 'Услуги по покраске'), ('Доп услуги', 'Доп услуги')] %}
+          {% set grid_cats = [('плоский', 'Плоские'), ('фрезерованный', 'Фрезерованные'), ('шпон', 'Шпон'), ('покраска', 'Покраска'), ('услуги по покраске', 'Услуги по покраске'), ('Доп услуги', 'Доп услуги')] %}
           {% for cat, label in grid_cats %}
           {% set cat_items = price_list|selectattr('category', 'equalto', cat)|list %}
           {% if cat_items %}

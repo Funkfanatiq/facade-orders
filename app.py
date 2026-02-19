@@ -528,10 +528,11 @@ def generate_daily_pool():
     OPTIMAL_UTILIZATION = 0.85  # 85% использования листа считается хорошим
     ACCEPTABLE_WASTE = 0.3  # Допустимые остатки в м²
 
-    # Получаем все незафрезерованные заказы
+    # Получаем все незафрезерованные заказы (покраска минует фрезеровку — не в пуле)
     candidates = Order.query.filter(
         Order.milling == False,
         Order.shipment == False,
+        Order.facade_type != "покраска",
         Order.area != None,
         Order.area > 0
     ).order_by(Order.due_date.asc()).all()
@@ -880,6 +881,8 @@ def dashboard():
                     flash(f"Не удалось сохранить файл {f.filename}", "error")
                     continue
 
+        # Покраска минует фрезеровку — сразу на шлифовку
+        milling_default = (facade_type == "покраска")
         order = Order(
             order_id=order_id,
             invoice_number=order_id,
@@ -887,7 +890,7 @@ def dashboard():
             counterparty_id=counterparty_id if counterparty_id else None,
             days=days,
             due_date=due_date,
-            milling=False,
+            milling=milling_default,
             packaging=False,
             shipment=False,
             paid=False,
@@ -895,7 +898,7 @@ def dashboard():
             filepaths=";".join(filepaths),
             facade_type=facade_type,
             area=area,
-            thickness=thickness if facade_type != "смешанный" else None,
+            thickness=thickness if facade_type not in ("смешанный", "покраска") else None,
             mixed_facade_data=mixed_facade_data if facade_type == "смешанный" else None
         )
 
@@ -1215,7 +1218,7 @@ def pricelist_export_pdf():
 
     grid_cats = [
         ("плоский", "Плоские"), ("фрезерованный", "Фрезерованные"), ("шпон", "Шпон"),
-        ("услуги по покраске", "Услуги по покраске"), ("Доп услуги", "Доп услуги")
+        ("покраска", "Покраска"), ("услуги по покраске", "Услуги по покраске"), ("Доп услуги", "Доп услуги")
     ]
     for cat, label in grid_cats:
         cat_items = [p for p in items if p.category == cat]
@@ -1465,8 +1468,8 @@ def api_invoice_by_number(invoice_number):
     if not inv or not inv.counterparty:
         return jsonify({"ok": False, "error": "Счёт не найден"}), 404
 
-    # Фасады из номенклатуры счёта (только плоский, фрезерованный, шпон)
-    facade_types = ["плоский", "фрезерованный", "шпон"]
+    # Фасады из номенклатуры счёта (плоский, фрезерованный, шпон, покраска)
+    facade_types = ["плоский", "фрезерованный", "шпон", "покраска"]
     aggregated = {}  # (type, thickness) -> area
     for it in inv.items:
         cat = None
@@ -1479,7 +1482,8 @@ def api_invoice_by_number(invoice_number):
         qty = float(it.quantity or 0)
         if qty <= 0:
             continue
-        th = float(it.thickness) if it.thickness is not None else None
+        # Покраска: толщина не имеет значения — агрегируем только по типу
+        th = None if cat == "покраска" else (float(it.thickness) if it.thickness is not None else None)
         key = (cat, th)
         aggregated[key] = aggregated.get(key, 0) + qty
 
@@ -1619,12 +1623,14 @@ def render_admin_dashboard():
         
         due_date = datetime.now(timezone.utc).date() + timedelta(days=days)
 
+        # Покраска минует фрезеровку — сразу на шлифовку
+        milling_default = (facade_type == "покраска")
         order = Order(
             order_id=order_id,
             client=client,
             days=days,
             due_date=due_date,
-            milling=False,
+            milling=milling_default,
             packaging=False,
             shipment=False,
             paid=False,

@@ -311,11 +311,12 @@
         <option value="фрезерованный">Фрезерованный</option>
         <option value="плоский">Плоский</option>
         <option value="шпон">Шпон</option>
+        <option value="покраска">Покраска</option>
         <option value="смешанный">Смешанный</option>
       </select>
       <div id="area-single-wrap">
         <input type="number" name="area" id="area_input" placeholder="Площадь (м²)" step="0.01">
-        <input type="number" name="thickness" id="thickness_input" placeholder="Толщина (мм)" step="1" min="1" style="margin-top:8px; width:120px;">
+        <span id="thickness-wrap"><input type="number" name="thickness" id="thickness_input" placeholder="Толщина (мм)" step="1" min="1" style="margin-top:8px; width:120px;"></span>
       </div>
       <div id="mixed-facade-wrap" style="display:none; margin-top:12px;">
         <p style="font-weight:500; margin-bottom:8px;">Типы фасадов, площадь и толщина:</p>
@@ -495,6 +496,7 @@
               <option value="плоский">Плоские</option>
               <option value="фрезерованный">Фрезерованные</option>
               <option value="шпон">Шпон</option>
+              <option value="покраска">Покраска</option>
               <option value="услуги по покраске">Услуги по покраске</option>
               <option value="Доп услуги">Доп услуги</option>
             </select>
@@ -509,7 +511,7 @@
         </form>
       </div>
       {% if price_list %}
-      {% set grid_cats = [('плоский', 'Плоские'), ('фрезерованный', 'Фрезерованные'), ('шпон', 'Шпон'), ('услуги по покраске', 'Услуги по покраске'), ('Доп услуги', 'Доп услуги')] %}
+      {% set grid_cats = [('плоский', 'Плоские'), ('фрезерованный', 'Фрезерованные'), ('шпон', 'Шпон'), ('покраска', 'Покраска'), ('услуги по покраске', 'Услуги по покраске'), ('Доп услуги', 'Доп услуги')] %}
       <div id="pricelist-list" class="pricelist-grid">
       {% for cat, label in grid_cats %}
       {% set cat_items = price_list|selectattr('category', 'equalto', cat)|list %}
@@ -705,27 +707,49 @@
         mixedWrap.style.display = isMixed ? 'block' : 'none';
         areaInput.required = !isMixed;
         if (isMixed && mixedTbody.querySelectorAll('tr').length === 0) addMixedRow();
+        else updateThicknessVisibility();
+      }
+      function updateThicknessVisibility() {
+        var wrap = document.getElementById('thickness-wrap');
+        if (wrap) wrap.style.display = (facadeSelect.value === 'покраска') ? 'none' : '';
       }
       function addMixedRow() {
         var tr = document.createElement('tr');
-        tr.innerHTML = '<td><select class="mixed-type"><option value="плоский">Плоский</option><option value="фрезерованный">Фрезерованный</option><option value="шпон">Шпон</option></select></td>' +
+        tr.innerHTML = '<td><select class="mixed-type"><option value="плоский">Плоский</option><option value="фрезерованный">Фрезерованный</option><option value="шпон">Шпон</option><option value="покраска">Покраска</option></select></td>' +
           '<td><input type="number" class="mixed-area" step="0.01" min="0.01" placeholder="м²" style="width:70px;"></td>' +
-          '<td><input type="number" class="mixed-thickness" step="1" min="1" placeholder="мм" style="width:60px;"></td>' +
+          '<td class="mixed-thickness-cell"><input type="number" class="mixed-thickness" step="1" min="1" placeholder="мм" style="width:60px;"></td>' +
           '<td><button type="button" class="mixed-remove">✕</button></td>';
         tr.querySelector('.mixed-remove').onclick = function() { tr.remove(); };
+        tr.querySelector('.mixed-type').onchange = function() { setMixedRowThicknessVisibility(tr); };
         mixedTbody.appendChild(tr);
+      }
+      function setMixedRowThicknessVisibility(tr) {
+        var typeSel = tr.querySelector('.mixed-type');
+        var thCell = tr.querySelector('.mixed-thickness-cell');
+        var thInp = tr.querySelector('.mixed-thickness');
+        if (!typeSel || !thCell) return;
+        if (typeSel.value === 'покраска') {
+          thCell.style.display = 'none';
+          if (thInp) thInp.value = '';
+        } else {
+          thCell.style.display = '';
+        }
       }
       addRowBtn.addEventListener('click', addMixedRow);
       facadeSelect.addEventListener('change', toggleMixed);
+      var thicknessWrap = document.getElementById('thickness-wrap');
+      if (thicknessWrap) updateThicknessVisibility();
       window.applyFacadeFromInvoice = function(items) {
         if (!items || items.length === 0) return;
         if (items.length === 1) {
           facadeSelect.value = items[0].type;
           areaInput.value = items[0].area;
-          document.getElementById('thickness_input').value = items[0].thickness || '';
+          var thInp = document.getElementById('thickness_input');
+          if (thInp) thInp.value = (items[0].type === 'покраска') ? '' : (items[0].thickness || '');
           areaSingleWrap.style.display = 'block';
           mixedWrap.style.display = 'none';
           areaInput.required = true;
+          updateThicknessVisibility();
         } else {
           facadeSelect.value = 'смешанный';
           areaSingleWrap.style.display = 'none';
@@ -735,9 +759,11 @@
           var totalArea = 0;
           items.forEach(function(it) {
             var tr = document.createElement('tr');
-            var thVal = it.thickness != null ? it.thickness : '';
-            tr.innerHTML = '<td><select class="mixed-type"><option value="плоский"' + (it.type === 'плоский' ? ' selected' : '') + '>Плоский</option><option value="фрезерованный"' + (it.type === 'фрезерованный' ? ' selected' : '') + '>Фрезерованный</option><option value="шпон"' + (it.type === 'шпон' ? ' selected' : '') + '>Шпон</option></select></td><td><input type="number" class="mixed-area" step="0.01" min="0.01" value="' + it.area + '" style="width:70px;"></td><td><input type="number" class="mixed-thickness" step="1" min="1" placeholder="мм" value="' + thVal + '" style="width:60px;"></td><td><button type="button" class="mixed-remove">✕</button></td>';
+            var thVal = (it.type === 'покраска') ? '' : (it.thickness != null ? it.thickness : '');
+            var thDisplay = (it.type === 'покраска') ? 'none' : '';
+            tr.innerHTML = '<td><select class="mixed-type"><option value="плоский"' + (it.type === 'плоский' ? ' selected' : '') + '>Плоский</option><option value="фрезерованный"' + (it.type === 'фрезерованный' ? ' selected' : '') + '>Фрезерованный</option><option value="шпон"' + (it.type === 'шпон' ? ' selected' : '') + '>Шпон</option><option value="покраска"' + (it.type === 'покраска' ? ' selected' : '') + '>Покраска</option></select></td><td><input type="number" class="mixed-area" step="0.01" min="0.01" value="' + it.area + '" style="width:70px;"></td><td class="mixed-thickness-cell" style="display:' + thDisplay + '"><input type="number" class="mixed-thickness" step="1" min="1" placeholder="мм" value="' + thVal + '" style="width:60px;"></td><td><button type="button" class="mixed-remove">✕</button></td>';
             tr.querySelector('.mixed-remove').onclick = function() { tr.remove(); };
+            tr.querySelector('.mixed-type').onchange = function() { setMixedRowThicknessVisibility(tr); };
             mixedTbody.appendChild(tr);
             totalArea += it.area;
           });
@@ -756,7 +782,7 @@
               if (!typeSel || !areaInp) return;
               var a = parseFloat(areaInp.value) || 0;
               if (a <= 0) return;
-              var th = parseFloat(thInp && thInp.value ? thInp.value : 0) || null;
+              var th = (typeSel.value === 'покраска') ? null : (parseFloat(thInp && thInp.value ? thInp.value : 0) || null);
               items.push({type: typeSel.value, area: a, thickness: th});
               totalArea += a;
             });

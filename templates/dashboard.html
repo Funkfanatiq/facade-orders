@@ -248,6 +248,8 @@
     .pricelist-drag-handle { cursor: grab; color: #999; padding: 0 6px; user-select: none; }
     .pricelist-drag-handle:active { cursor: grabbing; }
   </style>
+  <script>window.PUSH_ENABLED = {{ 'true' if current_user.role != 'Менеджер' else 'false' }};</script>
+  <script src="{{ url_for('static', filename='push-init.js') }}"></script>
 </head>
 <body>
   <div class="top-bar">

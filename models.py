@@ -45,6 +45,22 @@ class Order(db.Model):
 
     counterparty = db.relationship('Counterparty', backref=db.backref('orders', lazy=True))
 
+    # Push: когда отправляли уведомления по сроку (пора в работу / срочный)
+    last_push_work_at = db.Column(db.DateTime, nullable=True)
+    last_push_urgent_at = db.Column(db.DateTime, nullable=True)
+
+
+class PushSubscription(db.Model):
+    """Подписка пользователя на Web Push (уведомления о заказах)."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    endpoint = db.Column(db.Text, nullable=False)
+    p256dh = db.Column(db.Text, nullable=False)
+    auth = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=db.func.now())
+    user = db.relationship('User', backref=db.backref('push_subscriptions', lazy=True))
+
+
 class Employee(db.Model):
     """Модель сотрудника"""
     id = db.Column(db.Integer, primary_key=True)

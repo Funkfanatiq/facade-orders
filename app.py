@@ -14,7 +14,8 @@ import io
 from dotenv import load_dotenv
 
 # Константы приложения
-URGENT_DAYS_THRESHOLD = 3  # Дней до срока для срочных заказов
+URGENT_DAYS_THRESHOLD = 3   # Дней до срока — срочный заказ
+WORK_DAYS_THRESHOLD = 7     # Дней до срока — пора брать в работу
 SHEET_AREA = 2.75 * 2.05  # Площадь листа в м² (5.6375)
 MAX_FILE_SIZE = 16 * 1024 * 1024  # Максимальный размер файла (16MB)
 EXPIRED_DAYS = 180  # Дней для удаления старых заказов
@@ -39,7 +40,7 @@ app.config.from_object('config.Config')
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=2, x_host=2, x_proto=2)
 
 # Импортируем модели после инициализации Flask
-from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty, PriceListItem, Invoice, InvoiceItem, Payment, PRICE_CATEGORIES
+from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty, PriceListItem, Invoice, InvoiceItem, Payment, PRICE_CATEGORIES, PushSubscription
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -298,6 +299,33 @@ def _ensure_mixed_facade_data_column():
         print(f"⚠️ Проверка mixed_facade_data: {e}")
 
 
+def _ensure_push_columns():
+    """Добавляет last_push_work_at, last_push_urgent_at в order для отслеживания отправленных push."""
+    try:
+        with db.engine.connect() as conn:
+            backend = db.engine.url.get_backend_name()
+            if backend == "postgresql":
+                for col, col_type in [("last_push_work_at", "TIMESTAMP"), ("last_push_urgent_at", "TIMESTAMP")]:
+                    r = conn.execute(text(f"""
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'order' AND column_name = '{col}'
+                    """))
+                    if r.fetchone() is None:
+                        conn.execute(text(f'ALTER TABLE "order" ADD COLUMN {col} {col_type}'))
+                        conn.commit()
+                        print(f"✅ Колонка order.{col} добавлена")
+            else:
+                r = conn.execute(text('PRAGMA table_info("order")'))
+                cols = [row[1] for row in r.fetchall()]
+                for col in ("last_push_work_at", "last_push_urgent_at"):
+                    if col not in cols:
+                        conn.execute(text(f'ALTER TABLE "order" ADD COLUMN {col} DATETIME'))
+                        conn.commit()
+                        print(f"✅ Колонка order.{col} добавлена")
+    except Exception as e:
+        print(f"⚠️ Проверка push колонок в order: {e}")
+
+
 # Инициализация базы данных при запуске (с retry для Render PostgreSQL)
 def init_database():
     """Инициализация базы данных. Retry при SSL/сетевых ошибках (Render)."""
@@ -325,6 +353,7 @@ def init_database():
                 _ensure_mixed_facade_data_column()
                 _ensure_invoice_item_thickness_column()
                 _ensure_email_extra_columns()
+                _ensure_push_columns()
 
                 # Проверяем количество пользователей
                 user_count = User.query.count()
@@ -559,6 +588,78 @@ def is_urgent_order(order):
     """
     days_left = (order.due_date - datetime.now(timezone.utc).date()).days
     return days_left <= URGENT_DAYS_THRESHOLD
+
+
+def is_work_due_order(order):
+    """Пора брать в работу: осталось от URGENT+1 до WORK_DAYS_THRESHOLD дней."""
+    days_left = (order.due_date - datetime.now(timezone.utc).date()).days
+    return URGENT_DAYS_THRESHOLD < days_left <= WORK_DAYS_THRESHOLD
+
+
+def _send_push_to_non_managers(title, body, url="/"):
+    """Отправить Web Push всем пользователям кроме Менеджера."""
+    vapid_private = os.environ.get("VAPID_PRIVATE_KEY")
+    if not vapid_private:
+        return
+    try:
+        from pywebpush import webpush, WebPushException
+        users = User.query.filter(User.role != "Менеджер").all()
+        for user in users:
+            for sub in user.push_subscriptions:
+                try:
+                    webpush(
+                        subscription_info={
+                            "endpoint": sub.endpoint,
+                            "keys": {"p256dh": sub.p256dh, "auth": sub.auth}
+                        },
+                        data=json.dumps({"title": title, "body": body, "url": url}),
+                        vapid_private_key=vapid_private,
+                        vapid_claims={"sub": "mailto:support@example.com"}
+                    )
+                except WebPushException as e:
+                    if hasattr(e, "response") and e.response and e.response.status_code in (404, 410):
+                        db.session.delete(sub)
+                    # остальные ошибки — пропускаем, не удаляем подписку
+        db.session.commit()
+    except Exception as ex:
+        db.session.rollback()
+        print(f"⚠️ Push send error: {ex}")
+
+
+def _check_orders_push_by_due_date():
+    """
+    Проверяет заказы по сроку и отправляет push:
+    - «Заказ №X пора брать в работу» — когда days_left в диапазоне (URGENT, WORK]
+    - «Заказ №X срочный» — когда days_left <= URGENT
+    Уведомления только для неотгруженных заказов, по одному разу на зону.
+    """
+    today = datetime.now(timezone.utc).date()
+    orders = Order.query.filter(Order.shipment == False).all()
+    for order in orders:
+        days_left = (order.due_date - today).days
+        now_dt = datetime.now(timezone.utc)
+        if days_left <= URGENT_DAYS_THRESHOLD:
+            if order.last_push_urgent_at is None:
+                _send_push_to_non_managers(
+                    f"Заказ №{order.order_id} срочный",
+                    f"Осталось {days_left} дн. до срока",
+                    "/"
+                )
+                order.last_push_urgent_at = now_dt
+        elif days_left <= WORK_DAYS_THRESHOLD:
+            if order.last_push_work_at is None:
+                _send_push_to_non_managers(
+                    f"Заказ №{order.order_id} пора брать в работу",
+                    f"Осталось {days_left} дн. до срока",
+                    "/"
+                )
+                order.last_push_work_at = now_dt
+    try:
+        db.session.commit()
+    except Exception as ex:
+        db.session.rollback()
+        print(f"⚠️ Push check error: {ex}")
+
 
 def generate_daily_pool():
     """
@@ -2364,10 +2465,65 @@ def mail_fetch():
         return jsonify({"success": True, "count": 0})
 
 
+# === Web Push: уведомления о заказах по сроку ===
+
+@app.route("/api/push/vapid-public")
+@login_required
+def push_vapid_public():
+    """Публичный VAPID ключ для подписки на push."""
+    pub = os.environ.get("VAPID_PUBLIC_KEY")
+    if not pub:
+        return jsonify({"error": "Push не настроен"}), 503
+    return jsonify({"publicKey": pub})
+
+
+@app.route("/api/push/subscribe", methods=["POST"])
+@login_required
+def push_subscribe():
+    """Сохранить подписку на push для текущего пользователя."""
+    data = request.get_json()
+    if not data or not data.get("endpoint") or not data.get("keys"):
+        return jsonify({"success": False, "error": "Нет endpoint или keys"}), 400
+    keys = data["keys"]
+    if not keys.get("p256dh") or not keys.get("auth"):
+        return jsonify({"success": False, "error": "Нет p256dh или auth"}), 400
+    try:
+        sub = PushSubscription(
+            user_id=current_user.id,
+            endpoint=data["endpoint"],
+            p256dh=keys["p256dh"],
+            auth=keys["auth"]
+        )
+        db.session.add(sub)
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/internal/push-check")
+def push_check():
+    """Cron: проверка заказов по сроку и отправка push. Вызывать раз в час (Render Cron)."""
+    key = request.args.get("key")
+    expected = os.environ.get("CRON_PUSH_KEY")
+    if expected and key != expected:
+        return "Forbidden", 403
+    with app.app_context():
+        _check_orders_push_by_due_date()
+    return "ok", 200
+
+
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     """Маршрут для обслуживания загруженных файлов"""
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+@app.route("/sw.js")
+def service_worker():
+    """Service Worker для Web Push — должен быть в корне для scope /."""
+    return send_from_directory(app.static_folder, "sw.js", mimetype="application/javascript")
+
 
 @app.route("/health")
 def health():

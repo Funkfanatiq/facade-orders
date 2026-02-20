@@ -254,6 +254,11 @@
             background: #45A049;
             color: #fff;
         }
+        .btn-torg12.clicked {
+            background: #9e9e9e !important;
+            color: #fff;
+            cursor: default;
+        }
         .delete-btn {
             background: none;
             color: #6e6e73;
@@ -495,7 +500,7 @@
                                 </td>
                                 <td>
                                     {% if invoice_for_order.get(o.id) %}
-                                    <a href="{{ url_for('invoice_torg12', invoice_id=invoice_for_order[o.id].id) }}" class="btn-torg12" download title="ТОРГ-12 к счёту {{ o.order_id }}">ТОРГ-12</a>
+                                    <a href="{{ url_for('invoice_torg12', invoice_id=invoice_for_order[o.id].id) }}" class="btn-torg12 js-torg12-btn" data-invoice-id="{{ invoice_for_order[o.id].id }}" download title="ТОРГ-12 к счёту {{ o.order_id }}">ТОРГ-12</a>
                                     {% endif %}
                                     <button onclick="deleteOrder({{ o.id }})" class="delete-btn">🗑️</button>
                                 </td>
@@ -593,6 +598,26 @@
             });
         });
         
+        // ТОРГ-12: при клике кнопка становится серой
+        document.querySelectorAll('.js-torg12-btn').forEach(btn => {
+            const invId = btn.getAttribute('data-invoice-id');
+            try {
+                const clicked = JSON.parse(sessionStorage.getItem('torg12_clicked') || '[]');
+                if (clicked.includes(Number(invId))) btn.classList.add('clicked');
+            } catch (_) {}
+            btn.addEventListener('click', function() {
+                this.classList.add('clicked');
+                try {
+                    const clicked = JSON.parse(sessionStorage.getItem('torg12_clicked') || '[]');
+                    const id = Number(this.getAttribute('data-invoice-id'));
+                    if (!clicked.includes(id)) {
+                        clicked.push(id);
+                        sessionStorage.setItem('torg12_clicked', JSON.stringify(clicked));
+                    }
+                } catch (_) {}
+            });
+        });
+
         // Удаление заказа
         function deleteOrder(orderId) {
             if (confirm('Вы уверены, что хотите удалить этот заказ?')) {

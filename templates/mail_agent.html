@@ -3,546 +3,280 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Почтовый Агент - Менеджер</title>
+    <title>Почта | Панель менеджера</title>
     <style>
-        /* macOS-like styles */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #f9f9f9;
             color: #333;
             min-height: 100vh;
-            display: flex;
-            flex-direction: column;
         }
-        
-        .container {
-            max-width: 1400px;
-            margin: 20px auto;
-            padding: 20px;
-            flex-grow: 1;
-        }
-        
         .top-bar {
-            background: white;
-            border-radius: 8px;
-            padding: 15px 25px;
-            margin-bottom: 20px;
+            background: #fff;
+            padding: 14px 20px;
+            border-bottom: 1px solid #ddd;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            border: 1px solid #ddd;
         }
-        
-        .top-bar h1 {
-            margin: 0;
-            font-size: 26px;
-            font-weight: 700;
-            color: #2c3e50;
+        .top-bar h1 { font-size: 20px; font-weight: 600; color: #333; }
+        .top-bar .nav-links { display: flex; gap: 12px; align-items: center; font-size: 14px; }
+        .top-bar a { color: #4CAF50; text-decoration: none; }
+        .top-bar a:hover { text-decoration: underline; }
+        .mail-layout {
+            display: grid;
+            grid-template-columns: 220px 1fr;
+            min-height: calc(100vh - 60px);
+        }
+        .sidebar {
+            background: #fff;
+            border-right: 1px solid #ddd;
+            padding: 16px 0;
+        }
+        .btn-write {
+            margin: 0 12px 16px;
+            padding: 10px 16px;
+            background: #4CAF50;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            display: block;
+            width: calc(100% - 24px);
+            text-align: center;
+            text-decoration: none;
+        }
+        .btn-write:hover { background: #45A049; }
+        .folder-list { list-style: none; }
+        .folder-item {
             display: flex;
             align-items: center;
-            gap: 10px;
-        }
-        
-        .top-bar .nav-link {
+            padding: 10px 16px;
+            font-size: 14px;
             color: #333;
             text-decoration: none;
-            font-weight: 600;
-            padding: 8px 15px;
-            border-radius: 8px;
-            transition: background-color 0.2s ease, color 0.2s ease;
+            border-left: 3px solid transparent;
+            transition: background 0.2s;
         }
-        
-        .top-bar .nav-link:hover {
-            background-color: rgba(76, 175, 80, 0.15);
+        .folder-item:hover { background: #f2f2f2; }
+        .folder-item.active {
+            background: #e8f5e9;
+            border-left-color: #4CAF50;
+            font-weight: 500;
         }
-        
-        .top-bar .user-info {
-            font-size: 15px;
+        .folder-item .icon { margin-right: 10px; font-size: 16px; }
+        .folder-item .count {
+            margin-left: auto;
+            background: #e0e0e0;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+        }
+        .folder-item.active .count { background: #4CAF50; color: #fff; }
+        .main-area {
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+        }
+        .toolbar {
+            padding: 12px 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .toolbar input[type="search"] {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            width: 240px;
+        }
+        .toolbar .btn-tool {
+            padding: 6px 12px;
+            font-size: 13px;
+            border: 1px solid #ddd;
+            background: #fff;
+            border-radius: 6px;
+            cursor: pointer;
             color: #555;
         }
-        
-        .top-bar .user-info a {
-            color: #333;
-            text-decoration: none;
-            margin-left: 8px;
-        }
-        
-        .top-bar .user-info a:hover {
-            text-decoration: underline;
-        }
-        
-        .mail-interface {
-            display: grid;
-            grid-template-columns: 250px 1fr;
-            gap: 20px;
-            height: calc(100vh - 200px);
-        }
-        
-        .sidebar {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            border: 1px solid #ddd;
-        }
-        
-        .sidebar h3 {
-            color: #2c3e50;
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #eee;
-        }
-        
-        .mail-folder {
-            display: flex;
-            align-items: center;
-            padding: 12px 15px;
-            margin: 5px 0;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-decoration: none;
-            color: #333;
-        }
-        
-        .mail-folder:hover {
-            background: rgba(0, 122, 255, 0.1);
-            transform: translateX(5px);
-        }
-        
-        .mail-folder.active {
-            background: linear-gradient(135deg, #007aff, #0056b3);
-            color: white;
-            box-shadow: 0 4px 15px rgba(0, 122, 255, 0.3);
-        }
-        
-        .mail-folder .icon {
-            margin-right: 12px;
-            font-size: 16px;
-        }
-        
-        .mail-folder .count {
-            margin-left: auto;
-            background: rgba(255, 255, 255, 0.2);
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        
-        .mail-folder.active .count {
-            background: rgba(255, 255, 255, 0.3);
-        }
-        
-        .main-content {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            border: 1px solid #ddd;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .mail-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #eee;
-        }
-        
-        .mail-header h2 {
-            color: #2c3e50;
-            font-size: 22px;
-            font-weight: 600;
-        }
-        
-        .btn {
-            display: inline-block;
-            padding: 10px 18px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            border: none;
-            font-size: 15px;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #007aff, #0056b3);
-            color: white;
-            box-shadow: 0 4px 15px rgba(0, 122, 255, 0.3);
-        }
-        
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #0056b3, #003f7f);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(0, 122, 255, 0.4);
-        }
-        
-        .btn-success {
-            background: linear-gradient(135deg, #28a745, #218838);
-            color: white;
-            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
-        }
-        
-        .btn-success:hover {
-            background: linear-gradient(135deg, #218838, #1e7e34);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
-        }
-        
+        .toolbar .btn-tool:hover { background: #f5f5f5; }
+        .toolbar .btn-tool:disabled { opacity: 0.5; cursor: not-allowed; }
         .email-list {
             flex: 1;
             overflow-y: auto;
         }
-        
-        .email-item {
+        .email-row {
             display: flex;
             align-items: center;
-            padding: 15px;
-            margin: 5px 0;
-            border-radius: 10px;
+            padding: 12px 20px;
+            border-bottom: 1px solid #f0f0f0;
             cursor: pointer;
-            transition: all 0.2s ease;
-            border: 1px solid transparent;
+            transition: background 0.15s;
         }
-        
-        .email-item:hover {
-            background: rgba(0, 122, 255, 0.05);
-            border-color: rgba(0, 122, 255, 0.2);
-            transform: translateY(-1px);
-        }
-        
-        .email-item.unread {
-            background: rgba(0, 122, 255, 0.08);
-            border-color: rgba(0, 122, 255, 0.3);
-            font-weight: 600;
-        }
-        
+        .email-row:hover { background: #fafafa; }
+        .email-row.unread { background: #f0f8f0; font-weight: 500; }
+        .email-row input { margin-right: 12px; }
         .email-avatar {
-            width: 40px;
-            height: 40px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #007aff, #0056b3);
+            background: #757575;
+            color: #fff;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
             font-weight: 600;
-            margin-right: 15px;
-            flex-shrink: 0;
-        }
-        
-        .email-content {
-            flex: 1;
-            min-width: 0;
-        }
-        
-        .email-sender {
-            font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 4px;
-        }
-        
-        .email-subject {
-            color: #555;
-            margin-bottom: 4px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        
-        .email-preview {
-            color: #777;
             font-size: 14px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        
-        .email-meta {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            margin-left: 15px;
+            margin-right: 12px;
             flex-shrink: 0;
         }
-        
-        .email-date {
-            color: #777;
-            font-size: 12px;
-            margin-bottom: 5px;
-        }
-        
-        .email-actions {
-            display: flex;
-            gap: 5px;
-        }
-        
-        .btn-small {
-            padding: 5px 10px;
-            font-size: 12px;
-            border-radius: 5px;
-        }
-        
-        .btn-info {
-            background: linear-gradient(135deg, #17a2b8, #138496);
-            color: white;
-        }
-        
-        .btn-info:hover {
-            background: linear-gradient(135deg, #138496, #0f6674);
-        }
-        
-        .flash-message {
-            background-color: #e9f7ef;
-            color: #28a745;
-            padding: 12px 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            text-align: center;
-            font-weight: 500;
-            border: 1px solid #28a745;
-        }
-        
-        .flash-message.error {
-            background-color: #f8d7da;
-            color: #dc3545;
-            border-color: #dc3545;
-        }
-        
+        .email-content { flex: 1; min-width: 0; }
+        .email-sender { font-size: 14px; color: #333; margin-bottom: 2px; }
+        .email-subject { font-size: 13px; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .email-preview { font-size: 12px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .email-meta { margin-left: 12px; flex-shrink: 0; text-align: right; }
+        .email-date { font-size: 12px; color: #888; }
         .empty-state {
-            text-align: center;
             padding: 60px 20px;
-            color: #777;
+            text-align: center;
+            color: #888;
         }
-        
-        .empty-state .icon {
-            font-size: 48px;
-            margin-bottom: 20px;
-            opacity: 0.5;
+        .empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+        .flash-message {
+            padding: 12px 20px;
+            margin: 0 20px 16px;
+            border-radius: 8px;
+            font-size: 14px;
         }
-        
-        .empty-state h3 {
-            color: #555;
-            margin-bottom: 10px;
-        }
-        
+        .flash-message.success { background: #d4edda; color: #155724; }
+        .flash-message.error { background: #f8d7da; color: #721c24; }
         @media (max-width: 768px) {
-            .mail-interface {
-                grid-template-columns: 1fr;
-                height: auto;
-            }
-            
-            .sidebar {
-                order: 2;
-            }
-            
-            .main-content {
-                order: 1;
-            }
+            .mail-layout { grid-template-columns: 1fr; }
+            .sidebar { border-right: none; border-bottom: 1px solid #ddd; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="top-bar">
-            <h1>📮 Почтовый Агент</h1>
-            <div class="user-info">
-                {{ current_user.username }} ({{ current_user.role }}) | 
-                <a href="{{ url_for('dashboard') }}" class="nav-link">← Назад к заказам</a>
-                <a href="{{ url_for('logout') }}" class="nav-link">Выход</a>
-            </div>
-        </div>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="flash-message {{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <div class="mail-interface">
-            <div class="sidebar">
-                <h3>📁 Папки</h3>
-                
-                <a href="{{ url_for('mail_agent', view='inbox') }}" 
-                   class="mail-folder {% if view_type == 'inbox' %}active{% endif %}">
-                    <span class="icon">📥</span>
-                    <span>Входящие</span>
-                    {% if unread_count > 0 %}
-                        <span class="count">{{ unread_count }}</span>
-                    {% endif %}
-                </a>
-                
-                <a href="{{ url_for('mail_agent', view='sent') }}" 
-                   class="mail-folder {% if view_type == 'sent' %}active{% endif %}">
-                    <span class="icon">📤</span>
-                    <span>Отправленные</span>
-                    <span class="count">{{ total_sent }}</span>
-                </a>
-                
-                <a href="{{ url_for('compose_email') }}" class="mail-folder">
-                    <span class="icon">✏️</span>
-                    <span>Написать</span>
-                </a>
-            </div>
-
-            <div class="main-content">
-                <div class="mail-header">
-                    <h2>
-                        {% if view_type == 'inbox' %}
-                            📥 Входящие ({{ total_inbox }})
-                        {% elif view_type == 'sent' %}
-                            📤 Отправленные ({{ total_sent }})
-                        {% endif %}
-                    </h2>
-                    
-                    <div style="font-size: 14px; color: #666;">
-                        Автоматическое обновление каждые 30 секунд
-                    </div>
-                </div>
-
-                <div class="email-list">
-                    {% if view_type == 'inbox' %}
-                        {% for email in inbox_emails %}
-                            <div class="email-item {% if not email.is_read %}unread{% endif %}" 
-                                 onclick="location.href='{{ url_for('read_email', email_id=email.id) }}'">
-                                <div class="email-avatar">
-                                    {{ email.sender[0].upper() }}
-                                </div>
-                                <div class="email-content">
-                                    <div class="email-sender">{{ email.sender }}</div>
-                                    <div class="email-subject">{{ email.subject }}</div>
-                                    <div class="email-preview">
-                                        {{ email.body[:100] if email.body else 'Нет текста' }}...
-                                    </div>
-                                </div>
-                                <div class="email-meta">
-                                    <div class="email-date">
-                                        {{ email.created_at.strftime('%d.%m.%Y %H:%M') }}
-                                    </div>
-                                    <div class="email-actions">
-                                        <a href="{{ url_for('reply_email', email_id=email.id) }}" 
-                                           class="btn btn-info btn-small" 
-                                           onclick="event.stopPropagation();">
-                                            Ответить
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                        {% else %}
-                            <div class="empty-state">
-                                <div class="icon">📭</div>
-                                <h3>Нет входящих писем</h3>
-                                <p>Письма загружаются автоматически каждые 30 секунд</p>
-                            </div>
-                        {% endfor %}
-                    
-                    {% elif view_type == 'sent' %}
-                        {% for email in sent_emails %}
-                            <div class="email-item" 
-                                 onclick="location.href='{{ url_for('read_email', email_id=email.id) }}'">
-                                <div class="email-avatar">
-                                    {{ email.recipient[0].upper() }}
-                                </div>
-                                <div class="email-content">
-                                    <div class="email-sender">{{ email.recipient }}</div>
-                                    <div class="email-subject">{{ email.subject }}</div>
-                                    <div class="email-preview">
-                                        {{ email.body[:100] if email.body else 'Нет текста' }}...
-                                    </div>
-                                </div>
-                                <div class="email-meta">
-                                    <div class="email-date">
-                                        {{ email.sent_at.strftime('%d.%m.%Y %H:%M') if email.sent_at else 'Не отправлено' }}
-                                    </div>
-                                </div>
-                            </div>
-                        {% else %}
-                            <div class="empty-state">
-                                <div class="icon">📤</div>
-                                <h3>Нет отправленных писем</h3>
-                                <p>Создайте новое письмо, нажав "Написать"</p>
-                            </div>
-                        {% endfor %}
-                    {% endif %}
-                </div>
-            </div>
+    <div class="top-bar">
+        <h1>📮 Почта</h1>
+        <div class="nav-links">
+            {{ current_user.username }} ({{ current_user.role }}) |
+            <a href="{{ url_for('dashboard') }}" target="_top">← К заказам</a>
+            <a href="{{ url_for('logout') }}" target="_top">Выход</a>
         </div>
     </div>
 
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="flash-message {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="mail-layout">
+        <aside class="sidebar">
+            <a href="{{ url_for('compose_email') }}" class="btn-write">✏️ Написать</a>
+            <ul class="folder-list">
+                <a href="{{ url_for('mail_agent', view='inbox') }}" class="folder-item {% if view_type == 'inbox' %}active{% endif %}">
+                    <span class="icon">📥</span> Входящие
+                    {% if unread_count > 0 %}<span class="count">{{ unread_count }}</span>{% endif %}
+                </a>
+                <a href="{{ url_for('mail_agent', view='sent') }}" class="folder-item {% if view_type == 'sent' %}active{% endif %}">
+                    <span class="icon">📤</span> Отправленные
+                    {% if counts.sent > 0 %}<span class="count">{{ counts.sent }}</span>{% endif %}
+                </a>
+                <a href="{{ url_for('mail_agent', view='drafts') }}" class="folder-item {% if view_type == 'drafts' %}active{% endif %}">
+                    <span class="icon">📝</span> Черновики
+                    {% if counts.drafts > 0 %}<span class="count">{{ counts.drafts }}</span>{% endif %}
+                </a>
+                <a href="{{ url_for('mail_agent', view='archive') }}" class="folder-item {% if view_type == 'archive' %}active{% endif %}">
+                    <span class="icon">📦</span> Архив
+                    {% if counts.archive > 0 %}<span class="count">{{ counts.archive }}</span>{% endif %}
+                </a>
+                <a href="{{ url_for('mail_agent', view='spam') }}" class="folder-item {% if view_type == 'spam' %}active{% endif %}">
+                    <span class="icon">🚫</span> Спам
+                    {% if counts.spam > 0 %}<span class="count">{{ counts.spam }}</span>{% endif %}
+                </a>
+                <a href="{{ url_for('mail_agent', view='trash') }}" class="folder-item {% if view_type == 'trash' %}active{% endif %}">
+                    <span class="icon">🗑️</span> Корзина
+                    {% if counts.trash > 0 %}<span class="count">{{ counts.trash }}</span>{% endif %}
+                </a>
+            </ul>
+        </aside>
+
+        <main class="main-area">
+            <div class="toolbar">
+                <input type="search" id="mail-search" placeholder="Поиск по письмам...">
+                <button type="button" class="btn-tool" onclick="mailAction('mark_read')" id="btn-mark-read">Прочитать</button>
+                <button type="button" class="btn-tool" onclick="mailAction('mark_unread')">Не прочитано</button>
+                <button type="button" class="btn-tool" onclick="mailAction('archive')">В архив</button>
+                <button type="button" class="btn-tool" onclick="mailAction('spam')">В спам</button>
+                <button type="button" class="btn-tool" onclick="mailAction('trash')">В корзину</button>
+                {% if view_type == 'trash' %}
+                <button type="button" class="btn-tool" onclick="mailAction('restore')">Восстановить</button>
+                <button type="button" class="btn-tool" onclick="mailAction('delete')" style="color:#c62828;">Удалить</button>
+                {% endif %}
+            </div>
+
+            <div class="email-list">
+                {% if emails %}
+                    {% for email in emails %}
+                    <div class="email-row {% if not email.is_read and not email.is_sent %}unread{% endif %}" data-id="{{ email.id }}" onclick="goToEmail({{ email.id }}, event)">
+                        <input type="checkbox" onclick="event.stopPropagation();" data-email-id="{{ email.id }}">
+                        <div class="email-avatar">{{ (email.sender or email.recipient or '?')[0].upper() }}</div>
+                        <div class="email-content">
+                            <div class="email-sender">{{ email.sender or email.recipient or '—' }}</div>
+                            <div class="email-subject">{{ email.subject or '(без темы)' }}</div>
+                            <div class="email-preview">{{ (email.body or '')[:80] }}{% if email.body and email.body|length > 80 %}...{% endif %}</div>
+                        </div>
+                        <div class="email-meta">
+                            <div class="email-date">{{ (email.sent_at or email.created_at).strftime('%d.%m.%Y %H:%M') if email.sent_at or email.created_at else '' }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state">
+                        <div class="icon">{% if view_type == 'inbox' %}📭{% elif view_type == 'sent' %}📤{% elif view_type == 'drafts' %}📝{% elif view_type == 'trash' %}🗑️{% else %}📁{% endif %}</div>
+                        <p>{% if view_type == 'inbox' %}Нет входящих писем{% elif view_type == 'sent' %}Нет отправленных{% elif view_type == 'drafts' %}Нет черновиков{% elif view_type == 'archive' %}Архив пуст{% elif view_type == 'spam' %}Спам пуст{% elif view_type == 'trash' %}Корзина пуста{% endif %}</p>
+                        <p style="margin-top:8px; font-size:13px;">{% if view_type == 'inbox' %}Письма загружаются автоматически{% else %}Нажмите «Написать» чтобы создать письмо{% endif %}</p>
+                    </div>
+                {% endif %}
+            </div>
+        </main>
+    </div>
+
     <script>
-        // Автоматическое обновление каждые 60 секунд (снижение нагрузки на сервер)
-        setInterval(function() {
-            fetch('/mail/fetch')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success && data.count > 0) {
-                        // Показываем уведомление о новых письмах
-                        showNotification(`📧 Получено ${data.count} новых писем`);
-                        // Перезагружаем страницу только если есть новые письма
-                        setTimeout(() => location.reload(), 1000);
-                    }
-                })
-                .catch(error => {
-                    console.error('Ошибка при получении писем:', error);
-                });
-        }, 60000); // 60 секунд
-
-        function showNotification(message) {
-            // Создаем уведомление
-            const notification = document.createElement('div');
-            notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: #28a745;
-                color: white;
-                padding: 15px 20px;
-                border-radius: 8px;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-                z-index: 1000;
-                font-weight: 600;
-                animation: slideIn 0.3s ease;
-            `;
-            notification.textContent = message;
-            document.body.appendChild(notification);
-
-            // Удаляем уведомление через 3 секунды
-            setTimeout(() => {
-                notification.style.animation = 'slideOut 0.3s ease';
-                setTimeout(() => notification.remove(), 300);
-            }, 3000);
+        function goToEmail(id, ev) {
+            if (ev.target.tagName === 'INPUT') return;
+            window.location.href = '{{ url_for("read_email", email_id=0) }}'.replace('0', id);
         }
-
-        // Добавляем CSS анимации
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes slideIn {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-            @keyframes slideOut {
-                from { transform: translateX(0); opacity: 1; }
-                to { transform: translateX(100%); opacity: 0; }
-            }
-        `;
-        document.head.appendChild(style);
+        function getSelectedIds() {
+            return Array.from(document.querySelectorAll('input[data-email-id]:checked')).map(function(cb) { return parseInt(cb.getAttribute('data-email-id'), 10); });
+        }
+        function mailAction(action) {
+            var ids = getSelectedIds();
+            if (ids.length === 0) { alert('Выберите письма'); return; }
+            fetch('/mail/action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: action, email_ids: ids })
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.success) location.reload();
+                else alert(data.message || 'Ошибка');
+            }).catch(function() { alert('Ошибка'); });
+        }
+        setInterval(function() {
+            fetch('/mail/fetch').then(function(r) { return r.json(); }).then(function(data) {
+                if (data.success && data.count > 0) location.reload();
+            }).catch(function(){});
+        }, 60000);
     </script>
 </body>
 </html>

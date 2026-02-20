@@ -236,6 +236,43 @@ def _ensure_invoice_item_thickness_column():
         print(f"⚠️ Проверка invoice_item.thickness: {e}")
 
 
+def _ensure_email_extra_columns():
+    """Добавляет is_draft и folder в email, если колонок нет."""
+    try:
+        with db.engine.connect() as conn:
+            backend = db.engine.url.get_backend_name()
+            table = "email" if backend == "postgresql" else "email"
+            if backend == "postgresql":
+                r = conn.execute(text("""
+                    SELECT 1 FROM information_schema.tables WHERE table_name = 'email'
+                """))
+                if r.fetchone() is None:
+                    return
+                for col, col_type in [("is_draft", "BOOLEAN DEFAULT FALSE"), ("folder", "VARCHAR(16) DEFAULT 'inbox'")]:
+                    r2 = conn.execute(text(f"""
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'email' AND column_name = '{col}'
+                    """))
+                    if r2.fetchone() is None:
+                        conn.execute(text(f'ALTER TABLE email ADD COLUMN {col} {col_type}'))
+                        conn.commit()
+                        print(f"✅ Колонка email.{col} добавлена")
+            else:
+                r = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='email'"))
+                if r.fetchone() is None:
+                    return
+                r = conn.execute(text('PRAGMA table_info(email)'))
+                cols = [row[1] for row in r.fetchall()] if r else []
+                if "is_draft" not in cols:
+                    conn.execute(text('ALTER TABLE email ADD COLUMN is_draft BOOLEAN DEFAULT 0'))
+                    conn.commit()
+                if "folder" not in cols:
+                    conn.execute(text("ALTER TABLE email ADD COLUMN folder VARCHAR(16) DEFAULT 'inbox'"))
+                    conn.commit()
+    except Exception as e:
+        print(f"⚠️ Проверка email колонок: {e}")
+
+
 def _ensure_mixed_facade_data_column():
     """Добавляет колонку mixed_facade_data в order для смешанных фасадов."""
     try:
@@ -287,6 +324,7 @@ def init_database():
                 _ensure_thickness_column()
                 _ensure_mixed_facade_data_column()
                 _ensure_invoice_item_thickness_column()
+                _ensure_email_extra_columns()
 
                 # Проверяем количество пользователей
                 user_count = User.query.count()
@@ -2033,6 +2071,183 @@ def polishing_station():
                           packaging_orders=packaging_orders,
                           polishing_urgency=polishing_urgency,
                           packaging_urgency=packaging_urgency)
+
+@app.route("/mail")
+@app.route("/mail/<view>")
+@login_required
+def mail_agent(view=None):
+    """Почтовый агент — структура как Mail.ru: Входящие, Отправленные, Черновики, Архив, Спам, Корзина."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    view_type = view if view in ("inbox", "sent", "drafts", "archive", "spam", "trash") else "inbox"
+    emails = []
+    unread_count = 0
+    counts = {"inbox": 0, "sent": 0, "drafts": 0, "archive": 0, "spam": 0, "trash": 0}
+    try:
+        from models import Email
+        unread_count = Email.query.filter(
+            Email.folder == "inbox",
+            Email.is_draft == False,
+            Email.is_sent == False,
+            Email.is_read == False
+        ).count()
+        f_inbox = db.or_(Email.folder == "inbox", Email.folder.is_(None))
+        counts["inbox"] = Email.query.filter(f_inbox, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), Email.is_sent == False).count()
+        counts["sent"] = Email.query.filter(Email.is_sent == True, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), db.or_(Email.folder != "trash", Email.folder.is_(None))).count()
+        counts["drafts"] = Email.query.filter(Email.is_draft == True).count()
+        counts["archive"] = Email.query.filter(Email.folder == "archive").count()
+        counts["spam"] = Email.query.filter(Email.folder == "spam").count()
+        counts["trash"] = Email.query.filter(Email.folder == "trash").count()
+        unread_count = Email.query.filter(f_inbox, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), Email.is_sent == False, Email.is_read == False).count()
+        if view_type == "inbox":
+            emails = Email.query.filter(f_inbox, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), Email.is_sent == False
+                ).order_by(Email.created_at.desc()).all()
+        elif view_type == "sent":
+            emails = Email.query.filter(Email.is_sent == True, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), db.or_(Email.folder != "trash", Email.folder.is_(None))
+                ).order_by(Email.created_at.desc()).all()
+        elif view_type == "drafts":
+            emails = Email.query.filter(Email.is_draft == True).order_by(Email.created_at.desc()).all()
+        elif view_type == "archive":
+            emails = Email.query.filter(Email.folder == "archive"
+                ).order_by(Email.created_at.desc()).all()
+        elif view_type == "spam":
+            emails = Email.query.filter(Email.folder == "spam").order_by(Email.created_at.desc()).all()
+        elif view_type == "trash":
+            emails = Email.query.filter(Email.folder == "trash").order_by(Email.created_at.desc()).all()
+    except Exception:
+        pass
+    return render_template("mail_agent.html", view_type=view_type, emails=emails, unread_count=unread_count, counts=counts)
+
+
+@app.route("/mail/compose", methods=["GET", "POST"])
+@login_required
+def compose_email():
+    """Написать письмо. Доступ: Менеджер, Админ."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    if request.method == "POST":
+        to_email = request.form.get("to_email", "").strip()
+        subject = request.form.get("subject", "").strip()
+        body = request.form.get("body", "").strip()
+        if to_email and subject and body:
+            try:
+                import smtplib
+                from email.mime.text import MIMEText
+                from email.mime.multipart import MIMEMultipart
+                user = os.environ.get("MAIL_USERNAME")
+                passwd = os.environ.get("MAIL_PASSWORD")
+                if user and passwd:
+                    msg = MIMEMultipart()
+                    msg["From"] = user
+                    msg["To"] = to_email
+                    msg["Subject"] = subject
+                    msg.attach(MIMEText(body, "plain", "utf-8"))
+                    with smtplib.SMTP("smtp.mail.ru", 587) as s:
+                        s.starttls()
+                        s.login(user, passwd)
+                        s.sendmail(user, to_email, msg.as_string())
+                    try:
+                        from models import Email
+                        e = Email(sender=user, recipient=to_email, subject=subject, body=body, is_sent=True, folder='sent', sent_at=datetime.now(timezone.utc))
+                        db.session.add(e)
+                        db.session.commit()
+                    except Exception:
+                        pass
+                    flash("Письмо отправлено", "success")
+                else:
+                    flash("Почта не настроена (MAIL_USERNAME, MAIL_PASSWORD)", "error")
+                return redirect(url_for("mail_agent"))
+            except Exception as ex:
+                flash(f"Ошибка отправки: {ex}", "error")
+        else:
+            flash("Заполните все поля", "error")
+    return render_template("email_compose.html")
+
+
+@app.route("/mail/read/<int:email_id>")
+@login_required
+def read_email(email_id):
+    """Прочитать письмо."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    try:
+        from models import Email
+        email = Email.query.get_or_404(email_id)
+        if not email.is_read and not email.is_sent:
+            email.is_read = True
+            db.session.commit()
+        return render_template("email_view.html", email=email)
+    except Exception:
+        return redirect(url_for("mail_agent"))
+
+
+@app.route("/mail/reply/<int:email_id>", methods=["GET", "POST"])
+@login_required
+def reply_email(email_id):
+    """Ответ на письмо."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    try:
+        from models import Email
+        original_email = Email.query.get_or_404(email_id)
+        return render_template("email_reply.html", original_email=original_email)
+    except Exception:
+        return redirect(url_for("mail_agent"))
+
+
+@app.route("/mail/action", methods=["POST"])
+@login_required
+def mail_action():
+    """Действия с письмами: move (spam/archive/trash), mark_read, delete."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return jsonify({"success": False}), 403
+    try:
+        from models import Email
+        data = request.get_json() or {}
+        action = data.get("action")
+        email_ids = data.get("email_ids", [])
+        if not email_ids:
+            return jsonify({"success": False, "message": "Нет писем"}), 400
+        emails = Email.query.filter(Email.id.in_(email_ids)).all()
+        for e in emails:
+            if action == "spam":
+                e.folder = "spam"
+            elif action == "archive":
+                e.folder = "archive"
+            elif action == "trash":
+                e.folder = "trash"
+            elif action == "restore":
+                e.folder = "inbox" if not e.is_sent else "sent"
+            elif action == "mark_read":
+                e.is_read = True
+            elif action == "mark_unread":
+                e.is_read = False
+            elif action == "delete":
+                db.session.delete(e)
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as ex:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(ex)}), 500
+
+
+@app.route("/mail/fetch")
+@login_required
+def mail_fetch():
+    """API: загрузка новых писем (для polling)."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return jsonify({"success": False}), 403
+    try:
+        from models import Email
+        count = Email.query.filter_by(is_sent=False, is_read=False).count()
+        return jsonify({"success": True, "count": count})
+    except Exception:
+        return jsonify({"success": True, "count": 0})
+
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):

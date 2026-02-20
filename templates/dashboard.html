@@ -288,6 +288,7 @@
     <button type="button" class="tab {{ 'active' if active_tab == 'counterparties' else '' }}" onclick="showManagerTab('counterparties')">👥 Контрагенты</button>
     <button type="button" class="tab {{ 'active' if active_tab == 'debts' else '' }}" onclick="showManagerTab('debts')">💸 Долги</button>
     <button type="button" class="tab {{ 'active' if active_tab == 'pricelist' else '' }}" onclick="showManagerTab('pricelist')">💰 Прайс лист</button>
+    <button type="button" class="tab {{ 'active' if active_tab == 'mail' else '' }}" onclick="showManagerTab('mail')">📮 Почта</button>
   </div>
   <div id="manager-orders-tab" class="tab-content {{ 'active' if active_tab == 'orders' else '' }}">
   {% endif %}
@@ -478,6 +479,9 @@
       <p style="color: #666; margin: 12px 0 0;">Нет контрагентов с задолженностью.</p>
       {% endif %}
     </div>
+  </div>
+  <div id="manager-mail-tab" class="tab-content {{ 'active' if active_tab == 'mail' else '' }}" style="padding:0;">
+    <iframe src="{{ url_for('mail_agent') }}" style="width:100%; height:calc(100vh - 220px); min-height:500px; border:none; border-radius:8px;"></iframe>
   </div>
   <div id="manager-pricelist-tab" class="tab-content {{ 'active' if active_tab == 'pricelist' else '' }}">
     <div class="form-box">

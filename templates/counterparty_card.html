@@ -37,6 +37,7 @@
     .btn-remove-item:hover { background: #d0d0d0; }
     .btn-torg12 { display: inline-block; padding: 4px 10px; background: #4CAF50; color: #fff; border-radius: 4px; font-size: 12px; text-decoration: none; margin-left: 6px; }
     .btn-torg12:hover { background: #45A049; color: #fff; }
+    .btn-torg12.clicked { background: #9e9e9e !important; color: #fff; cursor: default; }
     .invoice-modal-actions { display: flex; gap: 12px; margin-top: 20px; }
     .invoice-modal-actions button { padding: 10px 24px; border-radius: 8px; font-size: 15px; cursor: pointer; border: none; }
     .btn-create-invoice { background: #4CAF50; color: #fff; }
@@ -332,7 +333,7 @@
           <td class="amount {% if inv.balance > 0 %}balance-owed{% elif inv.balance < 0 %}balance-over{% else %}balance-zero{% endif %}">{{ "%.2f"|format(inv.balance)|replace(".", ",") }} ₽</td>
           <td>
             <a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" download="invoice_{{ inv.invoice_number }}.pdf" class="btn-torg12">PDF</a>
-            <a href="{{ url_for('invoice_torg12', invoice_id=inv.id) }}" class="btn-torg12">ТОРГ-12</a>
+            <a href="{{ url_for('invoice_torg12', invoice_id=inv.id) }}" class="btn-torg12 js-torg12-btn" data-invoice-id="{{ inv.id }}">ТОРГ-12</a>
             {% if current_user.role in ["Менеджер", "Админ"] %}
             <button type="button" class="btn-remove-item" onclick="deleteInvoice({{ inv.id }})" title="Удалить">🗑️</button>
             {% endif %}
@@ -409,6 +410,26 @@
         else alert(data.error || 'Ошибка');
       }).catch(function() { alert('Ошибка'); });
     }
+
+    // ТОРГ-12: при клике кнопка становится серой
+    document.querySelectorAll('.js-torg12-btn').forEach(function(btn) {
+      var invId = btn.getAttribute('data-invoice-id');
+      try {
+        var clicked = JSON.parse(sessionStorage.getItem('torg12_clicked') || '[]');
+        if (clicked.indexOf(Number(invId)) >= 0) btn.classList.add('clicked');
+      } catch (_) {}
+      btn.addEventListener('click', function() {
+        this.classList.add('clicked');
+        try {
+          var clicked = JSON.parse(sessionStorage.getItem('torg12_clicked') || '[]');
+          var id = Number(this.getAttribute('data-invoice-id'));
+          if (clicked.indexOf(id) < 0) {
+            clicked.push(id);
+            sessionStorage.setItem('torg12_clicked', JSON.stringify(clicked));
+          }
+        } catch (_) {}
+      });
+    });
 
     function openInvoiceModal() {
       invoiceItems = [];

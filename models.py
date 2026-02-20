@@ -157,6 +157,27 @@ class Payment(db.Model):
     invoice = db.relationship('Invoice', backref=db.backref('payments', lazy=True))
 
 
+class Email(db.Model):
+    """Письмо для почтового агента (структура как Mail.ru: папки Входящие, Отправленные, Черновики, Архив, Спам, Корзина)."""
+    id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.String(255), nullable=True)  # ID из IMAP
+    sender = db.Column(db.String(512), nullable=True)
+    recipient = db.Column(db.String(512), nullable=True)
+    subject = db.Column(db.String(1024), nullable=True)
+    body = db.Column(db.Text, nullable=True)
+    html_body = db.Column(db.Text, nullable=True)
+    is_sent = db.Column(db.Boolean, default=False)
+    is_read = db.Column(db.Boolean, default=False)
+    is_draft = db.Column(db.Boolean, default=False)      # Черновик
+    folder = db.Column(db.String(16), default='inbox')   # inbox, sent, archive, spam, trash
+    created_at = db.Column(db.DateTime, default=db.func.now())
+    sent_at = db.Column(db.DateTime, nullable=True)
+    reply_to_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=True)
+    reply_to = db.relationship('Email', remote_side=[id], backref='replies')
+
+    __table_args__ = (db.Index('idx_email_message_id', 'message_id'), db.Index('idx_email_folder', 'folder'),)
+
+
 class InvoiceItem(db.Model):
     """Позиция счёта (из прайса или вручную)."""
     id = db.Column(db.Integer, primary_key=True)

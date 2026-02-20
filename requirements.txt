@@ -11,4 +11,4 @@ reportlab==4.2.0
 openpyxl>=3.1.0
 num2words==0.5.13
 pywebpush==1.14.0
-py-vapid==1.7.4
+py-vapid==1.9.4

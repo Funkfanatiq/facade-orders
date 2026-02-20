@@ -2235,16 +2235,131 @@ def mail_action():
         return jsonify({"success": False, "message": str(ex)}), 500
 
 
+def _fetch_emails_from_imap():
+    """Подключается к Mail.ru IMAP, загружает новые письма в БД. Возвращает (success, new_count, error_msg)."""
+    user = os.environ.get("MAIL_USERNAME")
+    passwd = os.environ.get("MAIL_PASSWORD")
+    if not user or not passwd:
+        return False, 0, "Почта не настроена (MAIL_USERNAME, MAIL_PASSWORD)"
+    try:
+        import imaplib
+        import email as emaillib
+        from email.header import decode_header
+        
+        def _decode_mime(s):
+            if not s: return ""
+            decoded = []
+            for part, enc in decode_header(s):
+                if isinstance(part, bytes):
+                    decoded.append(part.decode(enc or "utf-8", errors="replace"))
+                else:
+                    decoded.append(str(part))
+            return " ".join(decoded)
+        
+        def _get_body(msg):
+            body, html = "", ""
+            if msg.is_multipart():
+                for part in msg.walk():
+                    ct = part.get_content_type()
+                    if ct == "text/plain":
+                        try: body = part.get_payload(decode=True).decode(part.get_content_charset() or "utf-8", errors="replace")
+                        except: body = str(part.get_payload())
+                    elif ct == "text/html":
+                        try: html = part.get_payload(decode=True).decode(part.get_content_charset() or "utf-8", errors="replace")
+                        except: html = str(part.get_payload())
+            else:
+                try: body = msg.get_payload(decode=True).decode(msg.get_content_charset() or "utf-8", errors="replace")
+                except: body = str(msg.get_payload()) if msg.get_payload() else ""
+            return body or html[:5000] if html else "", html or None
+        
+        from models import Email
+        imap = imaplib.IMAP4_SSL("imap.mail.ru", 993)
+        imap.login(user, passwd)
+        imap.select("INBOX")
+        status, data = imap.uid("search", None, "ALL")
+        if status != "OK" or not data or not data[0]:
+            imap.logout()
+            return True, 0, None
+        uids = data[0].split()
+        rows = db.session.query(Email.message_id).filter(Email.message_id.isnot(None)).all()
+        existing = {str(r[0]) for r in rows if r[0]}
+        new_count = 0
+        for uid in reversed(uids[-50:]):  # последние 50 писем
+            uid_s = uid.decode() if isinstance(uid, bytes) else str(uid)
+            if uid_s in existing:
+                continue
+            status, msg_data = imap.uid("fetch", uid, "(RFC822)")
+            if status != "OK" or not msg_data:
+                continue
+            raw = msg_data[0][1]
+            try:
+                msg = emaillib.message_from_bytes(raw)
+                subject = _decode_mime(msg.get("Subject", ""))
+                from_addr = _decode_mime(msg.get("From", ""))
+                date_str = msg.get("Date")
+                body, html_body = _get_body(msg)
+                created = datetime.now(timezone.utc)
+                if date_str:
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        created = parsedate_to_datetime(date_str)
+                        if created.tzinfo is None:
+                            created = created.replace(tzinfo=timezone.utc)
+                    except Exception:
+                        pass
+                e = Email(
+                    message_id=uid_s,
+                    sender=from_addr[:512] if from_addr else "",
+                    subject=(subject or "(без темы)")[:1024],
+                    body=body[:50000] if body else "",
+                    html_body=html_body[:100000] if html_body else None,
+                    is_sent=False,
+                    folder="inbox",
+                    created_at=created,
+                )
+                db.session.add(e)
+                new_count += 1
+                existing.add(uid_s)
+            except Exception as ex:
+                print(f"⚠️ Ошибка парсинга письма {uid_s}: {ex}")
+        db.session.commit()
+        imap.logout()
+        return True, new_count, None
+    except Exception as ex:
+        db.session.rollback()
+        return False, 0, str(ex)
+
+
 @app.route("/mail/fetch")
 @login_required
 def mail_fetch():
-    """API: загрузка новых писем (для polling)."""
+    """API: загрузка новых писем. ?sync=1 — подключиться к IMAP и загрузить; иначе — только счётчик."""
     if current_user.role not in ["Менеджер", "Админ"]:
         return jsonify({"success": False}), 403
+    if request.args.get("sync") == "1":
+        ok, new_count, err = _fetch_emails_from_imap()
+        if not ok:
+            return jsonify({"success": False, "message": err or "Ошибка загрузки"}), 500
+        try:
+            from models import Email
+            unread = Email.query.filter(
+                db.or_(Email.folder == "inbox", Email.folder.is_(None)),
+                Email.is_sent == False,
+                db.or_(Email.is_draft == False, Email.is_draft.is_(None)),
+                Email.is_read == False
+            ).count()
+            return jsonify({"success": True, "count": unread, "new_fetched": new_count})
+        except Exception:
+            return jsonify({"success": True, "count": 0, "new_fetched": new_count})
     try:
         from models import Email
-        count = Email.query.filter_by(is_sent=False, is_read=False).count()
-        return jsonify({"success": True, "count": count})
+        unread = Email.query.filter(
+            db.or_(Email.folder == "inbox", Email.folder.is_(None)),
+            Email.is_sent == False,
+            db.or_(Email.is_draft == False, Email.is_draft.is_(None)),
+            Email.is_read == False
+        ).count()
+        return jsonify({"success": True, "count": unread})
     except Exception:
         return jsonify({"success": True, "count": 0})
 

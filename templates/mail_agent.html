@@ -163,7 +163,7 @@
     </style>
 </head>
 <body>
-    <div class="top-bar">
+    <div class="top-bar" id="mail-top-bar">
         <h1>📮 Почта</h1>
         <div class="nav-links">
             {{ current_user.username }} ({{ current_user.role }}) |
@@ -171,6 +171,12 @@
             <a href="{{ url_for('logout') }}" target="_top">Выход</a>
         </div>
     </div>
+    <script>
+        if (window.self !== window.top) {
+            document.getElementById('mail-top-bar').style.display = 'none';
+            document.querySelector('.mail-layout').style.minHeight = '100vh';
+        }
+    </script>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -213,6 +219,7 @@
 
         <main class="main-area">
             <div class="toolbar">
+                <button type="button" class="btn-tool" id="btn-fetch" onclick="fetchEmails()" style="background:#4CAF50; color:#fff; border-color:#4CAF50;">📥 Получить письма</button>
                 <input type="search" id="mail-search" placeholder="Поиск по письмам...">
                 <button type="button" class="btn-tool" onclick="mailAction('mark_read')" id="btn-mark-read">Прочитать</button>
                 <button type="button" class="btn-tool" onclick="mailAction('mark_unread')">Не прочитано</button>
@@ -271,6 +278,23 @@
                 if (data.success) location.reload();
                 else alert(data.message || 'Ошибка');
             }).catch(function() { alert('Ошибка'); });
+        }
+        function fetchEmails() {
+            var btn = document.getElementById('btn-fetch');
+            btn.disabled = true;
+            btn.textContent = 'Загрузка...';
+            fetch('/mail/fetch?sync=1').then(function(r) { return r.json(); }).then(function(data) {
+                btn.disabled = false;
+                btn.textContent = '📥 Получить письма';
+                if (data.success) {
+                    if (data.new_fetched > 0) location.reload();
+                    else alert('Новых писем нет');
+                } else alert(data.message || 'Ошибка загрузки');
+            }).catch(function(err) {
+                btn.disabled = false;
+                btn.textContent = '📥 Получить письма';
+                alert('Ошибка: ' + (err.message || 'нет связи'));
+            });
         }
         setInterval(function() {
             fetch('/mail/fetch').then(function(r) { return r.json(); }).then(function(data) {

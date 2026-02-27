@@ -247,16 +247,11 @@
     .btn-edit-pricelist:hover { background: #45A049; }
     .pricelist-drag-handle { cursor: grab; color: #999; padding: 0 6px; user-select: none; }
     .pricelist-drag-handle:active { cursor: grabbing; }
-    .mail-new-sticker {
-      display: none; position: fixed; top: 16px; right: 16px; z-index: 9999;
-      background: #4CAF50; color: #fff; padding: 14px 20px; font-size: 15px; font-weight: 500;
-      border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.25);
-      animation: sticker-pop 0.35s ease;
-    }
-    .mail-new-sticker.visible { display: block; }
-    @keyframes sticker-pop {
-      from { opacity: 0; transform: scale(0.8) translate(10px, -10px); }
-      to { opacity: 1; transform: scale(1) translate(0, 0); }
+    .mail-tab-badge {
+      display: inline-block; min-width: 20px; height: 20px; padding: 0 6px;
+      background: #e53935; color: #fff; font-size: 12px; font-weight: 600;
+      border-radius: 10px; line-height: 20px; text-align: center;
+      margin-left: 6px; vertical-align: middle;
     }
   </style>
   <script>window.PUSH_ENABLED = {{ 'true' if current_user.role != 'Менеджер' else 'false' }};</script>
@@ -264,11 +259,6 @@
   <script src="{{ url_for('static', filename='push-init.js') }}"></script>
 </head>
 <body>
-  {% if current_user.role == "Менеджер" %}
-  <div id="mail-new-banner" class="mail-new-sticker">
-    <span id="mail-new-text">📧 Получено новое письмо</span>
-  </div>
-  {% endif %}
   <div class="top-bar">
     {% if current_user.role == "Производство" %}
     <h2>🏭 Рабочее место производства</h2>
@@ -307,7 +297,7 @@
     <button type="button" class="tab {{ 'active' if active_tab == 'counterparties' else '' }}" data-tab="counterparties" onclick="showManagerTab('counterparties', event)">👥 Контрагенты</button>
     <button type="button" class="tab {{ 'active' if active_tab == 'debts' else '' }}" data-tab="debts" onclick="showManagerTab('debts', event)">💸 Долги</button>
     <button type="button" class="tab {{ 'active' if active_tab == 'pricelist' else '' }}" data-tab="pricelist" onclick="showManagerTab('pricelist', event)">💰 Прайс лист</button>
-    <button type="button" class="tab {{ 'active' if active_tab == 'mail' else '' }}" data-tab="mail" onclick="showManagerTab('mail', event)">📮 Почта</button>
+    <button type="button" class="tab {{ 'active' if active_tab == 'mail' else '' }}" data-tab="mail" onclick="showManagerTab('mail', event)">📮 Почта<span id="mail-unread-badge" class="mail-tab-badge" {% if not mail_unread_count %}style="display:none;"{% endif %}>{{ mail_unread_count or 0 }}</span></button>
   </div>
   <div id="manager-orders-tab" class="tab-content {{ 'active' if active_tab == 'orders' else '' }}">
   {% endif %}
@@ -947,23 +937,24 @@
     (function mailNewPoll() {
       var lastInbox = 0;
       try { lastInbox = parseInt(localStorage.getItem('mail_inbox_count') || '0', 10); } catch(e) {}
+      function updateBadge(count) {
+        var badge = document.getElementById('mail-unread-badge');
+        if (!badge) return;
+        badge.textContent = count;
+        badge.style.display = count > 0 ? 'inline-block' : 'none';
+      }
       function run() {
         fetch('/mail/fetch?sync=1').then(function() {
           setTimeout(function() {
             fetch('/mail/fetch').then(function(r) { return r.json(); }).then(function(d) {
               if (!d.success) return;
               var c = d.inbox_count || 0;
+              var unread = d.count || 0;
               try { localStorage.setItem('mail_inbox_count', String(c)); } catch(e) {}
-              if (c > lastInbox && lastInbox > 0) {
+              updateBadge(unread);
+              if (c > lastInbox && lastInbox > 0 && 'Notification' in window && Notification.permission === 'granted') {
                 var n = c - lastInbox;
-                var msg = n === 1 ? 'Получено новое письмо' : 'Получено ' + n + ' новых писем';
-                document.getElementById('mail-new-text').textContent = '📧 ' + msg;
-                var sticker = document.getElementById('mail-new-banner');
-                sticker.classList.add('visible');
-                setTimeout(function() { sticker.classList.remove('visible'); }, 5000);
-                if ('Notification' in window && Notification.permission === 'granted') {
-                  new Notification('📧 ' + msg, { tag: 'mail-new' });
-                }
+                new Notification('📧 ' + (n === 1 ? 'Получено новое письмо' : 'Получено ' + n + ' новых писем'), { tag: 'mail-new' });
               }
               lastInbox = c;
             }).catch(function(){});

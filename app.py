@@ -28,8 +28,9 @@ CLEANUP_BATCH_SIZE = 10  # Количество заказов для удале
 # Разрешенные типы файлов для загрузки
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'gif', 'txt', 'doc', 'docx', 'xls', 'xlsx', 'dwg', 'dxf'}
 
-# Загружаем переменные окружения из .env файла
-load_dotenv()
+# Загружаем переменные окружения из .env (в папке приложения)
+_base = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(_base, ".env"))
 
 app = Flask(__name__)
 app.config.from_object('config.Config')
@@ -2374,7 +2375,7 @@ def _fetch_emails_from_imap():
             return body or html[:5000] if html else "", html or None
         
         from models import Email
-        imap = imaplib.IMAP4_SSL("imap.mail.ru", 993)
+        imap = imaplib.IMAP4_SSL("imap.mail.ru", 993, timeout=30)
         imap.login(user, passwd)
         imap.select("INBOX")
         status, data = imap.uid("search", None, "ALL")
@@ -2385,7 +2386,7 @@ def _fetch_emails_from_imap():
         rows = db.session.query(Email.message_id).filter(Email.message_id.isnot(None)).all()
         existing = {str(r[0]) for r in rows if r[0]}
         new_count = 0
-        for uid in reversed(uids[-50:]):  # последние 50 писем
+        for uid in reversed(uids[-20:]):  # последние 20 писем (для быстрой загрузки)
             uid_s = uid.decode() if isinstance(uid, bytes) else str(uid)
             if uid_s in existing:
                 continue
@@ -2428,19 +2429,66 @@ def _fetch_emails_from_imap():
         return True, new_count, None
     except Exception as ex:
         db.session.rollback()
-        return False, 0, str(ex)
+        err_msg = str(ex)
+        print(f"⚠️ IMAP ошибка: {err_msg}")
+        return False, 0, err_msg
 
+
+@app.route("/mail/test-connection")
+@login_required
+def mail_test_connection():
+    """Проверка подключения к почте — показывает реальную ошибку для диагностики."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return jsonify({"success": False}), 403
+    user = os.environ.get("MAIL_USERNAME")
+    passwd = os.environ.get("MAIL_PASSWORD")
+    if not user or not passwd:
+        return jsonify({"success": False, "error": "MAIL_USERNAME или MAIL_PASSWORD не заданы в настройках"}), 200
+    try:
+        import imaplib
+        imap = imaplib.IMAP4_SSL("imap.mail.ru", 993, timeout=15)
+        imap.login(user, passwd)
+        imap.select("INBOX")
+        imap.logout()
+        return jsonify({"success": True, "message": "Подключение успешно"}), 200
+    except Exception as ex:
+        err = str(ex)
+        print(f"⚠️ Mail test: {err}")
+        return jsonify({"success": False, "error": err}), 200
+
+
+_mail_sync_in_progress = False
 
 @app.route("/mail/fetch")
 @login_required
 def mail_fetch():
-    """API: загрузка новых писем. ?sync=1 — подключиться к IMAP и загрузить; иначе — только счётчик."""
+    """API: загрузка новых писем. ?sync=1 — IMAP в фоне (сразу возвращает ответ); иначе — только счётчик."""
     if current_user.role not in ["Менеджер", "Админ"]:
         return jsonify({"success": False}), 403
     if request.args.get("sync") == "1":
-        ok, new_count, err = _fetch_emails_from_imap()
-        if not ok:
-            return jsonify({"success": False, "message": err or "Ошибка загрузки"}), 500
+        global _mail_sync_in_progress
+        if _mail_sync_in_progress:
+            try:
+                from models import Email
+                unread = Email.query.filter(
+                    db.or_(Email.folder == "inbox", Email.folder.is_(None)),
+                    Email.is_sent == False,
+                    db.or_(Email.is_draft == False, Email.is_draft.is_(None)),
+                    Email.is_read == False
+                ).count()
+                return jsonify({"success": True, "count": unread, "new_fetched": 0, "status": "fetching"})
+            except Exception:
+                return jsonify({"success": True, "count": 0, "new_fetched": 0, "status": "fetching"})
+        def _run_sync():
+            global _mail_sync_in_progress
+            _mail_sync_in_progress = True
+            try:
+                with app.app_context():
+                    _fetch_emails_from_imap()
+            finally:
+                _mail_sync_in_progress = False
+        import threading
+        threading.Thread(target=_run_sync, daemon=True).start()
         try:
             from models import Email
             unread = Email.query.filter(
@@ -2449,9 +2497,9 @@ def mail_fetch():
                 db.or_(Email.is_draft == False, Email.is_draft.is_(None)),
                 Email.is_read == False
             ).count()
-            return jsonify({"success": True, "count": unread, "new_fetched": new_count})
+            return jsonify({"success": True, "count": unread, "new_fetched": 0, "status": "started"})
         except Exception:
-            return jsonify({"success": True, "count": 0, "new_fetched": new_count})
+            return jsonify({"success": True, "count": 0, "new_fetched": 0, "status": "started"})
     try:
         from models import Email
         unread = Email.query.filter(

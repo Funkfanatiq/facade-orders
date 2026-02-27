@@ -148,6 +148,14 @@
             color: #888;
         }
         .empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+        .toast-new-mail {
+            position: fixed; bottom: 20px; right: 20px;
+            background: #4CAF50; color: #fff; padding: 14px 20px;
+            border-radius: 8px; font-size: 15px; font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 9999;
+            animation: toast-in 0.3s ease;
+        }
+        @keyframes toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .flash-message {
             padding: 12px 20px;
             margin: 0 20px 16px;
@@ -186,7 +194,7 @@
         {% endif %}
     {% endwith %}
 
-    <div class="mail-layout">
+    <div class="mail-layout" data-view="{{ view_type }}">
         <aside class="sidebar">
             <a href="{{ url_for('compose_email') }}" class="btn-write">✏️ Написать</a>
             <ul class="folder-list">
@@ -220,6 +228,10 @@
         <main class="main-area">
             <div class="toolbar">
                 <input type="search" id="mail-search" placeholder="Поиск по письмам...">
+                <button type="button" class="btn-tool" onclick="checkMail()" id="btn-check-mail">🔄 Проверить</button>
+                {% if view_type == 'inbox' %}
+                <button type="button" class="btn-tool" onclick="requestNotifyPermission()" id="btn-notify" title="Уведомления о новых письмах">🔔 Уведомления</button>
+                {% endif %}
                 <button type="button" class="btn-tool" onclick="mailAction('mark_read')" id="btn-mark-read">Прочитать</button>
                 <button type="button" class="btn-tool" onclick="mailAction('mark_unread')">Не прочитано</button>
                 <button type="button" class="btn-tool" onclick="mailAction('archive')">В архив</button>
@@ -278,14 +290,66 @@
                 else alert(data.message || 'Ошибка');
             }).catch(function() { alert('Ошибка'); });
         }
-        // Авто-проверка: IMAP в фоне каждую минуту, через 15 сек перезагрузка
-        setInterval(function() {
-            fetch('/mail/fetch?sync=1').then(function(r) { return r.json(); }).then(function(data) {
-                if (data.success && (data.status === 'started' || data.status === 'fetching')) {
-                    setTimeout(function() { location.reload(); }, 15000);
+        var _reloadScheduled = false;
+        var _viewType = document.querySelector('.mail-layout') && document.querySelector('.mail-layout').getAttribute('data-view') || '';
+        function scheduleReload() {
+            if (_reloadScheduled) return;
+            _reloadScheduled = true;
+            var count = document.querySelectorAll('.email-row').length;
+            if (_viewType === 'inbox') {
+                try { sessionStorage.setItem('mail_inbox_before', String(count)); } catch(e) {}
+            }
+            setTimeout(function() { location.reload(); }, 6000);
+        }
+        (function checkNewMailNotification() {
+            try {
+                var before = sessionStorage.getItem('mail_inbox_before');
+                sessionStorage.removeItem('mail_inbox_before');
+                if (before === null || _viewType !== 'inbox') return;
+                var now = document.querySelectorAll('.email-row').length;
+                var prev = parseInt(before, 10) || 0;
+                if (now > prev) {
+                    var n = now - prev;
+                    var msg = n === 1 ? 'Получено новое письмо' : 'Получено ' + n + ' новых писем';
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new Notification('📧 ' + msg, { body: 'Почта', tag: 'mail-new' });
+                    }
+                    var toast = document.createElement('div');
+                    toast.className = 'toast-new-mail';
+                    toast.textContent = '📧 ' + msg;
+                    document.body.appendChild(toast);
+                    setTimeout(function() { toast.remove(); }, 4000);
                 }
+            } catch(e) {}
+        })();
+        function requestNotifyPermission() {
+            if (!('Notification' in window)) return;
+            if (Notification.permission === 'granted') { alert('Уведомления включены'); return; }
+            Notification.requestPermission().then(function(p) {
+                alert(p === 'granted' ? 'Уведомления включены' : 'Уведомления отключены');
+            });
+        }
+        function runMailFetch() {
+            fetch('/mail/fetch?sync=1').then(function(r) { return r.json(); }).then(function(data) {
+                if (data.success) scheduleReload();
             }).catch(function(){});
-        }, 60000);
+        }
+        function checkMail() {
+            var btn = document.getElementById('btn-check-mail');
+            if (btn) { btn.disabled = true; btn.textContent = 'Загрузка...'; }
+            fetch('/mail/fetch?sync=1').then(function(r) { return r.json(); }).then(function(data) {
+                if (data.success) {
+                    if (btn) { btn.textContent = 'Загрузка...'; }
+                    scheduleReload();
+                } else {
+                    if (btn) { btn.disabled = false; btn.textContent = '🔄 Проверить'; }
+                }
+            }).catch(function() {
+                if (btn) { btn.disabled = false; btn.textContent = '🔄 Проверить'; }
+            });
+        }
+        runMailFetch();
+        setInterval(runMailFetch, 15000);
     </script>
 </body>
 </html>

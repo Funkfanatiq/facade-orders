@@ -2386,7 +2386,7 @@ def _fetch_emails_from_imap():
         rows = db.session.query(Email.message_id).filter(Email.message_id.isnot(None)).all()
         existing = {str(r[0]) for r in rows if r[0]}
         new_count = 0
-        for uid in reversed(uids[-20:]):  # последние 20 писем (для быстрой загрузки)
+        for uid in reversed(uids[-200:]):  # последние 200 писем
             uid_s = uid.decode() if isinstance(uid, bytes) else str(uid)
             if uid_s in existing:
                 continue
@@ -2432,29 +2432,6 @@ def _fetch_emails_from_imap():
         err_msg = str(ex)
         print(f"⚠️ IMAP ошибка: {err_msg}")
         return False, 0, err_msg
-
-
-@app.route("/mail/test-connection")
-@login_required
-def mail_test_connection():
-    """Проверка подключения к почте — показывает реальную ошибку для диагностики."""
-    if current_user.role not in ["Менеджер", "Админ"]:
-        return jsonify({"success": False}), 403
-    user = os.environ.get("MAIL_USERNAME")
-    passwd = os.environ.get("MAIL_PASSWORD")
-    if not user or not passwd:
-        return jsonify({"success": False, "error": "MAIL_USERNAME или MAIL_PASSWORD не заданы в настройках"}), 200
-    try:
-        import imaplib
-        imap = imaplib.IMAP4_SSL("imap.mail.ru", 993, timeout=15)
-        imap.login(user, passwd)
-        imap.select("INBOX")
-        imap.logout()
-        return jsonify({"success": True, "message": "Подключение успешно"}), 200
-    except Exception as ex:
-        err = str(ex)
-        print(f"⚠️ Mail test: {err}")
-        return jsonify({"success": False, "error": err}), 200
 
 
 _mail_sync_in_progress = False

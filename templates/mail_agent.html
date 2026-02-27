@@ -219,8 +219,6 @@
 
         <main class="main-area">
             <div class="toolbar">
-                <button type="button" class="btn-tool" id="btn-fetch" onclick="fetchEmails()" style="background:#4CAF50; color:#fff; border-color:#4CAF50;">📥 Получить письма</button>
-                <button type="button" class="btn-tool" onclick="testMailConnection()" title="Диагностика подключения">🔌 Проверить</button>
                 <input type="search" id="mail-search" placeholder="Поиск по письмам...">
                 <button type="button" class="btn-tool" onclick="mailAction('mark_read')" id="btn-mark-read">Прочитать</button>
                 <button type="button" class="btn-tool" onclick="mailAction('mark_unread')">Не прочитано</button>
@@ -280,35 +278,7 @@
                 else alert(data.message || 'Ошибка');
             }).catch(function() { alert('Ошибка'); });
         }
-        function testMailConnection() {
-            fetch('/mail/test-connection').then(function(r) { return r.json(); }).then(function(d) {
-                if (d.success) alert('✅ ' + (d.message || 'Подключение успешно'));
-                else alert('❌ ' + (d.error || 'Ошибка'));
-            }).catch(function(e) { alert('Ошибка: ' + e.message); });
-        }
-        function fetchEmails() {
-            var btn = document.getElementById('btn-fetch');
-            btn.disabled = true;
-            btn.textContent = 'Загрузка...';
-            fetch('/mail/fetch?sync=1').then(function(r) { return r.json(); }).then(function(data) {
-                btn.disabled = false;
-                btn.textContent = '📥 Получить письма';
-                if (data.success) {
-                    if (data.status === 'started' || data.status === 'fetching') {
-                        setTimeout(function() { location.reload(); }, 12000);
-                    } else if (data.new_fetched > 0) {
-                        location.reload();
-                    } else {
-                        alert('Новых писем нет');
-                    }
-                } else alert(data.message || 'Ошибка загрузки');
-            }).catch(function(err) {
-                btn.disabled = false;
-                btn.textContent = '📥 Получить письма';
-                alert('Ошибка: ' + (err.message || 'нет связи'));
-            });
-        }
-        // Авто-проверка: IMAP в фоне, через 15 сек перезагрузка
+        // Авто-проверка: IMAP в фоне каждую минуту, через 15 сек перезагрузка
         setInterval(function() {
             fetch('/mail/fetch?sync=1').then(function(r) { return r.json(); }).then(function(data) {
                 if (data.success && (data.status === 'started' || data.status === 'fetching')) {

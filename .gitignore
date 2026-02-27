@@ -1,4 +1,6 @@
 # Конфиденциальные файлы
+.env
+.env.local
 yandex_token.txt
 sync_info.json
 token.pickle

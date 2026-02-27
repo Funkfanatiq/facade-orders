@@ -286,11 +286,11 @@
   {% if current_user.role == "Менеджер" %}
   {% set active_tab = request.args.get('tab', 'orders') %}
   <div class="tabs">
-    <button type="button" class="tab {{ 'active' if active_tab == 'orders' else '' }}" onclick="showManagerTab('orders')">📋 Панель заказов</button>
-    <button type="button" class="tab {{ 'active' if active_tab == 'counterparties' else '' }}" onclick="showManagerTab('counterparties')">👥 Контрагенты</button>
-    <button type="button" class="tab {{ 'active' if active_tab == 'debts' else '' }}" onclick="showManagerTab('debts')">💸 Долги</button>
-    <button type="button" class="tab {{ 'active' if active_tab == 'pricelist' else '' }}" onclick="showManagerTab('pricelist')">💰 Прайс лист</button>
-    <button type="button" class="tab {{ 'active' if active_tab == 'mail' else '' }}" onclick="showManagerTab('mail')">📮 Почта</button>
+    <button type="button" class="tab {{ 'active' if active_tab == 'orders' else '' }}" data-tab="orders" onclick="showManagerTab('orders', event)">📋 Панель заказов</button>
+    <button type="button" class="tab {{ 'active' if active_tab == 'counterparties' else '' }}" data-tab="counterparties" onclick="showManagerTab('counterparties', event)">👥 Контрагенты</button>
+    <button type="button" class="tab {{ 'active' if active_tab == 'debts' else '' }}" data-tab="debts" onclick="showManagerTab('debts', event)">💸 Долги</button>
+    <button type="button" class="tab {{ 'active' if active_tab == 'pricelist' else '' }}" data-tab="pricelist" onclick="showManagerTab('pricelist', event)">💰 Прайс лист</button>
+    <button type="button" class="tab {{ 'active' if active_tab == 'mail' else '' }}" data-tab="mail" onclick="showManagerTab('mail', event)">📮 Почта</button>
   </div>
   <div id="manager-orders-tab" class="tab-content {{ 'active' if active_tab == 'orders' else '' }}">
   {% endif %}
@@ -555,7 +555,7 @@
 
   <script>
     {% if current_user.role == "Менеджер" %}
-    function showManagerTab(tabName) {
+    function showManagerTab(tabName, ev) {
       document.querySelectorAll('.tab-content').forEach(function(el) {
         el.classList.remove('active');
       });
@@ -564,7 +564,8 @@
       });
       var tabEl = document.getElementById('manager-' + tabName + '-tab');
       if (tabEl) tabEl.classList.add('active');
-      event.target.classList.add('active');
+      var tabBtn = ev && ev.target ? ev.target : document.querySelector('.tabs .tab[data-tab="' + tabName + '"]');
+      if (tabBtn) tabBtn.classList.add('active');
     }
     function toggleCounterpartyForm() {
       var wrap = document.getElementById('counterparty-form-wrap');

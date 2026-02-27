@@ -10,16 +10,16 @@
 ## 🔧 Настройка переменных окружения:
 
 ### Для локальной разработки:
-Создайте файл `.env` в корне проекта:
+Создайте файл `.env` в корне проекта (или добавьте строки в существующий):
 ```env
-MAIL_USERNAME=pictortest@mail.ru
-MAIL_PASSWORD=wFMvD0F25x93kvfw8bWP
+MAIL_USERNAME=ваш_почта@mail.ru
+MAIL_PASSWORD=пароль_приложения_из_настроек
 ```
 
 ### Для Render.com:
 Добавьте в Environment Variables:
-- **Key:** `MAIL_USERNAME` **Value:** `pictortest@mail.ru`
-- **Key:** `MAIL_PASSWORD` **Value:** `wFMvD0F25x93kvfw8bWP`
+- **Key:** `MAIL_USERNAME` **Value:** ваш адрес (например `pictorspb@mail.ru`)
+- **Key:** `MAIL_PASSWORD` **Value:** пароль приложения Mail.ru
 
 ## 📧 Функции почтового агента:
 

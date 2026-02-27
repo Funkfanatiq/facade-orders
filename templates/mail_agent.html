@@ -296,9 +296,10 @@
                 alert('Ошибка: ' + (err.message || 'нет связи'));
             });
         }
+        // Автоматическая проверка новых писем каждую минуту
         setInterval(function() {
-            fetch('/mail/fetch').then(function(r) { return r.json(); }).then(function(data) {
-                if (data.success && data.count > 0) location.reload();
+            fetch('/mail/fetch?sync=1').then(function(r) { return r.json(); }).then(function(data) {
+                if (data.success && data.new_fetched > 0) location.reload();
             }).catch(function(){});
         }, 60000);
     </script>

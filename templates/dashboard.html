@@ -247,11 +247,24 @@
     .btn-edit-pricelist:hover { background: #45A049; }
     .pricelist-drag-handle { cursor: grab; color: #999; padding: 0 6px; user-select: none; }
     .pricelist-drag-handle:active { cursor: grabbing; }
+    .mail-new-banner {
+      display: none; background: #4CAF50; color: #fff; padding: 12px 20px; font-size: 15px; font-weight: 500;
+      text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .mail-new-banner.visible { display: block; }
+    .mail-new-banner a { color: #fff; text-decoration: underline; }
+    .mail-new-banner a:hover { opacity: 0.9; }
   </style>
   <script>window.PUSH_ENABLED = {{ 'true' if current_user.role != 'Менеджер' else 'false' }};</script>
+  <script>window.MANAGER_ROLE = {{ 'true' if current_user.role == 'Менеджер' else 'false' }};</script>
   <script src="{{ url_for('static', filename='push-init.js') }}"></script>
 </head>
 <body>
+  {% if current_user.role == "Менеджер" %}
+  <div id="mail-new-banner" class="mail-new-banner">
+    <span id="mail-new-text">Получено новое письмо</span>
+  </div>
+  {% endif %}
   <div class="top-bar">
     {% if current_user.role == "Производство" %}
     <h2>🏭 Рабочее место производства</h2>
@@ -925,6 +938,37 @@
         });
       }
     }
+
+    {% if current_user.role == "Менеджер" %}
+    (function mailNewPoll() {
+      var lastInbox = 0;
+      try { lastInbox = parseInt(localStorage.getItem('mail_inbox_count') || '0', 10); } catch(e) {}
+      function run() {
+        fetch('/mail/fetch?sync=1').then(function() {
+          setTimeout(function() {
+            fetch('/mail/fetch').then(function(r) { return r.json(); }).then(function(d) {
+              if (!d.success) return;
+              var c = d.inbox_count || 0;
+              try { localStorage.setItem('mail_inbox_count', String(c)); } catch(e) {}
+              if (c > lastInbox && lastInbox > 0) {
+                var n = c - lastInbox;
+                var msg = n === 1 ? 'Получено новое письмо' : 'Получено ' + n + ' новых писем';
+                document.getElementById('mail-new-text').textContent = msg;
+                document.getElementById('mail-new-banner').classList.add('visible');
+                setTimeout(function() { document.getElementById('mail-new-banner').classList.remove('visible'); }, 5000);
+                if ('Notification' in window && Notification.permission === 'granted') {
+                  new Notification('📧 ' + msg, { tag: 'mail-new' });
+                }
+              }
+              lastInbox = c;
+            }).catch(function(){});
+          }, 8000);
+        }).catch(function(){});
+      }
+      run();
+      setInterval(run, 20000);
+    })();
+    {% endif %}
   </script>
 </body>
 </html>

@@ -2534,15 +2534,12 @@ def mail_fetch():
             return jsonify({"success": True, "count": 0, "new_fetched": 0, "status": "started"})
     try:
         from models import Email
-        unread = Email.query.filter(
-            db.or_(Email.folder == "inbox", Email.folder.is_(None)),
-            Email.is_sent == False,
-            db.or_(Email.is_draft == False, Email.is_draft.is_(None)),
-            Email.is_read == False
-        ).count()
-        return jsonify({"success": True, "count": unread})
+        f_inbox = db.or_(Email.folder == "inbox", Email.folder.is_(None))
+        unread = Email.query.filter(f_inbox, Email.is_sent == False, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), Email.is_read == False).count()
+        inbox_count = Email.query.filter(f_inbox, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), Email.is_sent == False).count()
+        return jsonify({"success": True, "count": unread, "inbox_count": inbox_count})
     except Exception:
-        return jsonify({"success": True, "count": 0})
+        return jsonify({"success": True, "count": 0, "inbox_count": 0})
 
 
 # === Web Push: уведомления о заказах по сроку ===

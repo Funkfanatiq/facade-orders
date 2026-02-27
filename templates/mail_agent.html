@@ -149,10 +149,10 @@
         }
         .empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
         .toast-new-mail {
-            position: fixed; bottom: 20px; right: 20px;
+            position: fixed; top: 0; left: 0; right: 0;
             background: #4CAF50; color: #fff; padding: 14px 20px;
-            border-radius: 8px; font-size: 15px; font-weight: 500;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 9999;
+            font-size: 15px; font-weight: 500; text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 9999;
             animation: toast-in 0.3s ease;
         }
         @keyframes toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -228,7 +228,6 @@
         <main class="main-area">
             <div class="toolbar">
                 <input type="search" id="mail-search" placeholder="Поиск по письмам...">
-                <button type="button" class="btn-tool" onclick="checkMail()" id="btn-check-mail">🔄 Проверить</button>
                 {% if view_type == 'inbox' %}
                 <button type="button" class="btn-tool" onclick="requestNotifyPermission()" id="btn-notify" title="Уведомления о новых письмах">🔔 Уведомления</button>
                 {% endif %}
@@ -290,16 +289,18 @@
                 else alert(data.message || 'Ошибка');
             }).catch(function() { alert('Ошибка'); });
         }
-        var _reloadScheduled = false;
         var _viewType = document.querySelector('.mail-layout') && document.querySelector('.mail-layout').getAttribute('data-view') || '';
-        function scheduleReload() {
-            if (_reloadScheduled) return;
-            _reloadScheduled = true;
-            var count = document.querySelectorAll('.email-row').length;
-            if (_viewType === 'inbox') {
-                try { sessionStorage.setItem('mail_inbox_before', String(count)); } catch(e) {}
-            }
-            setTimeout(function() { location.reload(); }, 6000);
+        function reloadIfNewMail() {
+            if (_viewType !== 'inbox') return;
+            var currentCount = document.querySelectorAll('.email-row').length;
+            setTimeout(function() {
+                fetch('/mail/fetch').then(function(r) { return r.json(); }).then(function(d) {
+                    if (d.success && (d.inbox_count || 0) > currentCount) {
+                        try { sessionStorage.setItem('mail_inbox_before', String(currentCount)); } catch(e) {}
+                        location.reload();
+                    }
+                }).catch(function(){});
+            }, 8000);
         }
         (function checkNewMailNotification() {
             try {
@@ -331,25 +332,11 @@
         }
         function runMailFetch() {
             fetch('/mail/fetch?sync=1').then(function(r) { return r.json(); }).then(function(data) {
-                if (data.success) scheduleReload();
+                if (data.success) reloadIfNewMail();
             }).catch(function(){});
         }
-        function checkMail() {
-            var btn = document.getElementById('btn-check-mail');
-            if (btn) { btn.disabled = true; btn.textContent = 'Загрузка...'; }
-            fetch('/mail/fetch?sync=1').then(function(r) { return r.json(); }).then(function(data) {
-                if (data.success) {
-                    if (btn) { btn.textContent = 'Загрузка...'; }
-                    scheduleReload();
-                } else {
-                    if (btn) { btn.disabled = false; btn.textContent = '🔄 Проверить'; }
-                }
-            }).catch(function() {
-                if (btn) { btn.disabled = false; btn.textContent = '🔄 Проверить'; }
-            });
-        }
         runMailFetch();
-        setInterval(runMailFetch, 15000);
+        setInterval(runMailFetch, 30000);
     </script>
 </body>
 </html>

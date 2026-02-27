@@ -107,6 +107,8 @@
         }
         .toolbar .btn-tool:hover { background: #f5f5f5; }
         .toolbar .btn-tool:disabled { opacity: 0.5; cursor: not-allowed; }
+        .toolbar-select-all { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+        .toolbar-select-all input { cursor: pointer; }
         .email-list {
             flex: 1;
             overflow-y: auto;
@@ -227,6 +229,7 @@
 
         <main class="main-area">
             <div class="toolbar">
+                <label class="toolbar-select-all"><input type="checkbox" id="mail-select-all" onchange="toggleSelectAll(this)"> Выделить все</label>
                 <input type="search" id="mail-search" placeholder="Поиск по письмам...">
                 {% if view_type == 'inbox' %}
                 <button type="button" class="btn-tool" onclick="requestNotifyPermission()" id="btn-notify" title="Уведомления о новых письмах">🔔 Уведомления</button>
@@ -246,7 +249,7 @@
                 {% if emails %}
                     {% for email in emails %}
                     <div class="email-row {% if not email.is_read and not email.is_sent %}unread{% endif %}" data-id="{{ email.id }}" onclick="goToEmail({{ email.id }}, event)">
-                        <input type="checkbox" onclick="event.stopPropagation();" data-email-id="{{ email.id }}">
+                        <input type="checkbox" onclick="event.stopPropagation();" onchange="syncSelectAll()" data-email-id="{{ email.id }}">
                         <div class="email-avatar">{{ (email.sender or email.recipient or '?')[0].upper() }}</div>
                         <div class="email-content">
                             <div class="email-sender">{{ email.sender or email.recipient or '—' }}</div>
@@ -276,6 +279,16 @@
         }
         function getSelectedIds() {
             return Array.from(document.querySelectorAll('input[data-email-id]:checked')).map(function(cb) { return parseInt(cb.getAttribute('data-email-id'), 10); });
+        }
+        function toggleSelectAll(ctrl) {
+            var checkboxes = document.querySelectorAll('input[data-email-id]');
+            checkboxes.forEach(function(cb) { cb.checked = ctrl.checked; });
+        }
+        function syncSelectAll() {
+            var all = document.querySelectorAll('input[data-email-id]');
+            var checked = document.querySelectorAll('input[data-email-id]:checked');
+            var sa = document.getElementById('mail-select-all');
+            if (sa) sa.checked = all.length > 0 && checked.length === all.length;
         }
         function mailAction(action) {
             var ids = getSelectedIds();

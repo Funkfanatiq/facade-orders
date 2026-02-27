@@ -194,6 +194,12 @@ class Email(db.Model):
     __table_args__ = (db.Index('idx_email_message_id', 'message_id'), db.Index('idx_email_folder', 'folder'),)
 
 
+class IgnoredEmailUid(db.Model):
+    """message_id писем, которые пользователь удалил — не загружать повторно из IMAP."""
+    id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.String(255), nullable=False, unique=True)
+
+
 class InvoiceItem(db.Model):
     """Позиция счёта (из прайса или вручную)."""
     id = db.Column(db.Integer, primary_key=True)

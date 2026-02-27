@@ -2384,6 +2384,11 @@ def mail_action():
             elif action == "mark_unread":
                 e.is_read = False
             elif action == "delete":
+                from models import IgnoredEmailUid
+                if e.message_id:
+                    ig = IgnoredEmailUid.query.filter_by(message_id=e.message_id).first()
+                    if not ig:
+                        db.session.add(IgnoredEmailUid(message_id=e.message_id))
                 db.session.delete(e)
         db.session.commit()
         return jsonify({"success": True})
@@ -2440,6 +2445,10 @@ def _fetch_emails_from_imap():
         uids = data[0].split()
         rows = db.session.query(Email.message_id).filter(Email.message_id.isnot(None)).all()
         existing = {str(r[0]) for r in rows if r[0]}
+        from models import IgnoredEmailUid
+        ignored_rows = db.session.query(IgnoredEmailUid.message_id).all()
+        ignored = {str(r[0]) for r in ignored_rows if r[0]}
+        existing = existing | ignored
         new_count = 0
         for uid in reversed(uids[-200:]):  # последние 200 писем
             uid_s = uid.decode() if isinstance(uid, bytes) else str(uid)

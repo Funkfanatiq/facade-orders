@@ -2174,6 +2174,25 @@ def polishing_station():
                           polishing_urgency=polishing_urgency,
                           packaging_urgency=packaging_urgency)
 
+def _mail_counts():
+    """Счётчики для боковой панели почты."""
+    counts = {"inbox": 0, "sent": 0, "drafts": 0, "archive": 0, "spam": 0, "trash": 0}
+    unread = 0
+    try:
+        from models import Email
+        f_inbox = db.or_(Email.folder == "inbox", Email.folder.is_(None))
+        unread = Email.query.filter(f_inbox, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), Email.is_sent == False, Email.is_read == False).count()
+        counts["inbox"] = Email.query.filter(f_inbox, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), Email.is_sent == False).count()
+        counts["sent"] = Email.query.filter(Email.is_sent == True, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), db.or_(Email.folder != "trash", Email.folder.is_(None))).count()
+        counts["drafts"] = Email.query.filter(Email.is_draft == True).count()
+        counts["archive"] = Email.query.filter(Email.folder == "archive").count()
+        counts["spam"] = Email.query.filter(Email.folder == "spam").count()
+        counts["trash"] = Email.query.filter(Email.folder == "trash").count()
+    except Exception:
+        pass
+    return counts, unread
+
+
 @app.route("/mail")
 @app.route("/mail/<view>")
 @login_required
@@ -2265,7 +2284,8 @@ def compose_email():
                 flash(f"Ошибка отправки: {ex}", "error")
         else:
             flash("Заполните все поля", "error")
-    return render_template("email_compose.html")
+    counts, unread_count = _mail_counts()
+    return render_template("email_compose.html", counts=counts, unread_count=unread_count)
 
 
 @app.route("/mail/read/<int:email_id>")
@@ -2281,7 +2301,8 @@ def read_email(email_id):
         if not email.is_read and not email.is_sent:
             email.is_read = True
             db.session.commit()
-        return render_template("email_view.html", email=email)
+        counts, unread_count = _mail_counts()
+        return render_template("email_view.html", email=email, counts=counts, unread_count=unread_count)
     except Exception:
         return redirect(url_for("mail_agent"))
 
@@ -2296,7 +2317,41 @@ def reply_email(email_id):
     try:
         from models import Email
         original_email = Email.query.get_or_404(email_id)
-        return render_template("email_reply.html", original_email=original_email)
+        if request.method == "POST":
+            subject = request.form.get("subject", "").strip()
+            body = request.form.get("body", "").strip()
+            to_addr = original_email.sender or ""
+            if to_addr and subject and body:
+                user = os.environ.get("MAIL_USERNAME")
+                passwd = os.environ.get("MAIL_PASSWORD")
+                if user and passwd:
+                    import smtplib
+                    from email.mime.text import MIMEText
+                    from email.mime.multipart import MIMEMultipart
+                    msg = MIMEMultipart()
+                    msg["From"] = user
+                    msg["To"] = to_addr
+                    msg["Subject"] = subject
+                    msg.attach(MIMEText(body, "plain", "utf-8"))
+                    with smtplib.SMTP("smtp.mail.ru", 587) as s:
+                        s.starttls()
+                        s.login(user, passwd)
+                        s.sendmail(user, to_addr, msg.as_string())
+                    try:
+                        e = Email(sender=user, recipient=to_addr, subject=subject, body=body, is_sent=True, folder='sent', sent_at=datetime.now(timezone.utc), reply_to_id=original_email.id)
+                        db.session.add(e)
+                        db.session.commit()
+                    except Exception:
+                        pass
+                    flash("Ответ отправлен", "success")
+                    return redirect(url_for("mail_agent"))
+                else:
+                    flash("Почта не настроена", "error")
+            else:
+                flash("Заполните тему и сообщение", "error")
+        counts, unread_count = _mail_counts()
+        reply_subject = "Re: " + (original_email.subject or "") if original_email.subject and not original_email.subject.startswith("Re:") else (original_email.subject or "")
+        return render_template("email_reply.html", original_email=original_email, counts=counts, unread_count=unread_count, reply_subject=reply_subject)
     except Exception:
         return redirect(url_for("mail_agent"))
 

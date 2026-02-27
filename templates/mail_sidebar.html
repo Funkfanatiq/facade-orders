@@ -1,0 +1,31 @@
+{% macro mail_sidebar(counts, unread_count, view_type='') %}
+<aside class="sidebar">
+    <a href="{{ url_for('compose_email') }}" class="btn-write">✏️ Написать</a>
+    <ul class="folder-list">
+        <a href="{{ url_for('mail_agent', view='inbox') }}" class="folder-item {% if view_type == 'inbox' %}active{% endif %}">
+            <span class="icon">📥</span> Входящие
+            {% if unread_count > 0 %}<span class="count">{{ unread_count }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('mail_agent', view='sent') }}" class="folder-item {% if view_type == 'sent' %}active{% endif %}">
+            <span class="icon">📤</span> Отправленные
+            {% if counts.sent > 0 %}<span class="count">{{ counts.sent }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('mail_agent', view='drafts') }}" class="folder-item {% if view_type == 'drafts' %}active{% endif %}">
+            <span class="icon">📝</span> Черновики
+            {% if counts.drafts > 0 %}<span class="count">{{ counts.drafts }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('mail_agent', view='archive') }}" class="folder-item {% if view_type == 'archive' %}active{% endif %}">
+            <span class="icon">📦</span> Архив
+            {% if counts.archive > 0 %}<span class="count">{{ counts.archive }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('mail_agent', view='spam') }}" class="folder-item {% if view_type == 'spam' %}active{% endif %}">
+            <span class="icon">🚫</span> Спам
+            {% if counts.spam > 0 %}<span class="count">{{ counts.spam }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('mail_agent', view='trash') }}" class="folder-item {% if view_type == 'trash' %}active{% endif %}">
+            <span class="icon">🗑️</span> Корзина
+            {% if counts.trash > 0 %}<span class="count">{{ counts.trash }}</span>{% endif %}
+        </a>
+    </ul>
+</aside>
+{% endmacro %}

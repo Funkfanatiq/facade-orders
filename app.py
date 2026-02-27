@@ -2326,7 +2326,9 @@ def reply_email(email_id):
         if request.method == "POST":
             subject = request.form.get("subject", "").strip()
             body = request.form.get("body", "").strip()
-            to_addr = original_email.sender or ""
+            from email.utils import parseaddr
+            _, to_addr = parseaddr(original_email.sender or "")
+            to_addr = (to_addr or "").strip() or (original_email.sender or "").strip()
             if to_addr and subject and body:
                 user = os.environ.get("MAIL_USERNAME")
                 passwd = os.environ.get("MAIL_PASSWORD")
@@ -2334,15 +2336,21 @@ def reply_email(email_id):
                     import smtplib
                     from email.mime.text import MIMEText
                     from email.mime.multipart import MIMEMultipart
-                    msg = MIMEMultipart()
-                    msg["From"] = user
-                    msg["To"] = to_addr
-                    msg["Subject"] = subject
-                    msg.attach(MIMEText(body, "plain", "utf-8"))
-                    with smtplib.SMTP("smtp.mail.ru", 587) as s:
-                        s.starttls()
-                        s.login(user, passwd)
-                        s.sendmail(user, to_addr, msg.as_string())
+                    try:
+                        msg = MIMEMultipart()
+                        msg["From"] = user
+                        msg["To"] = to_addr
+                        msg["Subject"] = subject
+                        msg.attach(MIMEText(body, "plain", "utf-8"))
+                        with smtplib.SMTP("smtp.mail.ru", 587, timeout=30) as s:
+                            s.starttls()
+                            s.login(user, passwd)
+                            s.sendmail(user, to_addr, msg.as_string())
+                    except Exception as ex:
+                        flash(f"Ошибка отправки: {str(ex)}", "error")
+                        counts, unread_count = _mail_counts()
+                        reply_subject = "Re: " + (original_email.subject or "") if original_email.subject and not original_email.subject.startswith("Re:") else (original_email.subject or "")
+                        return render_template("email_reply.html", original_email=original_email, counts=counts, unread_count=unread_count, reply_subject=reply_subject)
                     try:
                         e = Email(sender=user, recipient=to_addr, subject=subject, body=body, is_sent=True, folder='sent', sent_at=datetime.now(timezone.utc), reply_to_id=original_email.id)
                         db.session.add(e)

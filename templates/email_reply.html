@@ -69,7 +69,7 @@
                     </div>
                     <div style="font-size:14px;color:#555;max-height:120px;overflow-y:auto;">{{ (original_email.body or 'Нет содержимого')[:300] }}{% if original_email.body and original_email.body|length > 300 %}...{% endif %}</div>
                 </div>
-                <form method="POST">
+                <form method="POST" action="{{ url_for('reply_email', email_id=original_email.id) }}">
                     <div class="form-group">
                         <label for="subject">Тема</label>
                         <input type="text" id="subject" name="subject" value="{{ reply_subject }}" required>

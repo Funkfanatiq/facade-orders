@@ -1921,40 +1921,10 @@ def monitor():
 @app.route("/milling", methods=["GET", "POST"])
 @login_required
 def milling_station():
+    """Редирект на пул заказов (вкладка «Рабочее место» убрана)."""
     if current_user.role != "Фрезеровка":
         return redirect(url_for("dashboard"))
-
-    pool = generate_daily_pool()
-
-    pool_info = {
-        'is_urgent': any(is_urgent_order(order) for order in pool) if pool else False,
-        'efficiency': 0,
-        'waste': 0
-    }
-
-    order_urgency = {}
-    for order in pool:
-        days_left = (order.due_date - datetime.now(timezone.utc).date()).days
-        order_urgency[order.id] = {
-            'is_urgent': is_urgent_order(order),
-            'days_left': days_left
-        }
-
-    if pool:
-        total_area = sum(order.area for order in pool)
-        sheet_area = SHEET_AREA
-        sheets_needed = total_area / sheet_area
-        full_sheets = int(sheets_needed)
-        partial_sheet = sheets_needed - full_sheets
-
-        if partial_sheet > 0:
-            pool_info['waste'] = sheet_area - (total_area - full_sheets * sheet_area)
-            pool_info['efficiency'] = (total_area / ((full_sheets + 1) * sheet_area)) * 100
-        else:
-            pool_info['waste'] = 0
-            pool_info['efficiency'] = 100
-
-    return render_template("milling.html", orders=pool, pool_info=pool_info, order_urgency=order_urgency)
+    return redirect(url_for("milling_pool"))
 
 @app.route("/mark_pool_complete", methods=["POST"])
 @login_required
@@ -1972,7 +1942,7 @@ def mark_pool_complete():
         return {"success": True, "message": "✅ Пул заказов завершён"}
 
     flash("✅ Пул заказов завершён. Загружается следующий...")
-    return redirect(url_for("milling_station"))
+    return redirect(url_for("milling_pool"))
 
 @app.route("/milling-pool")
 @login_required

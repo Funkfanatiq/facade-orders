@@ -384,10 +384,13 @@
     <div class="container">
         <!-- Вкладки -->
         <div class="tabs">
-            <div class="tab active" onclick="showTab('orders')">
+            <div class="tab active" onclick="showTab('orders', this)">
                 📋 Управление заказами
             </div>
-            <div class="tab" onclick="showTab('salary')">
+            <div class="tab" onclick="showTab('debts', this)">
+                💸 Долги
+            </div>
+            <div class="tab" onclick="showTab('salary', this)">
                 💰 Расчет зарплат
             </div>
         </div>
@@ -513,6 +516,36 @@
             </div>
         </div>
         
+        <!-- Вкладка Долги -->
+        <div id="debts-tab" class="tab-content">
+            <div class="content-box">
+                <h2>💸 Долги</h2>
+                <p style="color:#6e6e73; margin:0 0 16px 0; font-size:14px;">Контрагенты с неоплаченными счетами</p>
+                {% if debtors %}
+                <table class="orders-table">
+                    <thead>
+                        <tr>
+                            <th>Контрагент</th>
+                            <th>Неоплаченные счета</th>
+                            <th>Задолженность, ₽</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in debtors %}
+                        <tr>
+                            <td><a href="{{ url_for('counterparty_card', counterparty_id=d.counterparty.id) }}" style="color:#007aff;text-decoration:none;">{{ d.counterparty.name }}</a></td>
+                            <td>{{ d.unpaid_invoices|join(', ') if d.unpaid_invoices else '—' }}</td>
+                            <td style="white-space:nowrap;">{{ "%.2f"|format(d.balance)|replace(".", ",") }} ₽</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="color:#6e6e73; margin:0;">Нет контрагентов с задолженностью.</p>
+                {% endif %}
+            </div>
+        </div>
+        
         <!-- Вкладка расчета зарплат: только Сотрудники, Рабочие часы, Расчет (без Отчетов) -->
         <div id="salary-tab" class="tab-content">
             <div class="content-box">
@@ -540,18 +573,16 @@
     
     <script>
         // Переключение вкладок
-        function showTab(tabName) {
-            // Скрыть все вкладки
+        function showTab(tabName, tabEl) {
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
             });
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.classList.remove('active');
             });
-            
-            // Показать выбранную вкладку
-            document.getElementById(tabName + '-tab').classList.add('active');
-            event.target.classList.add('active');
+            var content = document.getElementById(tabName + '-tab');
+            if (content) content.classList.add('active');
+            if (tabEl) tabEl.classList.add('active');
         }
         
         // Обновление статуса заказов (debounce 400ms для снижения нагрузки)

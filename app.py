@@ -1822,7 +1822,21 @@ def render_admin_dashboard():
         'percentage': round((storage_usage / STORAGE_LIMIT_MB) * 100, 1)
     }
     
-    return render_template("admin_dashboard.html", orders=orders, invoice_for_order=invoice_for_order, datetime=datetime, current_user=current_user, storage_info=storage_info)
+    debtors = []
+    for cp in Counterparty.query.order_by(Counterparty.name).all():
+        invoices = Invoice.query.filter(Invoice.counterparty_id == cp.id).all()
+        total_invoiced = sum(inv.total for inv in invoices)
+        total_paid = sum(p.amount for p in Payment.query.filter(Payment.counterparty_id == cp.id).all())
+        balance = total_invoiced - total_paid
+        if balance > 0:
+            unpaid_nums = []
+            for inv in invoices:
+                paid_amt = sum(p.amount for p in inv.payments)
+                if inv.total - paid_amt > 0:
+                    unpaid_nums.append(inv.invoice_number)
+            debtors.append({"counterparty": cp, "unpaid_invoices": unpaid_nums, "balance": balance})
+    
+    return render_template("admin_dashboard.html", orders=orders, invoice_for_order=invoice_for_order, datetime=datetime, current_user=current_user, storage_info=storage_info, debtors=debtors)
 
 @app.route("/delete_order/<int:order_id>", methods=["DELETE"])
 @login_required

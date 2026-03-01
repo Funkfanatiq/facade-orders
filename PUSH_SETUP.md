@@ -12,22 +12,13 @@
 ### 1. Генерация VAPID-ключей
 
 ```bash
-pip install py-vapid
-python -c "
-from vapid import Vapid
-import base64
-v = Vapid()
-v.generate_keys()
-print('VAPID_PRIVATE_KEY=')
-print(v.private_key.decode())
-print()
-pub = base64.urlsafe_b64encode(v.public_key).decode().rstrip('=')
-print('VAPID_PUBLIC_KEY=')
-print(pub)
-"
+pip install -r requirements.txt
+python generate_vapid.py
 ```
 
-Сохраните вывод в переменные окружения (`.env` локально или Environment Variables в Render).
+Скрипт выведет строки для `.env` и для Render. Скопируйте их в:
+- **Локально:** файл `.env`
+- **Render:** Dashboard → Ваш сервис → Environment → Add Environment Variable
 
 ### 2. Переменные окружения
 

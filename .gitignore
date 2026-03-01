@@ -1,5 +1,8 @@
 # Конфиденциальные файлы
 .env
+*_key.pem
+private_key.pem
+public_key.pem
 .env.local
 yandex_token.txt
 sync_info.json

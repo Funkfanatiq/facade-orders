@@ -111,6 +111,7 @@
           <th>№ заказа</th>
           <th>Клиент</th>
           <th>Тип фасада</th>
+          <th>Толщина</th>
           <th>Площадь (м²)</th>
           <th>Срок</th>
           <th>Статус</th>
@@ -136,7 +137,22 @@
           <tr data-order-id="{{ o.id }}" class="{{ row_class }}">
             <td>{{ o.order_id }}</td>
             <td>{{ o.client }}</td>
-            <td>{{ o.facade_type }}</td>
+            <td>
+              {% if o.facade_type == 'смешанный' and o.mixed_facade_data %}
+                {% set mixed = o.mixed_facade_data|fromjson %}
+                {% for m in mixed %}{{ m.type }}{% if not loop.last %}, {% endif %}{% endfor %}
+              {% else %}
+                {{ o.facade_type }}
+              {% endif %}
+            </td>
+            <td>
+              {% if o.facade_type == 'смешанный' and o.mixed_facade_data %}
+                {% set mixed = o.mixed_facade_data|fromjson %}
+                {% for m in mixed %}{{ m.thickness or '-' }} мм{% if not loop.last %} / {% endif %}{% endfor %}
+              {% else %}
+                {{ o.thickness|int if o.thickness else '-' }}{% if o.thickness %} мм{% endif %}
+              {% endif %}
+            </td>
             <td>{{ "%.2f"|format(o.area) }}</td>
             <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
             <td>
@@ -195,12 +211,12 @@
     });
 
     function updateTableStatus(row, orderId, status) {
-      const statusCell = row.querySelector('td:nth-child(6)');
+      const statusCell = row.querySelector('td:nth-child(7)');
       if (status) {
         row.className = 'completed';
         statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Завершен';
       } else {
-        const dueText = row.querySelector('td:nth-child(5)').textContent;
+        const dueText = row.querySelector('td:nth-child(6)').textContent;
         const [y, m, d] = dueText.split('-').map(Number);
         const due = new Date(y, m - 1, d);
         const today = new Date();

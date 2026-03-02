@@ -107,6 +107,21 @@ def _ensure_pricelist_category_column():
         print(f"⚠️ Проверка/добавление category в прайс-лист: {e}")
 
 
+def _ensure_pricelist_painting_categories_migration():
+    """Миграция: «услуги по покраске» и «покраска» → «покраска фрезерованный» (разделение по типам)."""
+    try:
+        for old_cat in ("услуги по покраске", "покраска"):
+            updated = PriceListItem.query.filter(PriceListItem.category == old_cat).update(
+                {PriceListItem.category: "покраска фрезерованный"}, synchronize_session=False
+            )
+            if updated:
+                db.session.commit()
+                print(f"✅ Миграция прайса: {updated} позиций «{old_cat}» → «покраска фрезерованный»")
+    except Exception as e:
+        db.session.rollback()
+        print(f"⚠️ Миграция категорий покраски: {e}")
+
+
 def _ensure_pricelist_sort_order_column():
     """Добавляет колонку sort_order в таблицу price_list_item, если её ещё нет."""
     try:
@@ -300,6 +315,31 @@ def _ensure_mixed_facade_data_column():
         print(f"⚠️ Проверка mixed_facade_data: {e}")
 
 
+def _ensure_milled_parts_column():
+    """Добавляет колонку milled_parts в order для отслеживания отфрезерованных частей смешанного заказа."""
+    try:
+        with db.engine.connect() as conn:
+            backend = db.engine.url.get_backend_name()
+            if backend == "postgresql":
+                r = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'order' AND column_name = 'milled_parts'
+                """))
+                if r.fetchone() is None:
+                    conn.execute(text('ALTER TABLE "order" ADD COLUMN milled_parts TEXT'))
+                    conn.commit()
+                    print("✅ Колонка order.milled_parts добавлена")
+            else:
+                r = conn.execute(text('PRAGMA table_info("order")'))
+                cols = [row[1] for row in r.fetchall()]
+                if "milled_parts" not in cols:
+                    conn.execute(text('ALTER TABLE "order" ADD COLUMN milled_parts TEXT'))
+                    conn.commit()
+                    print("✅ Колонка order.milled_parts добавлена")
+    except Exception as e:
+        print(f"⚠️ Проверка milled_parts: {e}")
+
+
 def _ensure_push_columns():
     """Добавляет last_push_work_at, last_push_urgent_at в order для отслеживания отправленных push."""
     try:
@@ -348,10 +388,12 @@ def init_database():
                 _ensure_pricelist_category_column()
                 # Добавляем колонку sort_order в price_list_item, если её ещё нет
                 _ensure_pricelist_sort_order_column()
+                _ensure_pricelist_painting_categories_migration()
                 _ensure_invoice_order_ids_column()
                 _ensure_order_invoice_number_column()
                 _ensure_thickness_column()
                 _ensure_mixed_facade_data_column()
+                _ensure_milled_parts_column()
                 _ensure_invoice_item_thickness_column()
                 _ensure_email_extra_columns()
                 _ensure_push_columns()
@@ -662,22 +704,89 @@ def _check_orders_push_by_due_date():
         print(f"⚠️ Push check error: {ex}")
 
 
+def _get_milled_parts_set(order):
+    """Возвращает set кортежей (type, thickness) для отфрезерованных частей смешанного заказа."""
+    if not order.milled_parts:
+        return set()
+    try:
+        parts = json.loads(order.milled_parts)
+        return set((p.get("type", ""), p.get("thickness") or 0) for p in parts)
+    except (json.JSONDecodeError, TypeError):
+        return set()
+
+
+def _expand_orders_to_virtual_items(orders):
+    """
+    Разворачивает заказы в виртуальные элементы (type, thickness, area).
+    Смешанные заказы разбиваются на части по (type, thickness); уже отфрезерованные части исключаются.
+    """
+    from collections import namedtuple
+    VirtualItem = namedtuple('VirtualItem', ['order', 'facade_type', 'thickness', 'area', 'is_partial'])
+
+    items = []
+    for o in orders:
+        if o.facade_type == "смешанный" and o.mixed_facade_data:
+            milled = _get_milled_parts_set(o)
+            try:
+                for it in json.loads(o.mixed_facade_data):
+                    t = it.get("type", "")
+                    th = it.get("thickness") or 0
+                    a = float(it.get("area") or 0)
+                    if a <= 0 or (t, th) in milled:
+                        continue
+                    items.append(VirtualItem(o, t, th, a, is_partial=True))
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+        else:
+            a = float(o.area or 0)
+            if a > 0:
+                t = o.facade_type or ""
+                th = o.thickness if o.thickness is not None else 0
+                items.append(VirtualItem(o, t, th, a, is_partial=False))
+    return items
+
+
+def _pack_virtual_items(items, max_area, sheet_area):
+    """Упаковка виртуальных элементов в пул. Приоритет: по сроку (due_date), жадная по площади."""
+    if not items:
+        return []
+    sorted_items = sorted(items, key=lambda x: (x.order.due_date, -x.area))
+    result = []
+    total = 0
+    for v in sorted_items:
+        if total + v.area <= max_area:
+            result.append(v)
+            total += v.area
+        else:
+            break
+    return result
+
+
+def _get_order_sort_key(order):
+    """Ключ сортировки заказов: по толщине, затем по сроку."""
+    if order.facade_type == "смешанный" and order.mixed_facade_data:
+        try:
+            items = json.loads(order.mixed_facade_data)
+            ths = [it.get("thickness") or 0 for it in items]
+            return (min(ths) if ths else 0, order.due_date)
+        except (json.JSONDecodeError, TypeError):
+            return (0, order.due_date)
+    th = order.thickness if order.thickness is not None else 0
+    return (th, order.due_date)
+
+
 def generate_daily_pool():
     """
-    Формирует оптимизированный пул заказов для фрезеровки:
-    1. Приоритет срочным заказам (игнорируют оптимизацию)
-    2. Оптимизация остатков листов МДФ
-    3. Группировка по типу фасада
+    Формирует пул заказов для фрезеровки:
+    1. Приоритет по сроку сдачи
+    2. Смешанные заказы РАЗБИВАЮТСЯ на части по (тип, толщина) и раскидываются по разным пулам
+    3. Пул = один (type, thickness). Показываем пул с самым ранним сроком
     4. Лист МДФ: 2750×2050 = 5.6375 м²
     """
-    # Константы для МДФ листа 2750×2050 мм
     SHEET_AREA = 2.75 * 2.05  # 5.6375 м²
     MAX_SHEET_COUNT = 4
-    LARGE_ORDER_THRESHOLD = SHEET_AREA * MAX_SHEET_COUNT  # 22.55 м²
-    OPTIMAL_UTILIZATION = 0.85  # 85% использования листа считается хорошим
-    ACCEPTABLE_WASTE = 0.3  # Допустимые остатки в м²
+    LARGE_ORDER_THRESHOLD = SHEET_AREA * MAX_SHEET_COUNT
 
-    # Получаем все незафрезерованные заказы (покраска минует фрезеровку — не в пуле)
     candidates = Order.query.filter(
         Order.milling == False,
         Order.shipment == False,
@@ -689,54 +798,24 @@ def generate_daily_pool():
     if not candidates:
         return []
 
-    # Проверяем срочные заказы
-    urgent_orders = [o for o in candidates if is_urgent_order(o)]
-    
-    # Если есть срочные заказы - берём первый срочный, игнорируя оптимизацию
-    if urgent_orders:
-        urgent_order = urgent_orders[0]
-        # Если срочный заказ очень большой - отдельный пул
-        if urgent_order.area >= LARGE_ORDER_THRESHOLD:
-            return [urgent_order]
-        
-        # Для срочного заказа просто добавляем заказы того же типа до 4 листов
-        def _same_type(a, b):
-            if a == b: return True
-            if a == "смешанный" and b == "фрезерованный": return True
-            if a == "фрезерованный" and b == "смешанный": return True
-            return False
-        same_type_urgent = [o for o in urgent_orders if _same_type(o.facade_type, urgent_order.facade_type)]
-        pool = []
-        total_area = 0
-        
-        for order in same_type_urgent:
-            if total_area + order.area <= LARGE_ORDER_THRESHOLD:
-                pool.append(order)
-                total_area += order.area
-            else:
-                break
-        
-        return pool
+    virtual_items = _expand_orders_to_virtual_items(candidates)
+    if not virtual_items:
+        return []
 
-    # Обычная оптимизация для несрочных заказов
-    first_order = candidates[0]
-    target_facade_type = first_order.facade_type
+    grouped = {}  # (type, thickness) -> [VirtualItem, ...]
+    for v in virtual_items:
+        key = (v.facade_type, v.thickness)
+        grouped.setdefault(key, []).append(v)
 
-    # Если первый заказ очень большой (>4 листов) - делаем отдельный пул
-    if first_order.area >= LARGE_ORDER_THRESHOLD:
-        return [first_order]
+    pools = []
+    for key, items in grouped.items():
+        packed = _pack_virtual_items(items, LARGE_ORDER_THRESHOLD, SHEET_AREA)
+        if packed:
+            min_due = min(v.order.due_date for v in packed)
+            pools.append((min_due, packed))
 
-    # Получаем заказы того же типа (смешанный ≈ фрезерованный для пула)
-    def _match_type(o, target):
-        if o.facade_type == target: return True
-        if target in ("фрезерованный", "смешанный") and o.facade_type in ("фрезерованный", "смешанный"): return True
-        return False
-    same_type_orders = [o for o in candidates if _match_type(o, target_facade_type)]
-    
-    # Алгоритм оптимизации: ищем лучшую комбинацию заказов
-    best_combination = find_optimal_combination(same_type_orders, SHEET_AREA, MAX_SHEET_COUNT)
-    
-    return best_combination if best_combination else [first_order]
+    pools.sort(key=lambda x: x[0])
+    return pools[0][1] if pools else []
 
 def find_optimal_combination(orders, sheet_area, max_sheets):
     """
@@ -1373,7 +1452,8 @@ def pricelist_export_pdf():
 
     grid_cats = [
         ("плоский", "Плоские"), ("фрезерованный", "Фрезерованные"), ("шпон", "Шпон"),
-        ("покраска", "Покраска"), ("услуги по покраске", "Услуги по покраске"), ("Доп услуги", "Доп услуги")
+        ("покраска плоский", "Покраска плоские"), ("покраска фрезерованный", "Покраска фрезерованные"), ("покраска шпон", "Покраска шпон"),
+        ("Доп услуги", "Доп услуги")
     ]
     for cat, label in grid_cats:
         cat_items = [p for p in items if p.category == cat]
@@ -1933,8 +2013,19 @@ def mark_pool_complete():
         return "⛔ Нет доступа", 403
 
     pool = generate_daily_pool()
-    for order in pool:
-        order.milling = True
+    for item in pool:
+        order = item.order
+        if item.is_partial:
+            milled = _get_milled_parts_set(order)
+            milled.add((item.facade_type, item.thickness))
+            order.milled_parts = json.dumps([{"type": t, "thickness": th} for t, th in milled])
+            mixed = json.loads(order.mixed_facade_data or "[]")
+            mixed_parts = set((it.get("type", ""), it.get("thickness") or 0) for it in mixed)
+            if milled >= mixed_parts:
+                order.milling = True
+                order.milled_parts = None
+        else:
+            order.milling = True
 
     db.session.commit()
 
@@ -1944,6 +2035,22 @@ def mark_pool_complete():
     flash("✅ Пул заказов завершён. Загружается следующий...")
     return redirect(url_for("milling_pool"))
 
+def _pool_items_to_display(pool):
+    """Преобразует список VirtualItem в список объектов для шаблона."""
+    return [
+        {
+            'id': v.order.id,
+            'order_id': v.order.order_id,
+            'client': v.order.client,
+            'facade_type': v.facade_type,
+            'thickness': v.thickness,
+            'area': v.area,
+            'due_date': v.order.due_date,
+        }
+        for v in pool
+    ]
+
+
 @app.route("/milling-pool")
 @login_required
 def milling_pool():
@@ -1952,23 +2059,26 @@ def milling_pool():
         return redirect(url_for("dashboard"))
 
     pool = generate_daily_pool()
+    orders = _pool_items_to_display(pool) if pool else []
 
-    pool_info = {
-        'is_urgent': any(is_urgent_order(order) for order in pool) if pool else False,
-        'efficiency': 0,
-        'waste': 0
-    }
-
+    pool_info = {'is_urgent': False, 'efficiency': 0, 'waste': 0, 'facade_type': '', 'thickness': ''}
     order_urgency = {}
-    for order in pool:
-        days_left = (order.due_date - datetime.now(timezone.utc).date()).days
-        order_urgency[order.id] = {
-            'is_urgent': is_urgent_order(order),
-            'days_left': days_left
-        }
+    earliest_due = None
 
     if pool:
-        total_area = sum(order.area for order in pool)
+        pool_info['is_urgent'] = any(is_urgent_order(v.order) for v in pool)
+        pool_info['facade_type'] = pool[0].facade_type
+        pool_info['thickness'] = pool[0].thickness
+        earliest_due = min(v.order.due_date for v in pool)
+
+        for v in pool:
+            days_left = (v.order.due_date - datetime.now(timezone.utc).date()).days
+            order_urgency[v.order.id] = {
+                'is_urgent': is_urgent_order(v.order),
+                'days_left': days_left
+            }
+
+        total_area = sum(v.area for v in pool)
         sheet_area = SHEET_AREA
         sheets_needed = total_area / sheet_area
         full_sheets = int(sheets_needed)
@@ -1981,7 +2091,7 @@ def milling_pool():
             pool_info['waste'] = 0
             pool_info['efficiency'] = 100
 
-    return render_template("milling_pool.html", orders=pool, pool_info=pool_info, order_urgency=order_urgency)
+    return render_template("milling_pool.html", orders=orders, pool_info=pool_info, order_urgency=order_urgency, earliest_due=earliest_due if pool else None)
 
 @app.route("/milling-orders")
 @login_required
@@ -1990,12 +2100,13 @@ def milling_orders():
     if current_user.role != "Фрезеровка":
         return redirect(url_for("dashboard"))
 
-    # Получаем все заказы для отображения
-    orders = Order.query.filter(Order.shipment == False).order_by(Order.due_date.asc()).all()
+    # Получаем все заказы для отображения (сортировка: толщина, затем срок)
+    orders_raw = Order.query.filter(Order.shipment == False).order_by(Order.due_date.asc()).all()
+    orders = sorted(orders_raw, key=_get_order_sort_key)
     
-    # Получаем текущий пул
+    # Получаем текущий пул (VirtualItems — берём order.id)
     current_pool = generate_daily_pool()
-    pool_order_ids = [order.id for order in current_pool]
+    pool_order_ids = list({v.order.id for v in current_pool})
     
     # Добавляем информацию о срочности для каждого заказа
     order_urgency = {}
@@ -2039,13 +2150,13 @@ def update_milling_manual():
 
         new_pool = generate_daily_pool()
         pool_info = {
-            'is_urgent': any(is_urgent_order(o) for o in new_pool) if new_pool else False,
+            'is_urgent': any(is_urgent_order(v.order) for v in new_pool) if new_pool else False,
             'efficiency': 0,
             'waste': 0
         }
 
         if new_pool:
-            total_area = sum(o.area for o in new_pool)
+            total_area = sum(v.area for v in new_pool)
             sheet_area = SHEET_AREA
             sheets_needed = total_area / sheet_area
             full_sheets = int(sheets_needed)
@@ -2057,20 +2168,25 @@ def update_milling_manual():
                 pool_info['waste'] = 0
                 pool_info['efficiency'] = 100
 
+        new_pool_display = []
+        if new_pool:
+            for v in new_pool:
+                d = {
+                    'id': v.order.id,
+                    'order_id': v.order.order_id,
+                    'client': v.order.client,
+                    'facade_type': v.facade_type,
+                    'thickness': v.thickness,
+                    'area': v.area,
+                    'due_date': v.order.due_date.strftime('%Y-%m-%d'),
+                    'is_urgent': is_urgent_order(v.order),
+                }
+                new_pool_display.append(d)
+
         return jsonify({
             'success': True,
             'message': f"✅ Статус заказа {order.order_id} обновлен",
-            'new_pool': [
-                {
-                    'id': o.id,
-                    'order_id': o.order_id,
-                    'client': o.client,
-                    'area': o.area,
-                    'facade_type': o.facade_type,
-                    'due_date': o.due_date.strftime('%Y-%m-%d'),
-                    'is_urgent': is_urgent_order(o)
-                } for o in new_pool
-            ],
+            'new_pool': new_pool_display,
             'pool_info': pool_info
         })
     except Exception as e:

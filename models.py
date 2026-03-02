@@ -42,6 +42,7 @@ class Order(db.Model):
     area        = db.Column(db.Float, nullable=True)       # площадь в м² (для смешанного — сумма)
     thickness   = db.Column(db.Float, nullable=True)      # толщина в мм (для фрезерованный/плоский/шпон)
     mixed_facade_data = db.Column(db.Text, nullable=True)  # JSON: [{"type":"плоский","area":1.5,"thickness":18},...]
+    milled_parts = db.Column(db.Text, nullable=True)  # JSON: [{"type":"фрезерованный","thickness":19},...] — отфрезерованные части смешанного заказа
 
     counterparty = db.relationship('Counterparty', backref=db.backref('orders', lazy=True))
 
@@ -129,8 +130,12 @@ class Counterparty(db.Model):
     # orders — обратная связь через Order.counterparty_id
 
 
-# Категории прайс-листа (как типы фасадов)
-PRICE_CATEGORIES = ["плоский", "фрезерованный", "шпон", "покраска", "услуги по покраске", "Доп услуги"]
+# Категории прайс-листа: изготовление (плоский, фрезерованный, шпон) и услуги по покраске по типам
+PRICE_CATEGORIES = [
+    "плоский", "фрезерованный", "шпон",
+    "покраска плоский", "покраска фрезерованный", "покраска шпон",
+    "Доп услуги"
+]
 
 
 class PriceListItem(db.Model):

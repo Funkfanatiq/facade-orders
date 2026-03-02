@@ -57,7 +57,7 @@
 
   <div style="background: #f1f8e9; padding: 12px; margin: 20px; border-radius: 8px; border-left: 4px solid #4CAF50;">
     <p style="margin: 0; color: #333; font-weight: 500;">
-      📋 Оптимизированный пул заказов по типу фасада. Отметьте пул как готовый после фрезеровки.
+      📋 Пул формируется по приоритету срока. Смешанные заказы разбиваются на части — каждая часть (тип+толщина) попадает в свой пул.
     </p>
   </div>
 
@@ -68,13 +68,12 @@
     {% set sheets_needed = (total_area / sheet_area) %}
     {% set full_sheets = sheets_needed|int %}
     {% set partial_sheet = sheets_needed - full_sheets %}
-    {% set earliest_order = orders|min(attribute='due_date') %}
 
     <div class="pool-info {{ 'urgent' if pool_info.is_urgent else 'normal' }}">
       <h3 style="margin: 0 0 10px 0; color: {% if pool_info.is_urgent %}#cc0000{% else %}#2c5aa0{% endif %};">
         {% if pool_info.is_urgent %}🚨 СРОЧНЫЙ ПУЛ ЗАКАЗОВ{% else %}📋 Оптимизированный пул заказов{% endif %}
       </h3>
-      <p style="margin: 5px 0;"><strong>Тип фасада:</strong> {{ orders[0].facade_type }}</p>
+      <p style="margin: 5px 0;"><strong>Тип фасада:</strong> {{ pool_info.facade_type }}{% if pool_info.thickness %} {{ pool_info.thickness|int }} мм{% endif %}</p>
       <p style="margin: 5px 0;"><strong>Количество заказов:</strong> {{ orders|length }}</p>
       <p style="margin: 5px 0;"><strong>Общая площадь:</strong> {{ "%.2f"|format(total_area) }} м²</p>
       <p style="margin: 5px 0;"><strong>Листов МДФ:</strong>
@@ -97,7 +96,7 @@
       {% endif %}
       <p style="margin: 5px 0;"><strong>Срок сдачи:</strong>
         <span style="color: {% if pool_info.is_urgent %}#cc0000{% else %}inherit{% endif %};">
-          {{ earliest_order.due_date.strftime('%Y-%m-%d') }}
+          {{ earliest_due.strftime('%Y-%m-%d') if earliest_due else '-' }}
         </span>
       </p>
     </div>
@@ -109,6 +108,7 @@
           <th>№ заказа</th>
           <th>Клиент</th>
           <th>Тип фасада</th>
+          <th>Толщина</th>
           <th>Площадь (м²)</th>
           <th>Срок сдачи</th>
           <th>Дней до сдачи</th>
@@ -122,6 +122,7 @@
             <td>{{ o.order_id }}</td>
             <td>{{ o.client }}</td>
             <td>{{ o.facade_type }}</td>
+            <td>{{ o.thickness|int if o.thickness else '-' }}{% if o.thickness %} мм{% endif %}</td>
             <td>{{ "%.2f"|format(o.area) }}</td>
             <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
             <td style="color: {% if days_left <= 3 %}#cc0000{% elif days_left <= 6 %}#ff6600{% else %}#333{% endif %}; font-weight: bold;">

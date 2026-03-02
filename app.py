@@ -2442,10 +2442,13 @@ def compose_email():
     return render_template("email_compose.html", counts=counts, unread_count=unread_count)
 
 
+IMAGE_EXTENSIONS = frozenset({"jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"})
+
+
 @app.route("/mail/attachment/<int:email_id>/<int:idx>")
 @login_required
 def mail_attachment(email_id, idx):
-    """Скачать вложение письма."""
+    """Скачать или просмотреть вложение письма. ?inline=1 — открыть изображение в браузере."""
     if current_user.role not in ["Менеджер", "Админ"]:
         return "Доступ запрещен", 403
     from models import Email
@@ -2466,7 +2469,11 @@ def mail_attachment(email_id, idx):
     full_path = os.path.join(app.config["UPLOAD_FOLDER"], path.replace("/", os.sep))
     if not os.path.isfile(full_path):
         return "Файл не найден", 404
-    return send_file(full_path, as_attachment=True, download_name=filename)
+    inline = request.args.get("inline") == "1"
+    ext = (filename or "").lower().rsplit(".", 1)[-1] if "." in (filename or "") else ""
+    as_att = not (inline and ext in IMAGE_EXTENSIONS)
+    mimetype = att.get("content_type") or None
+    return send_file(full_path, as_attachment=as_att, download_name=filename, mimetype=mimetype)
 
 
 @app.route("/mail/read/<int:email_id>")
@@ -2647,7 +2654,13 @@ def _fetch_emails_from_imap():
                                 full_path = os.path.join(upload_folder, rel_path)
                                 with open(full_path, "wb") as f:
                                     f.write(payload)
-                                attachments.append({"filename": filename, "path": rel_path.replace(os.sep, "/")})
+                                size_bytes = len(payload)
+                                attachments.append({
+                                    "filename": filename,
+                                    "path": rel_path.replace(os.sep, "/"),
+                                    "size": size_bytes,
+                                    "content_type": ct
+                                })
                         except Exception as ex:
                             print(f"⚠️ Ошибка сохранения вложения {filename}: {ex}")
                     elif ct == "text/plain":

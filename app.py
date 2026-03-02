@@ -49,6 +49,25 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
 
+
+@login_manager.unauthorized_handler
+def _handle_unauthorized():
+    """Единый обработчик для @login_required.
+    Если запрос идёт из iframe (таб «Почта»), перенаправляем весь топ-экран на страницу логина,
+    чтобы не рендерить login/dashboard внутри iframe и не дублировать интерфейс.
+    """
+    login_url = url_for("login")
+    dest = (request.headers.get("Sec-Fetch-Dest") or "").lower()
+    if dest == "iframe":
+        # Небольшая HTML-страница, которая выталкивает пользователя на логин из iframe.
+        return (
+            f"<!DOCTYPE html><html><head><meta charset='utf-8'>"
+            f"<script>window.top.location = '{login_url}';</script>"
+            f"</head><body></body></html>"
+        ), 200, {"Content-Type": "text/html; charset=utf-8"}
+    return redirect(login_url)
+
+
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 

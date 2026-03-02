@@ -290,6 +290,34 @@ def _ensure_email_extra_columns():
         print(f"⚠️ Проверка email колонок: {e}")
 
 
+def _ensure_email_attachments_column():
+    """Добавляет колонку attachments в email для вложений."""
+    try:
+        with db.engine.connect() as conn:
+            backend = db.engine.url.get_backend_name()
+            if backend == "postgresql":
+                r = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'email' AND column_name = 'attachments'
+                """))
+                if r.fetchone() is None:
+                    conn.execute(text("ALTER TABLE email ADD COLUMN attachments TEXT"))
+                    conn.commit()
+                    print("✅ Колонка email.attachments добавлена")
+            else:
+                r = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='email'"))
+                if r.fetchone() is None:
+                    return
+                r = conn.execute(text("PRAGMA table_info(email)"))
+                cols = [row[1] for row in r.fetchall()] if r else []
+                if "attachments" not in cols:
+                    conn.execute(text("ALTER TABLE email ADD COLUMN attachments TEXT"))
+                    conn.commit()
+                    print("✅ Колонка email.attachments добавлена")
+    except Exception as e:
+        print(f"⚠️ Проверка email.attachments: {e}")
+
+
 def _ensure_mixed_facade_data_column():
     """Добавляет колонку mixed_facade_data в order для смешанных фасадов."""
     try:
@@ -396,6 +424,7 @@ def init_database():
                 _ensure_milled_parts_column()
                 _ensure_invoice_item_thickness_column()
                 _ensure_email_extra_columns()
+                _ensure_email_attachments_column()
                 _ensure_push_columns()
 
                 # Проверяем количество пользователей
@@ -2413,6 +2442,33 @@ def compose_email():
     return render_template("email_compose.html", counts=counts, unread_count=unread_count)
 
 
+@app.route("/mail/attachment/<int:email_id>/<int:idx>")
+@login_required
+def mail_attachment(email_id, idx):
+    """Скачать вложение письма."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return "Доступ запрещен", 403
+    from models import Email
+    email = Email.query.get_or_404(email_id)
+    attachments = []
+    if email.attachments:
+        try:
+            attachments = json.loads(email.attachments)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    if idx < 0 or idx >= len(attachments):
+        return "Вложение не найдено", 404
+    att = attachments[idx]
+    path = att.get("path", "")
+    filename = att.get("filename", "attachment")
+    if not path or ".." in path or path.startswith("/"):
+        return "Недопустимый путь", 400
+    full_path = os.path.join(app.config["UPLOAD_FOLDER"], path.replace("/", os.sep))
+    if not os.path.isfile(full_path):
+        return "Файл не найден", 404
+    return send_file(full_path, as_attachment=True, download_name=filename)
+
+
 @app.route("/mail/read/<int:email_id>")
 @login_required
 def read_email(email_id):
@@ -2530,6 +2586,20 @@ def mail_action():
         return jsonify({"success": False, "message": str(ex)}), 500
 
 
+def _decode_mime_header(s):
+    """Декодирует MIME-заголовок (например, имя файла)."""
+    if not s:
+        return ""
+    from email.header import decode_header
+    decoded = []
+    for part, enc in decode_header(s):
+        if isinstance(part, bytes):
+            decoded.append(part.decode(enc or "utf-8", errors="replace"))
+        else:
+            decoded.append(str(part))
+    return "".join(decoded).strip()
+
+
 def _fetch_emails_from_imap():
     """Подключается к Mail.ru IMAP, загружает новые письма в БД. Возвращает (success, new_count, error_msg)."""
     user = os.environ.get("MAIL_USERNAME")
@@ -2540,6 +2610,7 @@ def _fetch_emails_from_imap():
         import imaplib
         import email as emaillib
         from email.header import decode_header
+        import uuid
         
         def _decode_mime(s):
             if not s: return ""
@@ -2551,21 +2622,48 @@ def _fetch_emails_from_imap():
                     decoded.append(str(part))
             return " ".join(decoded)
         
-        def _get_body(msg):
+        def _get_body_and_attachments(msg, upload_folder, uid_s):
             body, html = "", ""
+            attachments = []
             if msg.is_multipart():
-                for part in msg.walk():
+                for i, part in enumerate(msg.walk()):
                     ct = part.get_content_type()
-                    if ct == "text/plain":
+                    disp = str(part.get("Content-Disposition") or "")
+                    filename = part.get_filename()
+                    if filename:
+                        filename = _decode_mime_header(filename)
+                    is_attachment = "attachment" in disp.lower() or (filename and ct not in ("text/plain", "text/html"))
+                    if is_attachment and filename:
+                        try:
+                            payload = part.get_payload(decode=True)
+                            if payload:
+                                safe = secure_filename_custom(filename) or "attachment"
+                                subdir = "mail_attachments"
+                                os.makedirs(os.path.join(upload_folder, subdir), exist_ok=True)
+                                unique = f"{uid_s}_{i}_{uuid.uuid4().hex[:8]}"
+                                ext = os.path.splitext(safe)[1] or ""
+                                storage_name = f"{unique}{ext}" if ext else f"{unique}_{safe}"
+                                rel_path = os.path.join(subdir, storage_name)
+                                full_path = os.path.join(upload_folder, rel_path)
+                                with open(full_path, "wb") as f:
+                                    f.write(payload)
+                                attachments.append({"filename": filename, "path": rel_path.replace(os.sep, "/")})
+                        except Exception as ex:
+                            print(f"⚠️ Ошибка сохранения вложения {filename}: {ex}")
+                    elif ct == "text/plain":
                         try: body = part.get_payload(decode=True).decode(part.get_content_charset() or "utf-8", errors="replace")
                         except: body = str(part.get_payload())
-                    elif ct == "text/html":
+                    elif ct == "text/html" and not is_attachment:
                         try: html = part.get_payload(decode=True).decode(part.get_content_charset() or "utf-8", errors="replace")
                         except: html = str(part.get_payload())
             else:
                 try: body = msg.get_payload(decode=True).decode(msg.get_content_charset() or "utf-8", errors="replace")
                 except: body = str(msg.get_payload()) if msg.get_payload() else ""
-            return body or html[:5000] if html else "", html or None
+            return body or html[:5000] if html else "", html or None, attachments
+        
+        def _get_body(msg):
+            body, html, _ = _get_body_and_attachments(msg, app.config["UPLOAD_FOLDER"], "tmp")
+            return body, html
         
         from models import Email
         imap = imaplib.IMAP4_SSL("imap.mail.ru", 993, timeout=30)
@@ -2596,7 +2694,7 @@ def _fetch_emails_from_imap():
                 subject = _decode_mime(msg.get("Subject", ""))
                 from_addr = _decode_mime(msg.get("From", ""))
                 date_str = msg.get("Date")
-                body, html_body = _get_body(msg)
+                body, html_body, attachments_list = _get_body_and_attachments(msg, app.config["UPLOAD_FOLDER"], uid_s)
                 created = datetime.now(timezone.utc)
                 if date_str:
                     try:
@@ -2615,6 +2713,7 @@ def _fetch_emails_from_imap():
                     is_sent=False,
                     folder="inbox",
                     created_at=created,
+                    attachments=json.dumps(attachments_list) if attachments_list else None,
                 )
                 db.session.add(e)
                 new_count += 1

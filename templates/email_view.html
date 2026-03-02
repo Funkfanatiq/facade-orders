@@ -86,6 +86,19 @@
                 <div class="email-body">
                     {% if email.html_body %}{{ email.html_body|safe }}{% else %}{{ email.body or 'Нет содержимого' }}{% endif %}
                 </div>
+                {% if email.attachments %}
+                {% set att_list = email.attachments|fromjson %}
+                {% if att_list %}
+                <div class="email-attachments" style="margin-top:20px; padding-top:16px; border-top:1px solid #eee;">
+                    <div class="meta-label" style="margin-bottom:8px;">📎 Вложения</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:10px;">
+                        {% for att in att_list %}
+                        <a href="{{ url_for('mail_attachment', email_id=email.id, idx=loop.index0) }}" class="btn btn-secondary" style="text-decoration:none;" download>{{ att.filename or 'Файл' }}</a>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% endif %}
                 <div class="email-actions">
                     {% if not email.is_sent %}
                     <a href="{{ url_for('reply_email', email_id=email.id) }}" class="btn btn-primary">📝 Ответить</a>

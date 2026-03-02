@@ -195,6 +195,7 @@ class Email(db.Model):
     sent_at = db.Column(db.DateTime, nullable=True)
     reply_to_id = db.Column(db.Integer, db.ForeignKey('email.id'), nullable=True)
     reply_to = db.relationship('Email', remote_side=[id], backref='replies')
+    attachments = db.Column(db.Text, nullable=True)  # JSON: [{"filename":"doc.pdf","path":"mail_attachments/..."}]
 
     __table_args__ = (db.Index('idx_email_message_id', 'message_id'), db.Index('idx_email_folder', 'folder'),)
 

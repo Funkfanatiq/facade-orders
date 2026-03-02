@@ -232,9 +232,47 @@
     .counterparty-link { text-decoration: none; color: #333; display: block; }
     .counterparty-link:hover { color: #333; }
     .counterparty-link .cp-info { color: #666; font-weight: normal; }
-    .pricelist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; }
-    .pricelist-grid-cell { min-width: 0; }
-    @media (max-width: 700px) { .pricelist-grid { grid-template-columns: 1fr; } }
+    .pricelist-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-top: 16px;
+      border: 1px solid #e0e0e0;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .pricelist-grid-cell {
+      min-width: 0;
+      padding: 12px 16px;
+      border-right: 1px solid #e0e0e0;
+      border-bottom: 1px solid #e0e0e0;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .pricelist-grid-cell:nth-child(3n) {
+      border-right: none;
+    }
+    @media (max-width: 900px) {
+      .pricelist-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .pricelist-grid-cell:nth-child(3n) {
+        border-right: 1px solid #e0e0e0;
+      }
+      .pricelist-grid-cell:nth-child(2n) {
+        border-right: none;
+      }
+    }
+    @media (max-width: 700px) {
+      .pricelist-grid {
+        grid-template-columns: 1fr;
+        border-radius: 10px;
+      }
+      .pricelist-grid-cell {
+        border-right: none;
+      }
+    }
     .pricelist-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
     .pricelist-table th, .pricelist-table td { padding: 10px 12px; text-align: left; border: 1px solid #ddd; }
     .pricelist-table th { background: #f5f5f5; font-weight: 600; }

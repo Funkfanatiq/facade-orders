@@ -747,7 +747,8 @@ def _expand_orders_to_virtual_items(orders):
 
 
 def _pack_virtual_items(items, max_area, sheet_area):
-    """Упаковка виртуальных элементов в пул. Приоритет: по сроку (due_date), жадная по площади."""
+    """Упаковка виртуальных элементов в пул. Приоритет: по сроку (due_date), жадная по площади.
+    Крупные заказы (>4 листов) всё равно попадают в пул как один элемент."""
     if not items:
         return []
     sorted_items = sorted(items, key=lambda x: (x.order.due_date, -x.area))
@@ -757,6 +758,10 @@ def _pack_virtual_items(items, max_area, sheet_area):
         if total + v.area <= max_area:
             result.append(v)
             total += v.area
+        elif not result:
+            result.append(v)
+            total += v.area
+            break
         else:
             break
     return result
@@ -787,13 +792,27 @@ def generate_daily_pool():
     MAX_SHEET_COUNT = 4
     LARGE_ORDER_THRESHOLD = SHEET_AREA * MAX_SHEET_COUNT
 
+    # Заказы для пула: не отфрезерованы, не отгружены, не покраска
+    # area > 0 или смешанный (площадь в mixed_facade_data)
     candidates = Order.query.filter(
         Order.milling == False,
         Order.shipment == False,
-        Order.facade_type != "покраска",
-        Order.area != None,
-        Order.area > 0
+        Order.facade_type != "покраска"
     ).order_by(Order.due_date.asc()).all()
+    
+    def _order_has_area(o):
+        if o.area and float(o.area) > 0:
+            return True
+        if o.facade_type == "смешанный" and o.mixed_facade_data:
+            try:
+                for it in json.loads(o.mixed_facade_data):
+                    if float(it.get("area") or 0) > 0:
+                        return True
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+        return False
+    
+    candidates = [o for o in candidates if _order_has_area(o)]
 
     if not candidates:
         return []
@@ -1451,8 +1470,8 @@ def pricelist_export_pdf():
     ]
 
     grid_cats = [
-        ("плоский", "Плоские"), ("фрезерованный", "Фрезерованные"), ("шпон", "Шпон"),
         ("покраска плоский", "Покраска плоские"), ("покраска фрезерованный", "Покраска фрезерованные"), ("покраска шпон", "Покраска шпон"),
+        ("плоский", "Плоские"), ("фрезерованный", "Фрезерованные"), ("шпон", "Шпон"),
         ("Доп услуги", "Доп услуги")
     ]
     for cat, label in grid_cats:

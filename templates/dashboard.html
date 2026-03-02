@@ -506,12 +506,12 @@
             <h4 id="pricelist-form-title">Позиция прайс-листа</h4>
             <select name="pricelist_category" id="pricelist_category">
               <option value="">— Категория —</option>
-              <option value="плоский">Плоские</option>
-              <option value="фрезерованный">Фрезерованные</option>
-              <option value="шпон">Шпон</option>
               <option value="покраска плоский">Покраска плоские</option>
               <option value="покраска фрезерованный">Покраска фрезерованные</option>
               <option value="покраска шпон">Покраска шпон</option>
+              <option value="плоский">Плоские</option>
+              <option value="фрезерованный">Фрезерованные</option>
+              <option value="шпон">Шпон</option>
               <option value="Доп услуги">Доп услуги</option>
             </select>
             <input type="text" name="pricelist_name" id="pricelist_name" placeholder="Наименование" required>
@@ -525,7 +525,7 @@
         </form>
       </div>
       {% if price_list %}
-      {% set grid_cats = [('плоский', 'Плоские'), ('фрезерованный', 'Фрезерованные'), ('шпон', 'Шпон'), ('покраска плоский', 'Покраска плоские'), ('покраска фрезерованный', 'Покраска фрезерованные'), ('покраска шпон', 'Покраска шпон'), ('Доп услуги', 'Доп услуги')] %}
+      {% set grid_cats = [('покраска плоский', 'Покраска плоские'), ('покраска фрезерованный', 'Покраска фрезерованные'), ('покраска шпон', 'Покраска шпон'), ('плоский', 'Плоские'), ('фрезерованный', 'Фрезерованные'), ('шпон', 'Шпон'), ('Доп услуги', 'Доп услуги')] %}
       <div id="pricelist-list" class="pricelist-grid">
       {% for cat, label in grid_cats %}
       {% set cat_items = price_list|selectattr('category', 'equalto', cat)|list %}

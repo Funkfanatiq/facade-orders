@@ -2354,8 +2354,22 @@ def _mail_counts():
     try:
         from models import Email
         f_inbox = db.or_(Email.folder == "inbox", Email.folder.is_(None))
-        unread = Email.query.filter(f_inbox, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), Email.is_sent == False, Email.is_read == False).count()
-        counts["inbox"] = Email.query.filter(f_inbox, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), Email.is_sent == False).count()
+        # Обычные входящие (с сервера)
+        base_inbox_filter = db.and_(
+            f_inbox,
+            db.or_(Email.is_draft == False, Email.is_draft.is_(None)),
+            Email.is_sent == False,
+        )
+        # Письма "самому себе": отправитель и получатель совпадают.
+        self_to_self_filter = db.and_(
+            Email.is_sent == True,
+            Email.sender.isnot(None),
+            Email.recipient.isnot(None),
+            Email.sender == Email.recipient,
+            db.or_(Email.folder != "trash", Email.folder.is_(None)),
+        )
+        unread = Email.query.filter(base_inbox_filter, Email.is_read == False).count()
+        counts["inbox"] = Email.query.filter(db.or_(base_inbox_filter, self_to_self_filter)).count()
         counts["sent"] = Email.query.filter(Email.is_sent == True, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), db.or_(Email.folder != "trash", Email.folder.is_(None))).count()
         counts["drafts"] = Email.query.filter(Email.is_draft == True).count()
         counts["archive"] = Email.query.filter(Email.folder == "archive").count()
@@ -2380,23 +2394,32 @@ def mail_agent(view=None):
     counts = {"inbox": 0, "sent": 0, "drafts": 0, "archive": 0, "spam": 0, "trash": 0}
     try:
         from models import Email
-        unread_count = Email.query.filter(
-            Email.folder == "inbox",
-            Email.is_draft == False,
-            Email.is_sent == False,
-            Email.is_read == False
-        ).count()
         f_inbox = db.or_(Email.folder == "inbox", Email.folder.is_(None))
-        counts["inbox"] = Email.query.filter(f_inbox, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), Email.is_sent == False).count()
+        base_inbox_filter = db.and_(
+            f_inbox,
+            db.or_(Email.is_draft == False, Email.is_draft.is_(None)),
+            Email.is_sent == False,
+        )
+        self_to_self_filter = db.and_(
+            Email.is_sent == True,
+            Email.sender.isnot(None),
+            Email.recipient.isnot(None),
+            Email.sender == Email.recipient,
+            db.or_(Email.folder != "trash", Email.folder.is_(None)),
+        )
+        counts["inbox"] = Email.query.filter(db.or_(base_inbox_filter, self_to_self_filter)).count()
         counts["sent"] = Email.query.filter(Email.is_sent == True, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), db.or_(Email.folder != "trash", Email.folder.is_(None))).count()
         counts["drafts"] = Email.query.filter(Email.is_draft == True).count()
         counts["archive"] = Email.query.filter(Email.folder == "archive").count()
         counts["spam"] = Email.query.filter(Email.folder == "spam").count()
         counts["trash"] = Email.query.filter(Email.folder == "trash").count()
-        unread_count = Email.query.filter(f_inbox, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), Email.is_sent == False, Email.is_read == False).count()
+        unread_count = Email.query.filter(base_inbox_filter, Email.is_read == False).count()
         if view_type == "inbox":
-            emails = Email.query.filter(f_inbox, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), Email.is_sent == False
-                ).order_by(Email.created_at.desc()).all()
+            emails = (
+                Email.query.filter(db.or_(base_inbox_filter, self_to_self_filter))
+                .order_by(Email.created_at.desc())
+                .all()
+            )
         elif view_type == "sent":
             emails = Email.query.filter(Email.is_sent == True, db.or_(Email.is_draft == False, Email.is_draft.is_(None)), db.or_(Email.folder != "trash", Email.folder.is_(None))
                 ).order_by(Email.created_at.desc()).all()

@@ -4,10 +4,6 @@
 private_key.pem
 public_key.pem
 .env.local
-yandex_token.txt
-sync_info.json
-token.pickle
-credentials.json
 
 # База данных (только для локальной разработки)
 database.db

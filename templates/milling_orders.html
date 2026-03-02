@@ -4,78 +4,23 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Фрезеровка | Управление заказами</title>
+  <script>window.PUSH_ENABLED = true;</script>
+  <script src="{{ url_for('static', filename='push-init.js') }}"></script>
   <style>
-    body {
-      margin: 0;
-      background: #f9f9f9;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      color: #333;
-    }
-    .top-bar {
-      background: #fff;
-      padding: 16px;
-      border-bottom: 1px solid #ddd;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
+    body { margin: 0; background: #f9f9f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #333; }
+    .top-bar { background: #fff; padding: 16px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
     .top-bar h2 { margin: 0; font-size: 20px; }
-    .tabs {
-      display: flex;
-      background: #fff;
-      border-radius: 12px;
-      padding: 4px;
-      margin: 20px 20px 0;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
-      gap: 4px;
-    }
-    .tab {
-      flex: 1;
-      padding: 12px 20px;
-      text-align: center;
-      cursor: pointer;
-      border-radius: 8px;
-      font-weight: 500;
-      transition: all 0.2s ease;
-      background: #f2f2f2;
-      color: #555;
-      border: none;
-      font-size: 15px;
-      text-decoration: none;
-      display: block;
-    }
+    .tabs { display: flex; background: #fff; border-radius: 12px; padding: 4px; margin: 20px 20px 0; box-shadow: 0 2px 6px rgba(0,0,0,0.06); gap: 4px; }
+    .tab { flex: 1; padding: 12px 20px; text-align: center; cursor: pointer; border-radius: 8px; font-weight: 500; background: #f2f2f2; color: #555; text-decoration: none; display: block; font-size: 15px; transition: all 0.2s ease; }
     .tab:hover { background: #e8e8e8; color: #333; }
-    .tab.active {
-      background: #757575;
-      color: #fff;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-    }
+    .tab.active { background: #4CAF50; color: #fff; box-shadow: 0 2px 6px rgba(76, 175, 80, 0.3); }
     .tab.active:hover { color: #fff; }
-    .form-box {
-      background: #fff;
-      margin: 20px;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
-    }
+    .form-box { background: #fff; margin: 20px; padding: 20px; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
     .form-box h3 { margin: 0 0 16px 0; font-size: 18px; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: #fff;
-    }
-    th, td {
-      padding: 12px;
-      border-bottom: 1px solid #eee;
-      text-align: center;
-      vertical-align: middle;
-    }
+    table { width: 95%; margin: 20px auto; border-collapse: collapse; background: #fff; }
+    th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: center; vertical-align: middle; }
     th { background-color: #f2f2f2; }
-    a {
-      text-decoration: none;
-      color: #4CAF50;
-      font-size: 14px;
-    }
+    a { text-decoration: none; color: #4CAF50; font-size: 14px; }
     a:hover { text-decoration: underline; }
     .switch {
       position: relative;
@@ -115,18 +60,9 @@
     input:checked + .slider:before {
       transform: translateX(20px);
     }
-    .in-pool {
-      background-color: #d4edda !important;
-      border-left: 4px solid #4CAF50;
-    }
-    .urgent-order {
-      background-color: #f8d7da !important;
-      border-left: 4px solid #ff4444;
-    }
-    .warning-order {
-      background-color: #fff3cd !important;
-      border-left: 4px solid #ffc107;
-    }
+    .row-green { background-color: #d4edda !important; border-left: 4px solid #4CAF50; }
+    .row-danger { background-color: #f8d7da !important; border-left: 4px solid #dc3545; }
+    .row-warning { background-color: #fff3cd !important; border-left: 4px solid #ffc107; }
     .completed {
       background-color: #f8f9fa !important;
       color: #6c757d;
@@ -146,7 +82,7 @@
 </head>
 <body>
   <div class="top-bar">
-    <h2>🔧 Фрезеровка</h2>
+    <h2>🔧 Рабочее место фрезеровщика</h2>
     <div>
       {{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a>
     </div>
@@ -155,6 +91,16 @@
   <div class="tabs">
     <a href="{{ url_for('milling_pool') }}" class="tab">📋 Пул заказов</a>
     <a href="{{ url_for('milling_orders') }}" class="tab active">📋 Управление заказами</a>
+  </div>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}<div style="text-align:center; color: green; margin: 16px 20px;">{% for msg in messages %}<p style="margin: 4px 0;">{{ msg }}</p>{% endfor %}</div>{% endif %}
+  {% endwith %}
+
+  <div style="background: #f1f8e9; padding: 12px; margin: 20px; border-radius: 8px; border-left: 4px solid #4CAF50;">
+    <p style="margin: 0; color: #333; font-weight: 500;">
+      📋 Управление статусом фрезеровки заказов. Заказы в пуле выделены зелёным, срочные — красным.
+    </p>
   </div>
 
   <div class="form-box" style="margin-top: 20px;">
@@ -180,11 +126,11 @@
           {% if o.milling %}
             {% set row_class = "completed" %}
           {% elif in_pool %}
-            {% set row_class = "in-pool" %}
+            {% set row_class = "row-green" %}
           {% elif is_urgent %}
-            {% set row_class = "urgent-order" %}
+            {% set row_class = "row-danger" %}
           {% elif days_left <= 6 %}
-            {% set row_class = "warning-order" %}
+            {% set row_class = "row-warning" %}
           {% endif %}
 
           <tr data-order-id="{{ o.id }}" class="{{ row_class }}">
@@ -262,10 +208,10 @@
         due.setHours(0, 0, 0, 0);
         const daysLeft = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
         if (daysLeft <= 3) {
-          row.className = 'urgent-order';
+          row.className = 'row-danger';
           statusCell.innerHTML = '<span class="status-indicator status-urgent"></span>Срочный';
         } else if (daysLeft <= 6) {
-          row.className = 'warning-order';
+          row.className = 'row-warning';
           statusCell.innerHTML = '<span class="status-indicator status-warning"></span>Скоро срок';
         } else {
           row.className = '';

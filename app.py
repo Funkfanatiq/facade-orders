@@ -530,6 +530,24 @@ def secure_filename_custom(filename):
         filename = name[:95] + ext
     return filename
 
+def unique_upload_filename(filename, upload_folder):
+    """Гарантирует уникальное имя файла в папке загрузок."""
+    base = secure_filename_custom(filename)
+    if not base:
+        base = "file"
+    name, ext = os.path.splitext(base)
+    candidate = base
+    i = 1
+    while os.path.exists(os.path.join(upload_folder, candidate)):
+        candidate = f"{name}_{i}{ext}"
+        i += 1
+        if i > 10_000:
+            # страховка от бесконечного цикла в аномальных условиях
+            import uuid
+            candidate = f"{name}_{uuid.uuid4().hex}{ext}"
+            break
+    return candidate
+
 def get_storage_usage_mb():
     """Получает текущее использование хранилища в МБ"""
     try:
@@ -1164,12 +1182,12 @@ def dashboard():
                     continue
                 
                 # Создаем безопасное имя файла
-                safe_filename = secure_filename_custom(f.filename)
+                safe_filename = unique_upload_filename(f.filename, app.config["UPLOAD_FOLDER"])
                 path = os.path.join(app.config["UPLOAD_FOLDER"], safe_filename)
                 try:
                     f.save(path)
                     # Храним относительный путь как имя файла для обслуживания через /uploads/<filename>
-                    filenames.append(safe_filename)
+                    filenames.append(f.filename)
                     filepaths.append(safe_filename)
                 except Exception as e:
                     print(f"Ошибка при сохранении файла {safe_filename}: {e}")

@@ -391,10 +391,12 @@
         <td>{{ "✔" if o.paid else "✖" }}</td>
         {% endif %}
         <td>
-          {% if o.filenames %}
-            {% for fn in o.filenames.split(';') %}
-              {% if fn %}
-                <a href="{{ url_for('uploaded_file', filename=fn) }}" target="_blank">📎 {{ fn }}</a><br>
+          {% if o.filepaths %}
+            {% set fps = (o.filepaths or '').split(';') %}
+            {% set fns = (o.filenames or '').split(';') %}
+            {% for fp, fn in fps|zip(fns) %}
+              {% if fp %}
+                <a href="{{ url_for('uploaded_file', filename=fp) }}" target="_blank">📎 {{ fn or fp }}</a><br>
               {% endif %}
             {% endfor %}
           {% else %}

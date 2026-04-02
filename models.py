@@ -206,6 +206,20 @@ class IgnoredEmailUid(db.Model):
     message_id = db.Column(db.String(255), nullable=False, unique=True)
 
 
+class MillingNote(db.Model):
+    """Заметка фрезеровщика к заказу (напоминания, недостающие детали)."""
+    __tablename__ = 'milling_note'
+
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=db.func.now())
+
+    order = db.relationship('Order', backref=db.backref('milling_notes', lazy=True, cascade='all, delete-orphan'))
+    author = db.relationship('User', backref=db.backref('authored_milling_notes', lazy=True))
+
+
 class InvoiceItem(db.Model):
     """Позиция счёта (из прайса или вручную)."""
     id = db.Column(db.Integer, primary_key=True)

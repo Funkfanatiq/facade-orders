@@ -42,7 +42,7 @@ app.config.from_object('config.Config')
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=2, x_host=2, x_proto=2)
 
 # Импортируем модели после инициализации Flask
-from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty, PriceListItem, Invoice, InvoiceItem, Payment, PRICE_CATEGORIES, PushSubscription
+from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty, PriceListItem, Invoice, InvoiceItem, Payment, PRICE_CATEGORIES, PushSubscription, MillingNote
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -2302,6 +2302,59 @@ def milling_orders():
                          current_pool=current_pool,
                          pool_order_ids=pool_order_ids,
                          order_urgency=order_urgency)
+
+
+@app.route("/milling-notes", methods=["GET"])
+@login_required
+def milling_notes():
+    """Заметки по текущим заказам (планировщик для фрезеровщика)."""
+    if current_user.role != "Фрезеровка":
+        return redirect(url_for("dashboard"))
+    orders_raw = Order.query.filter(Order.shipment == False).order_by(Order.due_date.asc()).all()
+    orders = sorted(orders_raw, key=_get_order_sort_key)
+    notes = (
+        MillingNote.query.join(Order, MillingNote.order_id == Order.id)
+        .filter(Order.shipment == False)
+        .order_by(MillingNote.created_at.desc())
+        .all()
+    )
+    return render_template("milling_notes.html", orders=orders, notes=notes)
+
+
+@app.route("/milling-notes/add", methods=["POST"])
+@login_required
+def milling_note_add():
+    if current_user.role != "Фрезеровка":
+        flash("Нет доступа", "error")
+        return redirect(url_for("dashboard"))
+    oid = request.form.get("order_id", type=int)
+    body = (request.form.get("body") or "").strip()
+    if not oid or not body:
+        flash("Выберите заказ и введите текст заметки", "error")
+        return redirect(url_for("milling_notes"))
+    if len(body) > 4000:
+        body = body[:4000]
+    order = Order.query.get(oid)
+    if not order or order.shipment:
+        flash("Заказ не найден или уже отгружен", "error")
+        return redirect(url_for("milling_notes"))
+    db.session.add(MillingNote(order_id=oid, user_id=current_user.id, body=body))
+    db.session.commit()
+    flash("Заметка сохранена", "success")
+    return redirect(url_for("milling_notes"))
+
+
+@app.route("/milling-notes/<int:note_id>/delete", methods=["POST"])
+@login_required
+def milling_note_delete(note_id):
+    if current_user.role != "Фрезеровка":
+        return redirect(url_for("dashboard"))
+    note = MillingNote.query.get_or_404(note_id)
+    db.session.delete(note)
+    db.session.commit()
+    flash("Заметка удалена", "message")
+    return redirect(url_for("milling_notes"))
+
 
 @app.route("/update_milling_manual", methods=["POST"])
 @login_required

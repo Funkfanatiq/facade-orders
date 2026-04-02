@@ -150,7 +150,8 @@
                   <ul class="files-list">
                     {% for fp, fn in fps|zip(fns) %}
                       {% if fp %}
-                        <li><a href="{{ url_for('uploaded_file', filename=fp) }}" target="_blank">📎 {{ fn or fp }}</a></li>
+                        {% set basename = fp.split('/')[-1] %}
+                        <li><a href="{{ url_for('uploaded_file', filename=basename) }}" target="_blank">📎 {{ fn or basename }}</a></li>
                       {% endif %}
                     {% endfor %}
                   </ul>

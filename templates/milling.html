@@ -98,6 +98,19 @@
       box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
     }
     .row-urgent { background-color: #f8d7da !important; }
+    details.files-details { text-align: left; display: inline-block; max-width: 100%; }
+    details.files-details > summary {
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+      color: #333;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    details.files-details > summary::-webkit-details-marker { display: none; }
+    details.files-details[open] > summary { color: #4CAF50; }
+    .files-list { margin: 8px 0 0; padding: 0; list-style: none; text-align: left; }
+    .files-list li { margin: 4px 0; }
     .pool-info {
       padding: 16px;
       border-radius: 12px;
@@ -209,11 +222,20 @@
             </td>
             <td>
               {% if order.filepaths %}
-                {% set fps = order.filepaths.split(';') %}
-                {% set fns = order.filenames.split(';') %}
-                {% for fp, fn in fps|zip(fns) %}
-                  <a href="{{ url_for('uploaded_file', filename=fp.split('/')[-1]) }}" target="_blank">📎 {{ fn }}</a><br>
-                {% endfor %}
+                {% set fps = (order.filepaths or '').split(';') %}
+                {% set fns = (order.filenames or '').split(';') %}
+                {% set files_count = fps|reject('equalto','')|list|length %}
+                <details class="files-details">
+                  <summary>📎 Файлы ({{ files_count }})</summary>
+                  <ul class="files-list">
+                    {% for fp, fn in fps|zip(fns) %}
+                      {% if fp %}
+                        {% set basename = fp.split('/')[-1] %}
+                        <li><a href="{{ url_for('uploaded_file', filename=basename) }}" target="_blank">📎 {{ fn or basename }}</a></li>
+                      {% endif %}
+                    {% endfor %}
+                  </ul>
+                </details>
               {% else %}—{% endif %}
             </td>
           </tr>

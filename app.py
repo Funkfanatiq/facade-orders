@@ -10,6 +10,7 @@ from calendar import monthrange
 import json
 import os
 import time
+from types import SimpleNamespace
 import io
 from dotenv import load_dotenv
 
@@ -2216,19 +2217,25 @@ def mark_pool_complete():
     return redirect(url_for("milling_pool"))
 
 def _pool_items_to_display(pool):
-    """Преобразует список VirtualItem в список объектов для шаблона."""
-    return [
-        {
-            'id': v.order.id,
-            'order_id': v.order.order_id,
-            'client': v.order.client,
-            'facade_type': v.facade_type,
-            'thickness': v.thickness,
-            'area': v.area,
-            'due_date': v.order.due_date,
-        }
-        for v in pool
-    ]
+    """Преобразует список VirtualItem в объекты для шаблона (атрибуты как у Order — надёжно для Jinja)."""
+    rows = []
+    for v in pool:
+        o = v.order
+        fp = (o.filepaths or "").strip()
+        rows.append(
+            SimpleNamespace(
+                id=o.id,
+                order_id=o.order_id,
+                client=o.client,
+                facade_type=v.facade_type,
+                thickness=v.thickness,
+                area=v.area,
+                due_date=o.due_date,
+                filepaths=fp or None,
+                filenames=o.filenames,
+            )
+        )
+    return rows
 
 
 @app.route("/milling-pool")

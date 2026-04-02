@@ -1580,6 +1580,19 @@ def invoice_create(counterparty_id):
     inv = Invoice(counterparty_id=counterparty_id, invoice_number=invoice_number, invoice_date=date.today(), order_ids=order_ids or None)
     db.session.add(inv)
     db.session.flush()
+    new_items = _invoice_items_from_payload(items_data, inv.id)
+    if not new_items:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": "Нужна хотя бы одна позиция с наименованием"}), 400
+    for row in new_items:
+        db.session.add(row)
+    db.session.commit()
+    return jsonify({"ok": True, "invoice_id": inv.id, "invoice_number": inv.invoice_number})
+
+
+def _invoice_items_from_payload(items_data, invoice_id):
+    """Создаёт объекты InvoiceItem из JSON (без commit). Пропускает строки без наименования."""
+    rows = []
     for it in items_data:
         name = (it.get("name") or "").strip()
         if not name:
@@ -1597,7 +1610,76 @@ def invoice_create(counterparty_id):
             thickness = float(it.get("thickness")) if it.get("thickness") else None
         except (TypeError, ValueError):
             thickness = None
-        db.session.add(InvoiceItem(invoice_id=inv.id, name=name, unit=unit, quantity=qty, price=price, thickness=thickness, price_list_item_id=it.get("price_list_item_id")))
+        pli_id = it.get("price_list_item_id")
+        if pli_id is not None:
+            try:
+                pli_id = int(pli_id)
+            except (TypeError, ValueError):
+                pli_id = None
+        rows.append(InvoiceItem(invoice_id=invoice_id, name=name, unit=unit, quantity=qty, price=price, thickness=thickness, price_list_item_id=pli_id))
+    return rows
+
+
+@app.route("/invoice/<int:invoice_id>/edit-data", methods=["GET"])
+@login_required
+def invoice_edit_data(invoice_id):
+    """Данные счёта для редактирования в модалке (менеджер и админ)."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return jsonify({"ok": False, "error": "Доступ запрещен"}), 403
+    inv = Invoice.query.get_or_404(invoice_id)
+    items = []
+    for it in inv.items:
+        items.append({
+            "name": it.name,
+            "unit": it.unit or "шт",
+            "quantity": it.quantity,
+            "price": it.price,
+            "thickness": it.thickness,
+            "price_list_item_id": it.price_list_item_id,
+        })
+    return jsonify({
+        "ok": True,
+        "counterparty_id": inv.counterparty_id,
+        "invoice_number": inv.invoice_number,
+        "order_ids": inv.order_ids or "",
+        "items": items,
+    })
+
+
+@app.route("/invoice/<int:invoice_id>/update", methods=["POST"])
+@login_required
+def invoice_update(invoice_id):
+    """Обновление счёта: номер, заказы, полная замена позиций."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return jsonify({"ok": False, "error": "Доступ запрещен"}), 403
+    inv = Invoice.query.get_or_404(invoice_id)
+    data = request.get_json()
+    if not data or "items" not in data:
+        return jsonify({"ok": False, "error": "Добавьте хотя бы одну позицию"}), 400
+    items_data = data.get("items", [])
+    if not items_data:
+        return jsonify({"ok": False, "error": "Добавьте хотя бы одну позицию"}), 400
+    cp_body = data.get("counterparty_id")
+    if cp_body is not None:
+        try:
+            if int(cp_body) != inv.counterparty_id:
+                return jsonify({"ok": False, "error": "Счёт не относится к этому контрагенту"}), 400
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Некорректный контрагент"}), 400
+    invoice_number = (data.get("invoice_number") or "").strip()
+    if not invoice_number:
+        return jsonify({"ok": False, "error": "Укажите номер счёта"}), 400
+    order_ids = (data.get("order_ids") or "").strip()
+    inv.invoice_number = invoice_number
+    inv.order_ids = order_ids or None
+    InvoiceItem.query.filter(InvoiceItem.invoice_id == inv.id).delete()
+    db.session.flush()
+    new_items = _invoice_items_from_payload(items_data, inv.id)
+    if not new_items:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": "Нужна хотя бы одна позиция с наименованием"}), 400
+    for row in new_items:
+        db.session.add(row)
     db.session.commit()
     return jsonify({"ok": True, "invoice_id": inv.id, "invoice_number": inv.invoice_number})
 

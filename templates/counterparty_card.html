@@ -162,9 +162,11 @@
 
   <div id="invoice-modal-overlay" class="invoice-modal-overlay">
     <div class="invoice-modal">
-      <h3>Создать счёт на оплату</h3>
+      <h3 id="invoice-modal-title">Создать счёт на оплату</h3>
       <p style="margin:0 0 8px 0; color:#666; font-size:14px;">Номер счёта (обязательно):</p>
-      <input type="text" id="invoice-number" placeholder="Напр. 00044" style="width:120px; margin-bottom:12px; padding:8px;" required>
+      <input type="text" id="invoice-number" placeholder="Напр. 00044" style="width:120px; margin-bottom:8px; padding:8px;" required>
+      <p style="margin:0 0 4px 0; color:#666; font-size:14px;">Номера заказов (необязательно, через запятую):</p>
+      <input type="text" id="invoice-order-ids" placeholder="Напр. 101, 102" style="width:100%; max-width:420px; margin-bottom:12px; padding:8px; box-sizing:border-box;">
       <p style="margin:0 0 12px 0; color:#666; font-size:14px;">Добавьте позиции из прайса или введите вручную:</p>
       <div class="invoice-add-row">
         <select id="invoice-pricelist-select" style="min-width:260px;">
@@ -199,7 +201,7 @@
       </table>
       <p class="invoice-empty-msg" id="invoice-empty-msg">Позиций пока нет</p>
       <div class="invoice-modal-actions">
-        <button type="button" class="btn-create-invoice" onclick="createInvoice()">Создать счёт</button>
+        <button type="button" class="btn-create-invoice" id="invoice-submit-btn" onclick="submitInvoice()">Создать счёт</button>
         <button type="button" class="btn-cancel-invoice" onclick="closeInvoiceModal()">Отмена</button>
       </div>
     </div>
@@ -357,6 +359,7 @@
             <a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" download="invoice_{{ inv.invoice_number }}.pdf" class="btn-torg12">PDF</a>
             <a href="{{ url_for('invoice_torg12', invoice_id=inv.id) }}" class="btn-torg12 js-torg12-btn" data-invoice-id="{{ inv.id }}">ТОРГ-12</a>
             {% if current_user.role in ["Менеджер", "Админ"] %}
+            <button type="button" class="btn-remove-item" onclick="openInvoiceEditModal({{ inv.id }})" title="Изменить">Изменить</button>
             <button type="button" class="btn-remove-item" onclick="deleteInvoice({{ inv.id }})" title="Удалить">🗑️</button>
             {% endif %}
           </td>
@@ -391,6 +394,7 @@
   <script>
     var invoiceItems = [];
     var counterpartyId = {{ counterparty.id }};
+    var editingInvoiceId = null;
 
     (function initTab() {
       var params = new URLSearchParams(window.location.search);
@@ -454,13 +458,52 @@
     });
 
     function openInvoiceModal() {
+      editingInvoiceId = null;
       invoiceItems = [];
+      document.getElementById('invoice-modal-title').textContent = 'Создать счёт на оплату';
+      document.getElementById('invoice-submit-btn').textContent = 'Создать счёт';
       document.getElementById('invoice-number').value = '';
+      document.getElementById('invoice-order-ids').value = '';
       renderInvoiceItems();
       document.getElementById('invoice-modal-overlay').classList.add('show');
     }
+    function openInvoiceEditModal(invoiceId) {
+      editingInvoiceId = invoiceId;
+      fetch('/invoice/' + invoiceId + '/edit-data').then(function(r) { return r.json(); }).then(function(data) {
+        if (!data.ok) {
+          alert(data.error || 'Не удалось загрузить счёт');
+          editingInvoiceId = null;
+          return;
+        }
+        if (data.counterparty_id !== counterpartyId) {
+          alert('Счёт не относится к этому контрагенту');
+          editingInvoiceId = null;
+          return;
+        }
+        document.getElementById('invoice-modal-title').textContent = 'Изменить счёт';
+        document.getElementById('invoice-submit-btn').textContent = 'Сохранить';
+        document.getElementById('invoice-number').value = data.invoice_number || '';
+        document.getElementById('invoice-order-ids').value = data.order_ids || '';
+        invoiceItems = (data.items || []).map(function(it) {
+          return {
+            name: it.name,
+            unit: it.unit || 'шт',
+            quantity: it.quantity,
+            price: it.price,
+            thickness: it.thickness,
+            price_list_item_id: it.price_list_item_id != null ? it.price_list_item_id : null
+          };
+        });
+        renderInvoiceItems();
+        document.getElementById('invoice-modal-overlay').classList.add('show');
+      }).catch(function() {
+        alert('Ошибка загрузки счёта');
+        editingInvoiceId = null;
+      });
+    }
     function closeInvoiceModal() {
       document.getElementById('invoice-modal-overlay').classList.remove('show');
+      editingInvoiceId = null;
     }
     function addFromPricelist() {
       var sel = document.getElementById('invoice-pricelist-select');
@@ -502,19 +545,39 @@
       invoiceItems.forEach(function(it, i) {
         var sum = ((parseFloat(it.quantity) || 0) * (parseFloat(it.price) || 0)).toFixed(2).replace('.', ',');
         var priceVal = (parseFloat(it.price) || 0);
-        var qtyStr = (it.quantity || 0).toString().replace('.', ',');
+        var qtyVal = parseFloat(it.quantity);
+        if (!isFinite(qtyVal) || qtyVal <= 0) qtyVal = 1;
         var thVal = (it.thickness != null && it.thickness !== '') ? it.thickness : '';
         var tr = document.createElement('tr');
         tr.innerHTML =
           '<td>' + (i + 1) + '</td>' +
           '<td>' + (it.name || '') + '</td>' +
           '<td>' + (it.unit || 'шт') + '</td>' +
-          '<td>' + qtyStr + '</td>' +
+          '<td><input type="number" class="item-qty" data-idx="' + i + '" step="0.01" min="0.01" value="' + qtyVal + '" style="width:80px;"></td>' +
           '<td><input type="number" class="item-price" data-idx="' + i + '" step="0.01" min="0" value="' + priceVal + '" style="width:90px;"></td>' +
           '<td class="item-sum" data-idx="' + i + '">' + sum + '</td>' +
           '<td><input type="number" class="item-thickness" data-idx="' + i + '" placeholder="мм" step="1" min="1" value="' + thVal + '" style="width:60px;"></td>' +
           '<td><button type="button" class="btn-remove-item" onclick="removeInvoiceItem(' + i + ')">Удалить</button></td>';
         tbody.appendChild(tr);
+      });
+
+      function updateRowSum(idx) {
+        if (isNaN(idx) || !invoiceItems[idx]) return;
+        var sumCell = tbody.querySelector('.item-sum[data-idx="' + idx + '"]');
+        if (sumCell) {
+          var s = ((parseFloat(invoiceItems[idx].quantity) || 0) * (parseFloat(invoiceItems[idx].price) || 0)).toFixed(2).replace('.', ',');
+          sumCell.textContent = s;
+        }
+      }
+
+      tbody.querySelectorAll('.item-qty').forEach(function(inp) {
+        inp.addEventListener('input', function() {
+          var idx = parseInt(this.getAttribute('data-idx'), 10);
+          if (isNaN(idx) || !invoiceItems[idx]) return;
+          var v = parseFloat(this.value);
+          invoiceItems[idx].quantity = (isFinite(v) && v > 0) ? v : 0;
+          updateRowSum(idx);
+        });
       });
 
       // Редактирование цены в строке счёта (например, цена за м²)
@@ -524,24 +587,18 @@
           if (isNaN(idx) || !invoiceItems[idx]) return;
           var v = parseFloat(this.value);
           invoiceItems[idx].price = (isFinite(v) && v >= 0) ? v : 0;
-          var sumCell = tbody.querySelector('.item-sum[data-idx="' + idx + '"]');
-          if (sumCell) {
-            var s = ((parseFloat(invoiceItems[idx].quantity) || 0) * (parseFloat(invoiceItems[idx].price) || 0)).toFixed(2).replace('.', ',');
-            sumCell.textContent = s;
-          }
+          updateRowSum(idx);
         });
       });
     }
-    function createInvoice() {
-      var invoiceNum = document.getElementById('invoice-number').value.trim();
-      if (!invoiceNum) {
-        alert('Укажите номер счёта');
-        return;
-      }
-      if (invoiceItems.length === 0) {
-        alert('Добавьте хотя бы одну позицию');
-        return;
-      }
+    function syncInvoiceItemsFromDom() {
+      document.querySelectorAll('.item-qty').forEach(function(inp) {
+        var idx = parseInt(inp.getAttribute('data-idx'), 10);
+        if (!isNaN(idx) && invoiceItems[idx] !== undefined) {
+          var v = parseFloat(inp.value);
+          invoiceItems[idx].quantity = (isFinite(v) && v > 0) ? v : 0;
+        }
+      });
       document.querySelectorAll('.item-price').forEach(function(inp) {
         var idx = parseInt(inp.getAttribute('data-idx'), 10);
         if (!isNaN(idx) && invoiceItems[idx] !== undefined) {
@@ -556,10 +613,49 @@
           invoiceItems[idx].thickness = (v > 0 ? v : null);
         }
       });
-      fetch('/counterparty/' + counterpartyId + '/invoice/create', {
+    }
+    function submitInvoice() {
+      var invoiceNum = document.getElementById('invoice-number').value.trim();
+      if (!invoiceNum) {
+        alert('Укажите номер счёта');
+        return;
+      }
+      if (invoiceItems.length === 0) {
+        alert('Добавьте хотя бы одну позицию');
+        return;
+      }
+      syncInvoiceItemsFromDom();
+      var badQty = invoiceItems.some(function(it) { return !it.quantity || parseFloat(it.quantity) <= 0; });
+      if (badQty) {
+        alert('Укажите количество больше нуля для всех позиций');
+        return;
+      }
+      var orderIds = document.getElementById('invoice-order-ids').value.trim();
+      var payload = {
+        items: invoiceItems.map(function(it) {
+          return {
+            name: it.name,
+            unit: it.unit,
+            quantity: it.quantity,
+            price: it.price,
+            thickness: it.thickness,
+            price_list_item_id: it.price_list_item_id != null ? it.price_list_item_id : null
+          };
+        }),
+        invoice_number: invoiceNum,
+        order_ids: orderIds
+      };
+      var url;
+      if (editingInvoiceId) {
+        url = '/invoice/' + editingInvoiceId + '/update';
+        payload.counterparty_id = counterpartyId;
+      } else {
+        url = '/counterparty/' + counterpartyId + '/invoice/create';
+      }
+      fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: invoiceItems, invoice_number: invoiceNum })
+        body: JSON.stringify(payload)
       }).then(function(r) {
         return r.json();
       }).then(function(data) {
@@ -567,10 +663,10 @@
           closeInvoiceModal();
           window.location.href = window.location.pathname + '?tab=invoices';
         } else {
-          alert(data.error || 'Ошибка при создании счёта');
+          alert(data.error || (editingInvoiceId ? 'Ошибка при сохранении счёта' : 'Ошибка при создании счёта'));
         }
       }).catch(function() {
-        alert('Ошибка при создании счёта');
+        alert(editingInvoiceId ? 'Ошибка при сохранении счёта' : 'Ошибка при создании счёта');
       });
     }
 

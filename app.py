@@ -1669,9 +1669,10 @@ def invoice_update(invoice_id):
     invoice_number = (data.get("invoice_number") or "").strip()
     if not invoice_number:
         return jsonify({"ok": False, "error": "Укажите номер счёта"}), 400
-    order_ids = (data.get("order_ids") or "").strip()
     inv.invoice_number = invoice_number
-    inv.order_ids = order_ids or None
+    if "order_ids" in data:
+        order_ids = (data.get("order_ids") or "").strip()
+        inv.order_ids = order_ids or None
     InvoiceItem.query.filter(InvoiceItem.invoice_id == inv.id).delete()
     db.session.flush()
     new_items = _invoice_items_from_payload(items_data, inv.id)

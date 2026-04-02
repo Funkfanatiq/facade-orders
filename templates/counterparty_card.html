@@ -30,9 +30,11 @@
     .invoice-add-row .price-input { width: 90px; }
     .btn-add-item { padding: 8px 16px; background: #4CAF50; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
     .btn-add-item:hover { background: #45A049; }
-    .invoice-items-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
-    .invoice-items-table th, .invoice-items-table td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+    .invoice-items-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; table-layout: fixed; }
+    .invoice-items-table th, .invoice-items-table td { padding: 8px 6px; text-align: left; border-bottom: 1px solid #eee; vertical-align: middle; }
     .invoice-items-table th { background: #f5f5f5; font-weight: 600; }
+    .invoice-items-table .col-del { width: 44px; text-align: center; white-space: nowrap; }
+    .invoice-items-table .btn-row-del { padding: 6px 8px; min-width: auto; font-size: 16px; line-height: 1; }
     .btn-remove-item { background: #e0e0e0; color: #555; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
     .btn-remove-item:hover { background: #d0d0d0; }
     .btn-torg12 { display: inline-block; padding: 4px 10px; background: #4CAF50; color: #fff; border-radius: 4px; font-size: 12px; text-decoration: none; margin-left: 6px; }
@@ -164,9 +166,7 @@
     <div class="invoice-modal">
       <h3 id="invoice-modal-title">Создать счёт на оплату</h3>
       <p style="margin:0 0 8px 0; color:#666; font-size:14px;">Номер счёта (обязательно):</p>
-      <input type="text" id="invoice-number" placeholder="Напр. 00044" style="width:120px; margin-bottom:8px; padding:8px;" required>
-      <p style="margin:0 0 4px 0; color:#666; font-size:14px;">Номера заказов (необязательно, через запятую):</p>
-      <input type="text" id="invoice-order-ids" placeholder="Напр. 101, 102" style="width:100%; max-width:420px; margin-bottom:12px; padding:8px; box-sizing:border-box;">
+      <input type="text" id="invoice-number" placeholder="Напр. 00044" style="width:120px; margin-bottom:12px; padding:8px;" required>
       <p style="margin:0 0 12px 0; color:#666; font-size:14px;">Добавьте позиции из прайса или введите вручную:</p>
       <div class="invoice-add-row">
         <select id="invoice-pricelist-select" style="min-width:260px;">
@@ -196,7 +196,7 @@
         <button type="button" class="btn-add-item" onclick="addManualItem()">Добавить вручную</button>
       </div>
       <table class="invoice-items-table" id="invoice-items-table">
-        <thead><tr><th>№</th><th>Наименование</th><th>Ед.</th><th>Кол-во</th><th>Цена, ₽</th><th>Сумма, ₽</th><th>Толщина, мм</th><th></th></tr></thead>
+        <thead><tr><th>№</th><th>Наименование</th><th>Ед.</th><th>Кол-во</th><th>Цена, ₽</th><th>Сумма, ₽</th><th>Толщина</th><th class="col-del" title="Удалить строку"></th></tr></thead>
         <tbody id="invoice-items-tbody"></tbody>
       </table>
       <p class="invoice-empty-msg" id="invoice-empty-msg">Позиций пока нет</p>
@@ -345,13 +345,12 @@
       <h3>Счета</h3>
       {% if invoices %}
       <table class="invoices-table">
-        <thead><tr><th>№ счёта</th><th>Дата</th><th>Заказы</th><th>Сумма</th><th>Оплачено</th><th>Остаток</th><th></th></tr></thead>
+        <thead><tr><th>№ счёта</th><th>Дата</th><th>Сумма</th><th>Оплачено</th><th>Остаток</th><th></th></tr></thead>
         <tbody>
         {% for inv in invoices %}
         <tr>
           <td><a href="{{ url_for('invoice_pdf', invoice_id=inv.id) }}" download="invoice_{{ inv.invoice_number }}.pdf">№ {{ inv.invoice_number }}</a></td>
           <td>{{ inv.invoice_date.strftime('%d.%m.%Y') }}</td>
-          <td>{{ inv.order_ids or '—' }}</td>
           <td class="amount">{{ "%.2f"|format(inv.total)|replace(".", ",") }} ₽</td>
           <td class="amount">{{ "%.2f"|format(inv.paid_amount)|replace(".", ",") }} ₽</td>
           <td class="amount {% if inv.balance > 0 %}balance-owed{% elif inv.balance < 0 %}balance-over{% else %}balance-zero{% endif %}">{{ "%.2f"|format(inv.balance)|replace(".", ",") }} ₽</td>
@@ -463,7 +462,6 @@
       document.getElementById('invoice-modal-title').textContent = 'Создать счёт на оплату';
       document.getElementById('invoice-submit-btn').textContent = 'Создать счёт';
       document.getElementById('invoice-number').value = '';
-      document.getElementById('invoice-order-ids').value = '';
       renderInvoiceItems();
       document.getElementById('invoice-modal-overlay').classList.add('show');
     }
@@ -483,7 +481,6 @@
         document.getElementById('invoice-modal-title').textContent = 'Изменить счёт';
         document.getElementById('invoice-submit-btn').textContent = 'Сохранить';
         document.getElementById('invoice-number').value = data.invoice_number || '';
-        document.getElementById('invoice-order-ids').value = data.order_ids || '';
         invoiceItems = (data.items || []).map(function(it) {
           return {
             name: it.name,
@@ -556,8 +553,8 @@
           '<td><input type="number" class="item-qty" data-idx="' + i + '" step="0.01" min="0.01" value="' + qtyVal + '" style="width:80px;"></td>' +
           '<td><input type="number" class="item-price" data-idx="' + i + '" step="0.01" min="0" value="' + priceVal + '" style="width:90px;"></td>' +
           '<td class="item-sum" data-idx="' + i + '">' + sum + '</td>' +
-          '<td><input type="number" class="item-thickness" data-idx="' + i + '" placeholder="мм" step="1" min="1" value="' + thVal + '" style="width:60px;"></td>' +
-          '<td><button type="button" class="btn-remove-item" onclick="removeInvoiceItem(' + i + ')">Удалить</button></td>';
+          '<td><input type="number" class="item-thickness" data-idx="' + i + '" placeholder="мм" step="1" min="1" value="' + thVal + '" style="width:56px;"></td>' +
+          '<td class="col-del"><button type="button" class="btn-remove-item btn-row-del" onclick="removeInvoiceItem(' + i + ')" title="Удалить">🗑️</button></td>';
         tbody.appendChild(tr);
       });
 
@@ -630,7 +627,6 @@
         alert('Укажите количество больше нуля для всех позиций');
         return;
       }
-      var orderIds = document.getElementById('invoice-order-ids').value.trim();
       var payload = {
         items: invoiceItems.map(function(it) {
           return {
@@ -642,8 +638,7 @@
             price_list_item_id: it.price_list_item_id != null ? it.price_list_item_id : null
           };
         }),
-        invoice_number: invoiceNum,
-        order_ids: orderIds
+        invoice_number: invoiceNum
       };
       var url;
       if (editingInvoiceId) {

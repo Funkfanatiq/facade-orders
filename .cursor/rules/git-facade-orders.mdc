@@ -1,0 +1,10 @@
+---
+description: Все коммиты и push только в репозиторий facade-orders (Фасад Ордерс)
+alwaysApply: true
+---
+
+# Git: репозиторий проекта
+
+- Рабочий код и **все коммиты** — в каталоге **`facade_orders`** (remote: `Funkfanatiq/facade-orders`, ветка `main`).
+- После изменений **всегда** делать `git add`, `git commit` и **`git push`** из **`facade_orders`**, не из родительской папки `mvp`.
+- Родительский репозиторий `mvp` (если есть) — не целевой для деплоя и пуша; Render и прод смотрят на **facade-orders**.

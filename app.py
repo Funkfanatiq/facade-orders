@@ -17,7 +17,8 @@ from dotenv import load_dotenv
 URGENT_DAYS_THRESHOLD = 3   # Дней до срока — срочный заказ
 WORK_DAYS_THRESHOLD = 7     # Дней до срока — пора брать в работу
 SHEET_AREA = 2.75 * 2.05  # Площадь листа в м² (5.6375)
-MAX_FILE_SIZE = 16 * 1024 * 1024  # Максимальный размер файла (16MB)
+# Максимальный размер одного файла (МБ из env, по умолчанию 32 — чертежи PDF)
+MAX_FILE_SIZE = int(os.environ.get("MAX_FILE_SIZE_MB", "32")) * 1024 * 1024
 EXPIRED_DAYS = 180  # Дней для удаления старых заказов
 
 # Константы для управления хранилищем
@@ -656,6 +657,13 @@ def clear_session_if_not_logged_in():
     except (AttributeError, Exception):
         session.clear()
 
+@app.errorhandler(413)
+def request_too_large(_error):
+    """Слишком большой multipart (много/тяжёлые файлы). MAX_CONTENT_LENGTH в config."""
+    flash("Слишком большой объём загрузки: уменьшите число файлов или размер каждого (см. лимиты в настройках сервера).", "error")
+    return redirect(url_for("dashboard"))
+
+
 @app.errorhandler(500)
 def internal_error(error):
     """Обработчик внутренних ошибок сервера"""
@@ -1171,26 +1179,30 @@ def dashboard():
                 if not allowed_file(f.filename):
                     flash(f"Файл {f.filename} имеет недопустимый тип", "error")
                     continue
-                
-                # Проверяем размер файла
-                f.seek(0, 2)  # Переходим в конец файла
-                file_size = f.tell()
-                f.seek(0)  # Возвращаемся в начало
-                
-                if file_size > MAX_FILE_SIZE:
-                    flash(f"Файл {f.filename} слишком большой (максимум {MAX_FILE_SIZE // (1024*1024)}MB)", "error")
-                    continue
-                
-                # Создаем безопасное имя файла
+
                 safe_filename = unique_upload_filename(f.filename, app.config["UPLOAD_FOLDER"])
                 path = os.path.join(app.config["UPLOAD_FOLDER"], safe_filename)
                 try:
+                    # Сначала сохраняем поток на диск — так надёжнее для больших PDF и нескольких файлов подряд
                     f.save(path)
-                    # Храним относительный путь как имя файла для обслуживания через /uploads/<filename>
+                    file_size = os.path.getsize(path)
+                    if file_size == 0:
+                        os.remove(path)
+                        flash(f"Файл {f.filename} пустой", "error")
+                        continue
+                    if file_size > MAX_FILE_SIZE:
+                        os.remove(path)
+                        flash(f"Файл {f.filename} слишком большой (максимум {MAX_FILE_SIZE // (1024*1024)} МБ)", "error")
+                        continue
                     filenames.append(f.filename)
                     filepaths.append(safe_filename)
                 except Exception as e:
                     print(f"Ошибка при сохранении файла {safe_filename}: {e}")
+                    try:
+                        if os.path.isfile(path):
+                            os.remove(path)
+                    except OSError:
+                        pass
                     flash(f"Не удалось сохранить файл {f.filename}", "error")
                     continue
 
@@ -2990,8 +3002,20 @@ def push_check():
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-    """Маршрут для обслуживания загруженных файлов"""
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    """Раздача вложений. conditional=True — поддержка Range (PDF в браузере грузятся быстрее/стабильнее)."""
+    from flask import abort
+    if not filename or "/" in filename or "\\" in filename:
+        abort(404)
+    folder = os.path.realpath(app.config["UPLOAD_FOLDER"])
+    full = os.path.realpath(os.path.join(folder, filename))
+    try:
+        if os.path.commonpath([folder, full]) != folder:
+            abort(404)
+    except ValueError:
+        abort(404)
+    if not os.path.isfile(full):
+        abort(404)
+    return send_file(full, conditional=True)
 
 @app.route("/sw.js")
 def service_worker():

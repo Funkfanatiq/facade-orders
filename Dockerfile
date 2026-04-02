@@ -18,5 +18,6 @@ RUN mkdir -p uploads
 ENV PORT=10000
 EXPOSE 10000
 
-# Render передаёт PORT через env при запуске
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} app:app"]
+# Render передаёт PORT через env. Таймаут 300 с — иначе загрузка нескольких крупных PDF обрывается (~30 с по умолчанию).
+# При необходимости: GUNICORN_TIMEOUT=600 в Environment на Render.
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --timeout ${GUNICORN_TIMEOUT:-300} --graceful-timeout 120 app:app"]

@@ -44,6 +44,9 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 
+    # Лимит всего multipart-запроса (несколько файлов сразу). Render/Gunicorn: см. таймаут в Dockerfile.
+    MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH_MB", "300")) * 1024 * 1024
+
     # Настройки пула подключений для PostgreSQL на Render:
     # pool_pre_ping — проверка соединения перед использованием (переподключение при обрыве SSL)
     # pool_recycle — переподключение каждые 5 минут (избегаем "SSL connection closed")

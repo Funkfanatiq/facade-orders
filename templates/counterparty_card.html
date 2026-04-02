@@ -20,7 +20,7 @@
     .btn-invoice:hover { background: #45A049; }
     .invoice-modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 1000; justify-content: center; align-items: center; }
     .invoice-modal-overlay.show { display: flex; }
-    .invoice-modal { background: #fff; border-radius: 12px; padding: 24px; max-width: 640px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+    .invoice-modal { background: #fff; border-radius: 12px; padding: 24px; max-width: min(960px, 98vw); width: 96%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.2); box-sizing: border-box; }
     .invoice-modal h3 { margin: 0 0 16px 0; font-size: 18px; }
     .invoice-add-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: flex-end; }
     .invoice-add-row input, .invoice-add-row select { padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
@@ -30,10 +30,57 @@
     .invoice-add-row .price-input { width: 90px; }
     .btn-add-item { padding: 8px 16px; background: #4CAF50; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
     .btn-add-item:hover { background: #45A049; }
-    .invoice-items-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; table-layout: fixed; }
-    .invoice-items-table th, .invoice-items-table td { padding: 8px 6px; text-align: left; border-bottom: 1px solid #eee; vertical-align: middle; }
-    .invoice-items-table th { background: #f5f5f5; font-weight: 600; }
-    .invoice-items-table .col-del { width: 44px; text-align: center; white-space: nowrap; }
+    .invoice-table-scroll {
+      overflow-x: auto;
+      margin: 16px 0;
+      -webkit-overflow-scrolling: touch;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      background: #fff;
+    }
+    .invoice-modal .invoice-items-table {
+      width: 100%;
+      min-width: 820px;
+      margin: 0;
+      font-size: 13px;
+      table-layout: auto;
+      border-collapse: collapse;
+      box-shadow: none;
+      border-radius: 0;
+      overflow: visible;
+    }
+    .invoice-items-table th, .invoice-items-table td {
+      padding: 10px 8px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+      vertical-align: middle;
+      box-sizing: border-box;
+    }
+    .invoice-items-table th {
+      background: #f5f5f5;
+      font-weight: 600;
+      font-size: 12px;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+    .invoice-items-table .col-num { width: 2.25rem; text-align: center; }
+    .invoice-items-table .col-name { min-width: 200px; max-width: 320px; word-wrap: break-word; word-break: break-word; white-space: normal; }
+    .invoice-items-table .col-unit { width: 3.25rem; text-align: center; white-space: nowrap; }
+    .invoice-items-table .col-qty { width: 6.5rem; }
+    .invoice-items-table .col-price { width: 7rem; }
+    .invoice-items-table .col-sum { width: 6.5rem; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .invoice-items-table .col-thick { width: 5rem; }
+    .invoice-items-table .col-del { width: 3rem; text-align: center; padding-left: 4px; padding-right: 4px; }
+    .invoice-items-table input[type="number"] {
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 96px;
+      min-width: 0;
+      padding: 6px 8px;
+      font-size: 14px;
+      margin: 0;
+    }
+    .invoice-items-table .col-thick input[type="number"] { max-width: 68px; }
     .invoice-items-table .btn-row-del { padding: 6px 8px; min-width: auto; font-size: 16px; line-height: 1; }
     .btn-remove-item { background: #e0e0e0; color: #555; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
     .btn-remove-item:hover { background: #d0d0d0; }
@@ -195,10 +242,21 @@
         <input type="number" id="invoice-manual-thickness" placeholder="Толщина, мм" step="1" min="1" style="width:90px;" title="Толщина (для справки)">
         <button type="button" class="btn-add-item" onclick="addManualItem()">Добавить вручную</button>
       </div>
+      <div class="invoice-table-scroll">
       <table class="invoice-items-table" id="invoice-items-table">
-        <thead><tr><th>№</th><th>Наименование</th><th>Ед.</th><th>Кол-во</th><th>Цена, ₽</th><th>Сумма, ₽</th><th>Толщина</th><th class="col-del" title="Удалить строку"></th></tr></thead>
+        <thead><tr>
+          <th class="col-num">№</th>
+          <th class="col-name">Наименование</th>
+          <th class="col-unit">Ед.</th>
+          <th class="col-qty">Кол-во</th>
+          <th class="col-price">Цена,&nbsp;₽</th>
+          <th class="col-sum">Сумма,&nbsp;₽</th>
+          <th class="col-thick">Толщ.,&nbsp;мм</th>
+          <th class="col-del" title="Удалить"></th>
+        </tr></thead>
         <tbody id="invoice-items-tbody"></tbody>
       </table>
+      </div>
       <p class="invoice-empty-msg" id="invoice-empty-msg">Позиций пока нет</p>
       <div class="invoice-modal-actions">
         <button type="button" class="btn-create-invoice" id="invoice-submit-btn" onclick="submitInvoice()">Создать счёт</button>
@@ -394,6 +452,14 @@
     var invoiceItems = [];
     var counterpartyId = {{ counterparty.id }};
     var editingInvoiceId = null;
+    function escapeHtml(str) {
+      if (str == null || str === '') return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
 
     (function initTab() {
       var params = new URLSearchParams(window.location.search);
@@ -547,13 +613,13 @@
         var thVal = (it.thickness != null && it.thickness !== '') ? it.thickness : '';
         var tr = document.createElement('tr');
         tr.innerHTML =
-          '<td>' + (i + 1) + '</td>' +
-          '<td>' + (it.name || '') + '</td>' +
-          '<td>' + (it.unit || 'шт') + '</td>' +
-          '<td><input type="number" class="item-qty" data-idx="' + i + '" step="0.01" min="0.01" value="' + qtyVal + '" style="width:80px;"></td>' +
-          '<td><input type="number" class="item-price" data-idx="' + i + '" step="0.01" min="0" value="' + priceVal + '" style="width:90px;"></td>' +
-          '<td class="item-sum" data-idx="' + i + '">' + sum + '</td>' +
-          '<td><input type="number" class="item-thickness" data-idx="' + i + '" placeholder="мм" step="1" min="1" value="' + thVal + '" style="width:56px;"></td>' +
+          '<td class="col-num">' + (i + 1) + '</td>' +
+          '<td class="col-name">' + escapeHtml(it.name || '') + '</td>' +
+          '<td class="col-unit">' + escapeHtml(it.unit || 'шт') + '</td>' +
+          '<td class="col-qty"><input type="number" class="item-qty" data-idx="' + i + '" step="0.01" min="0.01" value="' + qtyVal + '"></td>' +
+          '<td class="col-price"><input type="number" class="item-price" data-idx="' + i + '" step="0.01" min="0" value="' + priceVal + '"></td>' +
+          '<td class="item-sum col-sum" data-idx="' + i + '">' + sum + '</td>' +
+          '<td class="col-thick"><input type="number" class="item-thickness" data-idx="' + i + '" placeholder="мм" step="1" min="1" value="' + thVal + '"></td>' +
           '<td class="col-del"><button type="button" class="btn-remove-item btn-row-del" onclick="removeInvoiceItem(' + i + ')" title="Удалить">🗑️</button></td>';
         tbody.appendChild(tr);
       });

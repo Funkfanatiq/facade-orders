@@ -11,6 +11,8 @@ from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from xml.sax.saxutils import escape
 
+from models import money_line_rub
+
 
 def generate_torg12_pdf(invoice, counterparty, config, font_name="Helvetica", amount_to_words=None, unit_to_okei=None):
     """Генерирует PDF ТОРГ-12."""
@@ -107,13 +109,11 @@ def generate_torg12_pdf(invoice, counterparty, config, font_name="Helvetica", am
     goods_data = [
         ["№", "Наименование", "Кол-во", "Цена", "Сумма"],
     ]
-    total_sum = 0.0
     total_qty = 0.0
     for i, it in enumerate(invoice.items, 1):
         qty = float(it.quantity or 0)
         prc = float(it.price or 0)
-        s = round(qty * prc, 2)
-        total_sum += s
+        s = money_line_rub(qty, prc)
         total_qty += qty
         goods_data.append([
             str(i),
@@ -122,6 +122,7 @@ def generate_torg12_pdf(invoice, counterparty, config, font_name="Helvetica", am
             fmt_num(prc),
             fmt_num(s),
         ])
+    total_sum = invoice.total
     goods_data.append([
         "Всего",
         "",

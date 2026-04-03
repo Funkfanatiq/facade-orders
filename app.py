@@ -43,7 +43,26 @@ app.config.from_object('config.Config')
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=2, x_host=2, x_proto=2)
 
 # Импортируем модели после инициализации Flask
-from models import db, User, Order, Employee, WorkHours, SalaryPeriod, Counterparty, PriceListItem, Invoice, InvoiceItem, Payment, PRICE_CATEGORIES, PushSubscription, MillingNote
+from models import (
+    db,
+    User,
+    Order,
+    Employee,
+    WorkHours,
+    SalaryPeriod,
+    Counterparty,
+    PriceListItem,
+    Invoice,
+    InvoiceItem,
+    Payment,
+    PRICE_CATEGORIES,
+    PushSubscription,
+    MillingNote,
+    money_rub,
+    money_sum_rub,
+    money_sub_rub,
+    money_line_rub,
+)
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -1282,14 +1301,14 @@ def dashboard():
         ).all()
         for cp in counterparties:
             invoices = Invoice.query.filter(Invoice.counterparty_id == cp.id).all()
-            total_invoiced = sum(inv.total for inv in invoices)
-            total_paid = sum(p.amount for p in Payment.query.filter(Payment.counterparty_id == cp.id).all())
-            balance = total_invoiced - total_paid
+            total_invoiced = money_sum_rub(inv.total for inv in invoices)
+            total_paid = money_sum_rub(p.amount for p in Payment.query.filter(Payment.counterparty_id == cp.id).all())
+            balance = money_sub_rub(total_invoiced, total_paid)
             if balance > 0:
                 unpaid_nums = []
                 for inv in invoices:
-                    paid_amt = sum(p.amount for p in inv.payments)
-                    if inv.total - paid_amt > 0:
+                    paid_amt = money_sum_rub(p.amount for p in inv.payments)
+                    if money_sub_rub(inv.total, paid_amt) > 0:
                         unpaid_nums.append(inv.invoice_number)
                 debtors.append({"counterparty": cp, "unpaid_invoices": unpaid_nums, "balance": balance})
 
@@ -1615,7 +1634,7 @@ def _invoice_items_from_payload(items_data, invoice_id):
         except (TypeError, ValueError):
             qty = 1.0
         try:
-            price = float(it.get("price") or 0)
+            price = money_rub(float(it.get("price") or 0))
         except (TypeError, ValueError):
             price = 0.0
         unit = (it.get("unit") or "").strip() or "шт"
@@ -1814,10 +1833,8 @@ def invoice_pdf(invoice_id):
     headers = ["№", "Наименование товара", "Цена", "Кол-во", "Ед. изм.", "Сумма"]
     col_widths = [12*mm, 80*mm, 22*mm, 18*mm, 18*mm, 30*mm]
     data = [headers]
-    total_sum = 0.0
     for i, it in enumerate(inv.items, 1):
-        s = round(it.quantity * it.price, 2)
-        total_sum += s
+        s = money_line_rub(it.quantity, it.price)
         data.append([
             str(i),
             Paragraph(esc(it.name), cell_style),
@@ -1841,6 +1858,7 @@ def invoice_pdf(invoice_id):
     flow.append(t)
     flow.append(Spacer(1, 4*mm))
 
+    total_sum = inv.total
     total_str = fmt_num(total_sum)
     flow.append(Paragraph(f"Итого: {total_str}", p_style))
     flow.append(Paragraph("В том числе НДС: 0,00", p_style))
@@ -1955,7 +1973,7 @@ def payment_create(counterparty_id):
     if not data:
         return jsonify({"ok": False, "error": "Укажите сумму"}), 400
     try:
-        amount = float(data.get("amount") or 0)
+        amount = money_rub(data.get("amount") or 0)
     except (TypeError, ValueError):
         return jsonify({"ok": False, "error": "Некорректная сумма"}), 400
     if amount <= 0:
@@ -1993,12 +2011,12 @@ def counterparty_card(counterparty_id):
     price_list = sorted(_price_raw, key=lambda p: (cat_order.get(p.category, 0), p.sort_order or 0, p.name or ""))
     invoices = Invoice.query.filter(Invoice.counterparty_id == counterparty_id).order_by(Invoice.invoice_date.desc()).all()
     payments = Payment.query.filter(Payment.counterparty_id == counterparty_id).order_by(Payment.payment_date.desc()).all()
-    total_invoiced = sum(inv.total for inv in invoices)
-    total_paid = sum(p.amount for p in payments)
-    balance = total_invoiced - total_paid
+    total_invoiced = money_sum_rub(inv.total for inv in invoices)
+    total_paid = money_sum_rub(p.amount for p in payments)
+    balance = money_sub_rub(total_invoiced, total_paid)
     for inv in invoices:
-        inv.paid_amount = sum(p.amount for p in inv.payments)
-        inv.balance = inv.total - inv.paid_amount
+        inv.paid_amount = money_sum_rub(p.amount for p in inv.payments)
+        inv.balance = money_sub_rub(inv.total, inv.paid_amount)
     return render_template("counterparty_card.html", counterparty=cp, orders=orders, price_list=price_list, price_categories=PRICE_CATEGORIES, invoices=invoices, payments=payments, total_invoiced=total_invoiced, total_paid=total_paid, balance=balance, datetime=datetime)
 
 
@@ -2086,14 +2104,14 @@ def render_admin_dashboard():
     debtors = []
     for cp in Counterparty.query.order_by(Counterparty.name).all():
         invoices = Invoice.query.filter(Invoice.counterparty_id == cp.id).all()
-        total_invoiced = sum(inv.total for inv in invoices)
-        total_paid = sum(p.amount for p in Payment.query.filter(Payment.counterparty_id == cp.id).all())
-        balance = total_invoiced - total_paid
+        total_invoiced = money_sum_rub(inv.total for inv in invoices)
+        total_paid = money_sum_rub(p.amount for p in Payment.query.filter(Payment.counterparty_id == cp.id).all())
+        balance = money_sub_rub(total_invoiced, total_paid)
         if balance > 0:
             unpaid_nums = []
             for inv in invoices:
-                paid_amt = sum(p.amount for p in inv.payments)
-                if inv.total - paid_amt > 0:
+                paid_amt = money_sum_rub(p.amount for p in inv.payments)
+                if money_sub_rub(inv.total, paid_amt) > 0:
                     unpaid_nums.append(inv.invoice_number)
             debtors.append({"counterparty": cp, "unpaid_invoices": unpaid_nums, "balance": balance})
     

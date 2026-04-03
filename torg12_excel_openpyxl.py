@@ -6,6 +6,8 @@
 import io
 from pathlib import Path
 
+from models import money_line_rub
+
 # Путь к шаблону (рядом с этим модулем)
 _TEMPLATE_PATH = Path(__file__).parent / "torg12_template.xlsx"
 
@@ -196,7 +198,6 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
     COL_SUM_VAT = 38    # AL — Сумма с НДС
     DATA_START_ROW = 23
     DEFAULT_DATA_ROWS = 6
-    total_sum = 0.0
     total_qty = 0.0
 
     items = list(invoice.items)
@@ -218,8 +219,7 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
         row = DATA_START_ROW + i
         qty = float(it.quantity or 0)
         prc = float(it.price or 0)
-        s = round(qty * prc, 2)
-        total_sum += s
+        s = money_line_rub(qty, prc)
         total_qty += qty
 
         _put_cell(ws, row, COL_N, i + 1)
@@ -231,6 +231,7 @@ def generate_torg12_xlsx(invoice, counterparty, config, template_path=None):
                            COL_VAT_RATE, COL_VAT_AMT, COL_SUM_VAT)
 
     last_data_row = DATA_START_ROW + len(items)
+    total_sum = invoice.total
     _put_cell(ws, last_data_row, COL_N, "Всего")
     _put_qty_price_sum(ws, last_data_row, COL_QTY, COL_PRC, COL_SUM, total_qty, None, total_sum,
                        COL_VAT_RATE, COL_VAT_AMT, COL_SUM_VAT)

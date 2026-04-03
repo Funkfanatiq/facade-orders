@@ -1,6 +1,42 @@
 # models.py
 
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+
 from flask_sqlalchemy import SQLAlchemy
+
+
+def money_rub(value):
+    """Денежная сумма в рублях с точностью до копеек (устраняет хвосты float)."""
+    if value is None:
+        return 0.0
+    try:
+        return float(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    except (InvalidOperation, TypeError, ValueError):
+        return 0.0
+
+
+def money_sum_rub(amounts):
+    """Сумма денежных величин без накопления ошибки float."""
+    s = Decimal("0")
+    for x in amounts:
+        if x is None:
+            continue
+        s += Decimal(str(x)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return float(s.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def money_sub_rub(a, b):
+    """Разность a − b с округлением до копеек."""
+    d = Decimal(str(money_rub(a))) - Decimal(str(money_rub(b)))
+    return float(d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def money_line_rub(quantity, price):
+    """Сумма по строке счёта (кол-во × цена) с округлением до копеек."""
+    line = (Decimal(str(quantity)) * Decimal(str(price))).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    return float(line)
 from flask_login import UserMixin
 
 db = SQLAlchemy()
@@ -162,7 +198,13 @@ class Invoice(db.Model):
 
     @property
     def total(self):
-        return sum(it.quantity * it.price for it in self.items)
+        s = Decimal("0")
+        for it in self.items:
+            line = (Decimal(str(it.quantity)) * Decimal(str(it.price))).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            s += line
+        return float(s.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 class Payment(db.Model):

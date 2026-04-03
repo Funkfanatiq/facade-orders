@@ -208,18 +208,14 @@ def generate_torg12_pdf(invoice, counterparty, config, font_name="Helvetica", am
     # Таблица товаров - заголовки и данные
     if amount_to_words is None:
         from app import _amount_to_words_rub as amount_to_words
-    total_sum = 0.0
-    for i, it in enumerate(invoice.items, 1):
-        qty = float(it.quantity or 0)
-        prc = float(it.price or 0)
-        total_sum += qty * prc
+    from models import money_line_rub
 
     # Товарные строки — колонки по Excel: B=номер, C-F=товар, G-H=ед.изм, O=кол-во, P-Q=цена, R-U=сумма, V-AD=НДС%, AE-AK=НДСсумма, AL-AM=сумма с НДС
     row = 22
     for i, it in enumerate(invoice.items, 1):
         qty = float(it.quantity or 0)
         prc = float(it.price or 0)
-        s = round(qty * prc, 2)
+        s = money_line_rub(qty, prc)
         unit = it.unit or "шт"
         c.setFont(font_name, 7)
         c.drawCentredString(x_pt(2) + w_pt(2, 2) / 2, y_pt(row) - 7, str(i))
@@ -233,6 +229,7 @@ def generate_torg12_pdf(invoice, counterparty, config, font_name="Helvetica", am
         row += 1
 
     # Итого
+    total_sum = invoice.total
     c.drawString(x_pt(3) + 2, y_pt(row) - 7, "Всего по накладной")
     c.drawRightString(x_pt(15) - 2, y_pt(row) - 7, fmt_num(sum(float(x.quantity or 0) for x in invoice.items)))
     c.drawRightString(x_pt(21) - 2, y_pt(row) - 7, fmt_num(total_sum))

@@ -3564,22 +3564,3 @@ def init_db():
 
 if __name__ == "__main__":
     app.run(debug=True, host='0.0.0.0', port=5000)
-anager", "password": "5678", "role": "Менеджер"},
-        {"username": "worker", "password": "0000", "role": "Производство"},
-        {"username": "cutter", "password": "7777", "role": "Фрезеровка"},
-        {"username": "polisher", "password": "8888", "role": "Шлифовка"},
-        {"username": "monitor", "password": "9999", "role": "Монитор"}
-    ]
-
-    for u in users:
-        if not User.query.filter_by(username=u["username"]).first():
-            db.session.add(User(
-                username=u["username"],
-                password=generate_password_hash(u["password"]),
-                role=u["role"]
-            ))
-    db.session.commit()
-    print("✅ База данных и пользователи инициализированы.")
-
-if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=5000)

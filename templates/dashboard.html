@@ -124,6 +124,14 @@
       color: #e33;
       cursor: pointer;
     }
+    .edit-icon {
+      background: none;
+      border: none;
+      font-size: 18px;
+      color: #1e88e5;
+      cursor: pointer;
+      margin-right: 6px;
+    }
     .row-green { background-color: #d4edda !important; }
     .row-warning { background-color: #fff3cd !important; }
     .row-danger { background-color: #f8d7da !important; }
@@ -271,6 +279,13 @@
     details.files-details[open] > summary { color: #4CAF50; }
     .files-list { margin: 8px 0 0; padding: 0; list-style: none; }
     .files-list li { margin: 4px 0; }
+    .files-list a {
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      max-width: min(100%, 22rem);
+      display: inline-block;
+      vertical-align: top;
+    }
   </style>
   <script>window.PUSH_ENABLED = {{ 'true' if current_user.role != 'Менеджер' else 'false' }};</script>
   <script>window.MANAGER_ROLE = {{ 'true' if current_user.role == 'Менеджер' else 'false' }};</script>
@@ -374,7 +389,7 @@
     <tr>
       <th>№ заказа</th><th>Клиент</th><th>Срок</th>
       <th>Фрезеровка</th><th>Шлифовка</th><th>Упаковка</th><th>Отгрузка</th><th>Оплата</th><th>Файлы</th>
-      {% if current_user.role == "Менеджер" %}<th>Удалить</th>{% endif %}
+      {% if current_user.role == "Менеджер" %}<th>Действия</th>{% endif %}
     </tr>
     {% for o in orders %}
       {% set days_left = (o.due_date - datetime.utcnow().date()).days %}
@@ -387,7 +402,7 @@
       {% if request.args.get('order_id_query') == o.order_id or request.args.get('client_query') == o.client %}
         {% set highlight_class = "highlight-row" %}
       {% endif %}
-      <tr data-order-id="{{ o.id }}" class="{{ base_class }} {% if highlight_class %}{{ highlight_class }}{% endif %}">
+      <tr data-order-id="{{ o.id }}" data-order-code="{{ o.order_id|e }}" data-client-name="{{ o.client|e }}" data-days="{{ o.days }}" class="{{ base_class }} {% if highlight_class %}{{ highlight_class }}{% endif %}">
         <td>{{ o.order_id }}</td>
         <td>{% set cp_id = o.counterparty_id or cp_id_for_client.get(o.client) %}{% if cp_id %}<a href="{{ url_for('counterparty_card', counterparty_id=cp_id) }}" style="color:inherit;text-decoration:none;">{{ o.client }}</a>{% else %}{{ o.client }}{% endif %}</td>
         <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
@@ -426,7 +441,8 @@
 
         {% if current_user.role == "Менеджер" %}
         <td>
-          <button class="delete-icon" onclick="deleteOrder({{ o.id }})">🗑️</button>
+          <button class="edit-icon" onclick="openEditOrderModal(this)" title="Редактировать заказ">✏️</button>
+          <button class="delete-icon" onclick="deleteOrder({{ o.id }})" title="Удалить заказ">🗑️</button>
         </td>
         {% endif %}
       </tr>
@@ -435,6 +451,24 @@
 
   {% if current_user.role == "Менеджер" %}
   </div>
+
+  <div id="edit-order-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:#fff; width:min(480px, 92vw); border-radius:12px; padding:18px; box-shadow:0 8px 24px rgba(0,0,0,.2);">
+      <h3 style="margin:0 0 8px 0;">Редактировать заказ</h3>
+      <input type="hidden" id="edit-order-id">
+      <label style="font-size:14px; color:#555;">№ заказа</label>
+      <input type="text" id="edit-order-code" placeholder="№ заказа" required>
+      <label style="font-size:14px; color:#555; margin-top:6px;">Клиент</label>
+      <input type="text" id="edit-order-client" list="client_datalist" placeholder="Клиент" required>
+      <label style="font-size:14px; color:#555; margin-top:6px;">Срок (дней)</label>
+      <input type="number" id="edit-order-days" min="1" step="1" placeholder="Срок" required>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button type="button" onclick="saveOrderEdit()">Сохранить</button>
+        <button type="button" onclick="closeEditOrderModal()" style="background:#777;">Отмена</button>
+      </div>
+    </div>
+  </div>
+
   <div id="manager-counterparties-tab" class="tab-content {{ 'active' if active_tab == 'counterparties' else '' }}">
     <div class="form-box">
       <h3>👥 Контрагенты</h3>
@@ -943,6 +977,48 @@
       });
     });
     
+    function openEditOrderModal(btn) {
+      var row = btn && btn.closest ? btn.closest('tr[data-order-id]') : null;
+      if (!row) return;
+      document.getElementById('edit-order-id').value = row.getAttribute('data-order-id') || '';
+      document.getElementById('edit-order-code').value = row.getAttribute('data-order-code') || '';
+      document.getElementById('edit-order-client').value = row.getAttribute('data-client-name') || '';
+      document.getElementById('edit-order-days').value = row.getAttribute('data-days') || '';
+      var modal = document.getElementById('edit-order-modal');
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function closeEditOrderModal() {
+      var modal = document.getElementById('edit-order-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function saveOrderEdit() {
+      var orderId = parseInt(document.getElementById('edit-order-id').value, 10);
+      var orderCode = (document.getElementById('edit-order-code').value || '').trim();
+      var client = (document.getElementById('edit-order-client').value || '').trim();
+      var days = parseInt(document.getElementById('edit-order-days').value, 10);
+      if (!orderId || !orderCode || !client || !days || days <= 0) {
+        alert('Проверьте данные: № заказа, клиент и срок должны быть заполнены.');
+        return;
+      }
+      fetch('/order/' + orderId + '/edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: orderCode, client: client, days: days })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success) {
+          closeEditOrderModal();
+          location.reload();
+        } else {
+          alert(data.message || 'Ошибка при редактировании');
+        }
+      })
+      .catch(function() { alert('Произошла ошибка при редактировании заказа'); });
+    }
+
     // Функция удаления заказа
     function deleteOrder(orderId) {
       if (confirm('Вы уверены, что хотите удалить этот заказ?')) {

@@ -271,6 +271,7 @@ class InvoiceItem(db.Model):
     quantity = db.Column(db.Float, nullable=False, default=1.0)
     price = db.Column(db.Float, nullable=False)       # Цена за ед.
     thickness = db.Column(db.Float, nullable=True)    # Толщина в мм (для справки, в PDF и ТОРГ-12 не выводится)
+    facade_type = db.Column(db.String(32), nullable=True)  # Тип фасада для ручных позиций (плоский/фрезерованный/шпон/покраска)
     price_list_item_id = db.Column(db.Integer, db.ForeignKey('price_list_item.id'), nullable=True)  # Ссылка на прайс или NULL для ручных
     invoice = db.relationship('Invoice', backref=db.backref('items', lazy=True, cascade='all, delete-orphan'))
 

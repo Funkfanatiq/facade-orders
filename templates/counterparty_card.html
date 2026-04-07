@@ -158,6 +158,13 @@
     details.files-details[open] > summary { color: #4CAF50; }
     .files-list { margin: 8px 0 0; padding: 0; list-style: none; }
     .files-list li { margin: 4px 0; }
+    .files-list a {
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      max-width: min(100%, 22rem);
+      display: inline-block;
+      vertical-align: top;
+    }
   </style>
 </head>
 <body>
@@ -224,7 +231,7 @@
           {% if cat_items %}
           <optgroup label="{{ label }}">
             {% for p in cat_items %}
-            <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-price="{{ p.price }}" data-unit="{{ p.unit or 'шт' }}">{{ p.name }} — {{ (p.price|round(2))|string|replace(".", ",") }} ₽/{{ p.unit or 'шт' }}</option>
+            <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-price="{{ p.price }}" data-unit="{{ p.unit or 'шт' }}" data-facade-type="{{ 'покраска' if cat.startswith('покраска') else cat }}">{{ p.name }} — {{ (p.price|round(2))|string|replace(".", ",") }} ₽/{{ p.unit or 'шт' }}</option>
             {% endfor %}
           </optgroup>
           {% endif %}
@@ -237,6 +244,13 @@
       <div class="invoice-add-row" style="border-top:1px solid #eee; padding-top:12px; margin-top:8px;">
         <input type="text" id="invoice-manual-name" class="name-input" placeholder="Наименование (вручную)">
         <input type="text" id="invoice-manual-unit" class="unit-input" placeholder="Ед." value="м²">
+        <select id="invoice-manual-facade-type" style="width:135px;">
+          <option value="">— Тип фасада —</option>
+          <option value="плоский">Плоский</option>
+          <option value="фрезерованный">Фрезерованный</option>
+          <option value="шпон">Шпон</option>
+          <option value="покраска">Покраска</option>
+        </select>
         <input type="number" id="invoice-manual-qty" placeholder="Кол-во" step="0.01" min="0.01" value="1" style="width:70px;">
         <input type="number" id="invoice-manual-price" class="price-input" placeholder="Цена" step="0.01" min="0">
         <input type="number" id="invoice-manual-thickness" placeholder="Толщина, мм" step="1" min="1" style="width:90px;" title="Толщина (для справки)">
@@ -248,6 +262,7 @@
           <th class="col-num">№</th>
           <th class="col-name">Наименование</th>
           <th class="col-unit">Ед.</th>
+          <th class="col-type">Тип</th>
           <th class="col-qty">Кол-во</th>
           <th class="col-price">Цена,&nbsp;₽</th>
           <th class="col-sum">Сумма,&nbsp;₽</th>
@@ -554,6 +569,7 @@
             quantity: it.quantity,
             price: it.price,
             thickness: it.thickness,
+            facade_type: it.facade_type || '',
             price_list_item_id: it.price_list_item_id != null ? it.price_list_item_id : null
           };
         });
@@ -576,21 +592,28 @@
       var name = opt.getAttribute('data-name');
       var price = parseFloat(opt.getAttribute('data-price')) || 0;
       var unit = opt.getAttribute('data-unit') || 'шт';
+      var facadeType = opt.getAttribute('data-facade-type') || '';
       var thickness = parseFloat(document.getElementById('invoice-thickness-pricelist').value) || null;
-      invoiceItems.push({ name: name, unit: unit, quantity: qty, price: price, thickness: thickness, price_list_item_id: parseInt(opt.value, 10) });
+      invoiceItems.push({ name: name, unit: unit, facade_type: facadeType, quantity: qty, price: price, thickness: thickness, price_list_item_id: parseInt(opt.value, 10) });
       renderInvoiceItems();
     }
     function addManualItem() {
       var name = document.getElementById('invoice-manual-name').value.trim();
       if (!name) return;
       var unit = document.getElementById('invoice-manual-unit').value.trim() || 'м²';
+      var facadeType = (document.getElementById('invoice-manual-facade-type').value || '').trim();
+      if (!facadeType) {
+        alert('Для ручной позиции укажите тип фасада');
+        return;
+      }
       var qty = parseFloat(document.getElementById('invoice-manual-qty').value) || 1;
       var price = parseFloat(document.getElementById('invoice-manual-price').value) || 0;
       var thickness = parseFloat(document.getElementById('invoice-manual-thickness').value) || null;
-      invoiceItems.push({ name: name, unit: unit, quantity: qty, price: price, thickness: thickness, price_list_item_id: null });
+      invoiceItems.push({ name: name, unit: unit, facade_type: facadeType, quantity: qty, price: price, thickness: thickness, price_list_item_id: null });
       renderInvoiceItems();
       document.getElementById('invoice-manual-name').value = '';
       document.getElementById('invoice-manual-price').value = '';
+      document.getElementById('invoice-manual-facade-type').value = '';
     }
     function removeInvoiceItem(idx) {
       invoiceItems.splice(idx, 1);
@@ -612,10 +635,18 @@
         if (!isFinite(qtyVal) || qtyVal <= 0) qtyVal = 1;
         var thVal = (it.thickness != null && it.thickness !== '') ? it.thickness : '';
         var tr = document.createElement('tr');
+        var facadeTypeVal = (it.facade_type || '').trim();
         tr.innerHTML =
           '<td class="col-num">' + (i + 1) + '</td>' +
           '<td class="col-name">' + escapeHtml(it.name || '') + '</td>' +
           '<td class="col-unit">' + escapeHtml(it.unit || 'шт') + '</td>' +
+          '<td class="col-type"><select class="item-facade-type" data-idx="' + i + '">' +
+            '<option value="">—</option>' +
+            '<option value="плоский"' + (facadeTypeVal === 'плоский' ? ' selected' : '') + '>Плоский</option>' +
+            '<option value="фрезерованный"' + (facadeTypeVal === 'фрезерованный' ? ' selected' : '') + '>Фрезерованный</option>' +
+            '<option value="шпон"' + (facadeTypeVal === 'шпон' ? ' selected' : '') + '>Шпон</option>' +
+            '<option value="покраска"' + (facadeTypeVal === 'покраска' ? ' selected' : '') + '>Покраска</option>' +
+          '</select></td>' +
           '<td class="col-qty"><input type="number" class="item-qty" data-idx="' + i + '" step="0.01" min="0.01" value="' + qtyVal + '"></td>' +
           '<td class="col-price"><input type="number" class="item-price" data-idx="' + i + '" step="0.01" min="0" value="' + priceVal + '"></td>' +
           '<td class="item-sum col-sum" data-idx="' + i + '">' + sum + '</td>' +
@@ -676,6 +707,12 @@
           invoiceItems[idx].thickness = (v > 0 ? v : null);
         }
       });
+      document.querySelectorAll('.item-facade-type').forEach(function(sel) {
+        var idx = parseInt(sel.getAttribute('data-idx'), 10);
+        if (!isNaN(idx) && invoiceItems[idx] !== undefined) {
+          invoiceItems[idx].facade_type = (sel.value || '').trim();
+        }
+      });
     }
     function submitInvoice() {
       var invoiceNum = document.getElementById('invoice-number').value.trim();
@@ -701,6 +738,7 @@
             quantity: it.quantity,
             price: it.price,
             thickness: it.thickness,
+            facade_type: it.facade_type || '',
             price_list_item_id: it.price_list_item_id != null ? it.price_list_item_id : null
           };
         }),

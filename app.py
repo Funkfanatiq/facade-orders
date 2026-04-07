@@ -8,6 +8,7 @@ from sqlalchemy import or_, text
 from datetime import datetime, timedelta, timezone, date
 from calendar import monthrange
 import json
+import mimetypes
 import os
 import time
 from types import SimpleNamespace
@@ -293,6 +294,33 @@ def _ensure_invoice_item_thickness_column():
         print(f"⚠️ Проверка invoice_item.thickness: {e}")
 
 
+
+
+def _ensure_invoice_item_facade_type_column():
+    """Добавляет колонку facade_type в invoice_item (тип фасада для ручных позиций счёта)."""
+    try:
+        with db.engine.connect() as conn:
+            backend = db.engine.url.get_backend_name()
+            if backend == "postgresql":
+                r = conn.execute(text("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'invoice_item' AND column_name = 'facade_type'
+                """))
+                if r.fetchone() is None:
+                    conn.execute(text('ALTER TABLE invoice_item ADD COLUMN facade_type VARCHAR(32)'))
+                    conn.commit()
+                    print("✅ Колонка invoice_item.facade_type добавлена")
+            else:
+                r = conn.execute(text('PRAGMA table_info("invoice_item")'))
+                cols = [row[1] for row in r.fetchall()]
+                if "facade_type" not in cols:
+                    conn.execute(text('ALTER TABLE invoice_item ADD COLUMN facade_type VARCHAR(32)'))
+                    conn.commit()
+                    print("✅ Колонка invoice_item.facade_type добавлена")
+    except Exception as e:
+        print(f"⚠️ Проверка invoice_item.facade_type: {e}")
+
+
 def _ensure_email_extra_columns():
     """Добавляет is_draft и folder в email, если колонок нет."""
     try:
@@ -463,6 +491,7 @@ def init_database():
                 _ensure_mixed_facade_data_column()
                 _ensure_milled_parts_column()
                 _ensure_invoice_item_thickness_column()
+                _ensure_invoice_item_facade_type_column()
                 _ensure_email_extra_columns()
                 _ensure_email_attachments_column()
                 _ensure_push_columns()
@@ -1622,6 +1651,13 @@ def invoice_create(counterparty_id):
     return jsonify({"ok": True, "invoice_id": inv.id, "invoice_number": inv.invoice_number})
 
 
+def _normalize_facade_type(value):
+    v = (value or "").strip().lower()
+    if v in ("плоский", "фрезерованный", "шпон", "покраска"):
+        return v
+    return None
+
+
 def _invoice_items_from_payload(items_data, invoice_id):
     """Создаёт объекты InvoiceItem из JSON (без commit). Пропускает строки без наименования."""
     rows = []
@@ -1642,13 +1678,14 @@ def _invoice_items_from_payload(items_data, invoice_id):
             thickness = float(it.get("thickness")) if it.get("thickness") else None
         except (TypeError, ValueError):
             thickness = None
+        facade_type = _normalize_facade_type(it.get("facade_type"))
         pli_id = it.get("price_list_item_id")
         if pli_id is not None:
             try:
                 pli_id = int(pli_id)
             except (TypeError, ValueError):
                 pli_id = None
-        rows.append(InvoiceItem(invoice_id=invoice_id, name=name, unit=unit, quantity=qty, price=price, thickness=thickness, price_list_item_id=pli_id))
+        rows.append(InvoiceItem(invoice_id=invoice_id, name=name, unit=unit, quantity=qty, price=price, thickness=thickness, facade_type=facade_type, price_list_item_id=pli_id))
     return rows
 
 
@@ -1667,6 +1704,7 @@ def invoice_edit_data(invoice_id):
             "quantity": it.quantity,
             "price": it.price,
             "thickness": it.thickness,
+            "facade_type": it.facade_type,
             "price_list_item_id": it.price_list_item_id,
         })
     return jsonify({
@@ -1906,11 +1944,14 @@ def api_invoice_by_number(invoice_number):
     facade_types = ["плоский", "фрезерованный", "шпон", "покраска"]
     aggregated = {}  # (type, thickness) -> area
     for it in inv.items:
-        cat = None
-        if it.price_list_item_id:
+        cat = _normalize_facade_type(it.facade_type)
+        if not cat and it.price_list_item_id:
             pli = PriceListItem.query.get(it.price_list_item_id)
-            if pli and pli.category in facade_types:
-                cat = pli.category
+            if pli:
+                if pli.category in facade_types:
+                    cat = pli.category
+                elif str(pli.category or "").startswith("покраска"):
+                    cat = "покраска"
         if not cat:
             continue
         qty = float(it.quantity or 0)
@@ -2116,6 +2157,46 @@ def render_admin_dashboard():
             debtors.append({"counterparty": cp, "unpaid_invoices": unpaid_nums, "balance": balance})
     
     return render_template("admin_dashboard.html", orders=orders, invoice_for_order=invoice_for_order, datetime=datetime, current_user=current_user, storage_info=storage_info, debtors=debtors)
+
+@app.route("/order/<int:order_id>/edit", methods=["POST"])
+@login_required
+def edit_order(order_id):
+    """Редактирование базовых полей заказа из панели заказов (менеджер/админ)."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return jsonify({"success": False, "message": "⛔ Нет доступа"}), 403
+
+    order = Order.query.get_or_404(order_id)
+    data = request.get_json(silent=True) or {}
+    new_order_id = (data.get("order_id") or "").strip()
+    new_client = (data.get("client") or "").strip()
+
+    try:
+        days = int(data.get("days") or 0)
+    except (TypeError, ValueError):
+        days = 0
+
+    if not new_order_id:
+        return jsonify({"success": False, "message": "Укажите № заказа"}), 400
+    if not new_client:
+        return jsonify({"success": False, "message": "Укажите клиента"}), 400
+    if days <= 0:
+        return jsonify({"success": False, "message": "Срок должен быть больше 0"}), 400
+
+    try:
+        # Если клиент совпал с контрагентом из справочника — привяжем counterparty_id.
+        cp = Counterparty.query.filter(Counterparty.name == new_client).first()
+        order.order_id = new_order_id
+        order.invoice_number = new_order_id
+        order.client = new_client
+        order.counterparty_id = cp.id if cp else None
+        order.days = days
+        order.due_date = datetime.now(timezone.utc).date() + timedelta(days=days)
+        db.session.commit()
+        return jsonify({"success": True, "message": "✅ Заказ обновлён"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"❌ Ошибка: {e}"}), 500
+
 
 @app.route("/delete_order/<int:order_id>", methods=["DELETE"])
 @login_required
@@ -3078,10 +3159,25 @@ def push_check():
     return "ok", 200
 
 
+# Открытие во вкладке браузера (Chrome: PDF, изображения, Excel). Остальное — скачивание.
+_UPLOAD_VIEW_IN_BROWSER_EXT = frozenset({
+    ".pdf",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg",
+    ".txt",
+    ".xlsx", ".xls",
+})
+
+
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-    """Раздача вложений. conditional=True — поддержка Range (PDF в браузере грузятся быстрее/стабильнее)."""
+    """Раздача вложений к заказам.
+
+    Без conditional/Range: на macOS Safari и внешние просмотрщики часто ломаются на 206/ETag.
+    DWG/DXF, архивы и прочий бинарник без просмотра в Chrome — отдаём как вложение (скачивание).
+    """
     from flask import abort
+    from werkzeug.utils import secure_filename as _secure_dl_name
+
     if not filename or "/" in filename or "\\" in filename:
         abort(404)
     folder = os.path.realpath(app.config["UPLOAD_FOLDER"])
@@ -3093,7 +3189,33 @@ def uploaded_file(filename):
         abort(404)
     if not os.path.isfile(full):
         abort(404)
-    return send_file(full, conditional=True)
+    mimetype, _ = mimetypes.guess_type(full)
+    if not mimetype:
+        mimetype = "application/octet-stream"
+    ext = os.path.splitext(full)[1].lower()
+    if ext == ".svg" and mimetype == "application/octet-stream":
+        mimetype = "image/svg+xml"
+    as_attachment = ext not in _UPLOAD_VIEW_IN_BROWSER_EXT
+    if mimetype == "application/octet-stream" and ext in _UPLOAD_VIEW_IN_BROWSER_EXT:
+        if ext == ".pdf":
+            mimetype = "application/pdf"
+        elif ext == ".txt":
+            mimetype = "text/plain; charset=utf-8"
+        elif ext == ".xlsx":
+            mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        elif ext == ".xls":
+            mimetype = "application/vnd.ms-excel"
+    elif mimetype == "application/octet-stream":
+        as_attachment = True
+    download_name = _secure_dl_name(os.path.basename(filename)) or "attachment"
+    return send_file(
+        full,
+        mimetype=mimetype,
+        conditional=False,
+        etag=False,
+        as_attachment=as_attachment,
+        download_name=download_name,
+    )
 
 @app.route("/sw.js")
 def service_worker():
@@ -3424,6 +3546,25 @@ def init_db():
     users = [
         {"username": "admin", "password": "admin123", "role": "Админ"},
         {"username": "manager", "password": "5678", "role": "Менеджер"},
+        {"username": "worker", "password": "0000", "role": "Производство"},
+        {"username": "cutter", "password": "7777", "role": "Фрезеровка"},
+        {"username": "polisher", "password": "8888", "role": "Шлифовка"},
+        {"username": "monitor", "password": "9999", "role": "Монитор"}
+    ]
+
+    for u in users:
+        if not User.query.filter_by(username=u["username"]).first():
+            db.session.add(User(
+                username=u["username"],
+                password=generate_password_hash(u["password"]),
+                role=u["role"]
+            ))
+    db.session.commit()
+    print("✅ База данных и пользователи инициализированы.")
+
+if __name__ == "__main__":
+    app.run(debug=True, host='0.0.0.0', port=5000)
+anager", "password": "5678", "role": "Менеджер"},
         {"username": "worker", "password": "0000", "role": "Производство"},
         {"username": "cutter", "password": "7777", "role": "Фрезеровка"},
         {"username": "polisher", "password": "8888", "role": "Шлифовка"},

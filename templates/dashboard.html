@@ -264,6 +264,37 @@
     .counterparty-form-actions button[type="submit"]:hover { background: #45A049; }
     .counterparty-form-actions button[type="button"] { background: #4CAF50; color: #fff; }
     .counterparty-form-actions button[type="button"]:hover { background: #45A049; }
+    /* Форма добавления контрагента: удобнее при крупном масштабе экрана */
+    #counterparty-form-wrap.counterparty-form-wrap {
+      max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      box-sizing: border-box;
+    }
+    #counterparty-form-wrap .counterparty-block input,
+    #counterparty-form-wrap .counterparty-block select {
+      font-size: 16px;
+      padding: 12px 14px;
+      box-sizing: border-box;
+      max-width: 100%;
+    }
+    #counterparty-form-wrap .counterparty-form-actions {
+      flex-wrap: wrap;
+    }
+    #counterparty-form-wrap .counterparty-form-actions button {
+      flex: 1 1 auto;
+      min-width: 9rem;
+      padding: 12px 18px;
+      font-size: 16px;
+    }
+    .counterparty-search-input {
+      width: 100%;
+      max-width: min(420px, 100%);
+      box-sizing: border-box;
+      font-size: 16px;
+      padding: 12px 14px !important;
+      margin-bottom: 12px;
+    }
     .counterparty-link { text-decoration: none; color: #333; display: block; }
     .counterparty-link:hover { color: #333; }
     .counterparty-link .cp-info { color: #666; font-weight: normal; }
@@ -534,7 +565,7 @@
   <div id="manager-counterparties-tab" class="tab-content {{ 'active' if active_tab == 'counterparties' else '' }}">
     <div class="form-box">
       <h3>👥 Контрагенты</h3>
-      <input type="text" id="counterparty-search" placeholder="Поиск по имени, телефону или email..." class="counterparty-search-input" style="width:100%; max-width:320px; margin-bottom:12px; padding:8px;">
+      <input type="text" id="counterparty-search" placeholder="Поиск по имени, телефону или email..." class="counterparty-search-input">
       <button type="button" class="btn-add-counterparty" onclick="toggleCounterpartyForm()">➕ Добавить контрагента</button>
       <div id="counterparty-form-wrap" class="counterparty-form-wrap" style="display: none;">
         <form method="POST" action="{{ url_for('counterparty_add') }}" class="counterparty-form">

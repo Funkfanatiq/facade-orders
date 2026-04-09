@@ -28,8 +28,13 @@ STORAGE_LIMIT_MB = 980  # Лимит хранилища в МБ
 ORDER_SIZE_MB = 10  # Средний размер заказа в МБ
 CLEANUP_BATCH_SIZE = 10  # Количество заказов для удаления за раз
 
-# Разрешенные типы файлов для загрузки
-ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'gif', 'txt', 'doc', 'docx', 'xls', 'xlsx', 'dwg', 'dxf'}
+# Запрещённые расширения (исполняемые и сценарии). Остальные типы — можно прикреплять к заказу
+# (в т.ч. Базис-Мебельщик: .b3d, .bsw и др.).
+BLOCKED_UPLOAD_EXTENSIONS = frozenset({
+    "exe", "msi", "scr", "bat", "cmd", "com", "pif", "vbs", "wsf", "reg",
+    "dll", "sys", "drv", "app", "deb", "rpm", "dmg", "pkg",
+    "sh", "bash", "zsh", "csh", "ksh", "ps1", "psm1", "psd1",
+})
 
 # Загружаем переменные окружения из .env (в папке приложения)
 _base = os.path.dirname(os.path.abspath(__file__))
@@ -565,9 +570,14 @@ except Exception as e:
     print("⚠️ Приложение продолжит работу, но функциональность может быть ограничена")
 
 def allowed_file(filename):
-    """Проверяет, разрешен ли тип файла для загрузки"""
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    """Разрешаем любые вложения, кроме явно опасных расширений; файлы без расширения тоже можно."""
+    if not filename or not str(filename).strip():
+        return False
+    base = str(filename).strip()
+    if "." not in base:
+        return True
+    ext = base.rsplit(".", 1)[1].lower()
+    return ext not in BLOCKED_UPLOAD_EXTENSIONS
 
 def secure_filename_custom(filename):
     """Безопасное имя файла с проверкой"""
@@ -1226,7 +1236,10 @@ def dashboard():
             if f and f.filename:
                 # Проверяем тип файла
                 if not allowed_file(f.filename):
-                    flash(f"Файл {f.filename} имеет недопустимый тип", "error")
+                    flash(
+                        f"Файл {f.filename} не принят: запрещённый тип (исполняемые и служебные файлы)",
+                        "error",
+                    )
                     continue
 
                 safe_filename = unique_upload_filename(f.filename, app.config["UPLOAD_FOLDER"])
@@ -3165,6 +3178,8 @@ _UPLOAD_VIEW_IN_BROWSER_EXT = frozenset({
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg",
     ".txt",
     ".xlsx", ".xls",
+    ".mp4", ".webm", ".ogv",
+    ".mp3", ".ogg", ".oga", ".wav", ".m4a", ".opus",
 })
 
 
@@ -3205,6 +3220,22 @@ def uploaded_file(filename):
             mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         elif ext == ".xls":
             mimetype = "application/vnd.ms-excel"
+        elif ext == ".mp4":
+            mimetype = "video/mp4"
+        elif ext == ".webm":
+            mimetype = "video/webm"
+        elif ext == ".ogv":
+            mimetype = "video/ogg"
+        elif ext == ".mp3":
+            mimetype = "audio/mpeg"
+        elif ext in (".ogg", ".oga"):
+            mimetype = "audio/ogg"
+        elif ext == ".wav":
+            mimetype = "audio/wav"
+        elif ext == ".m4a":
+            mimetype = "audio/mp4"
+        elif ext == ".opus":
+            mimetype = "audio/opus"
     elif mimetype == "application/octet-stream":
         as_attachment = True
     download_name = _secure_dl_name(os.path.basename(filename)) or "attachment"

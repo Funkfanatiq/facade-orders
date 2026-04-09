@@ -3,9 +3,11 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Заказы</title>
   <style>
     /* 🔧 Стили — полностью сохранены */
+    *, *::before, *::after { box-sizing: border-box; }
     body {
       margin: 0;
       background: #f9f9f9;
@@ -14,16 +16,23 @@
     }
     .top-bar {
       background: #fff;
-      padding: 16px;
+      padding: 12px 16px;
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
       border-bottom: 1px solid #ddd;
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
+      gap: 12px 16px;
     }
+    .top-bar h2 { margin: 0; font-size: clamp(1.1rem, 2.8vw, 1.35rem); line-height: 1.25; }
+    .top-bar-user { font-size: clamp(0.9rem, 2.2vw, 1rem); line-height: 1.4; word-break: break-word; }
     .form-box {
       background: #fff;
-      margin: 20px;
-      padding: 20px;
+      margin: 16px max(12px, env(safe-area-inset-left)) 16px max(12px, env(safe-area-inset-right));
+      padding: 16px 18px;
+      max-width: 100%;
       border-radius: 12px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.06);
     }
@@ -53,9 +62,18 @@
       transform: translateY(0);
       box-shadow: 0 1px 4px rgba(76, 175, 80, 0.3);
     }
-    table {
-      width: 95%;
-      margin: 20px auto;
+    .orders-table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 0 max(12px, env(safe-area-inset-left)) 20px max(12px, env(safe-area-inset-right));
+      max-width: 100%;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    table.orders-dashboard-table {
+      width: 100%;
+      min-width: 52rem;
+      margin: 0;
       background: #fff;
       border-collapse: collapse;
     }
@@ -64,6 +82,10 @@
       border-bottom: 1px solid #eee;
       text-align: center;
       vertical-align: middle;
+    }
+    table.orders-dashboard-table th,
+    table.orders-dashboard-table td {
+      padding: 10px 8px;
     }
     th {
       background-color: #f2f2f2;
@@ -76,8 +98,33 @@
     }
     #mixed-facade-table td:nth-child(2) input,
     #mixed-facade-table td:nth-child(3) input {
-      display: inline-block;
+      display: block;
       margin: 0 auto;
+    }
+    .mixed-facade-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+      margin-bottom: 8px;
+    }
+    .mixed-row-input,
+    .edit-mixed-row-input {
+      width: 100%;
+      max-width: 7rem;
+      min-width: 4.5rem;
+      box-sizing: border-box;
+      margin: 4px auto !important;
+    }
+    #mixed-facade-table select.mixed-type,
+    #edit-mixed-facade-table select.edit-mixed-type {
+      max-width: 100%;
+      min-width: 0;
+      font-size: 15px;
+    }
+    .input-thickness-compact {
+      width: 100%;
+      max-width: 11rem;
+      margin-top: 8px;
     }
     #edit-mixed-facade-table th:nth-child(2),
     #edit-mixed-facade-table th:nth-child(3),
@@ -87,49 +134,76 @@
     }
     #edit-mixed-facade-table td:nth-child(2) input,
     #edit-mixed-facade-table td:nth-child(3) input {
-      display: inline-block;
+      display: block;
       margin: 0 auto;
+    }
+    .edit-order-modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(0,0,0,0.45);
+      align-items: center;
+      justify-content: center;
+      padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+      box-sizing: border-box;
     }
     .edit-order-dialog {
       background: #fff;
-      width: min(640px, 96vw);
-      max-height: 90vh;
+      width: min(640px, calc(100vw - 24px));
+      max-width: 100%;
+      max-height: min(90vh, 100dvh - 24px);
       overflow-y: auto;
       border-radius: 12px;
       padding: 18px;
       box-shadow: 0 8px 24px rgba(0,0,0,.2);
     }
-    .edit-order-dialog label { display: block; font-size: 14px; color: #555; margin-top: 8px; }
+    .edit-order-dialog label { display: block; font-size: 16px; color: #555; margin-top: 8px; }
     .edit-order-dialog input[type="text"],
     .edit-order-dialog input[type="number"],
     .edit-order-dialog select { width: 100%; max-width: 100%; box-sizing: border-box; margin-top: 4px; }
-    #edit-order-files-list { list-style: none; padding: 0; margin: 8px 0 0; font-size: 14px; }
+    .edit-order-dialog input[type="file"] { width: 100%; max-width: 100%; }
+    .edit-order-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .edit-order-actions button { flex: 1 1 auto; min-width: 9rem; }
+    #manager-mail-tab iframe {
+      min-height: min(420px, 55dvh);
+      height: calc(100vh - 200px) !important;
+    }
+    #edit-order-files-list { list-style: none; padding: 0; margin: 8px 0 0; font-size: 15px; }
     #edit-order-files-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid #eee; }
     #edit-order-files-list a { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .switch {
+    label.switch {
       position: relative;
       display: inline-block;
-      width: 46px;
-      height: 26px;
+      width: 54px;
+      height: 30px;
+      margin: 8px 6px;
+      cursor: pointer;
+      vertical-align: middle;
+      flex-shrink: 0;
     }
-    .switch input {
+    label.switch input {
       opacity: 0;
       width: 0;
       height: 0;
     }
-    .slider {
+    label.switch .slider {
       position: absolute;
       cursor: pointer;
       top: 0; left: 0; right: 0; bottom: 0;
       background-color: #ccc;
-      border-radius: 26px;
+      border-radius: 30px;
       transition: .3s ease-in-out;
     }
-    .slider:before {
+    label.switch .slider:before {
       position: absolute;
       content: "";
-      height: 20px;
-      width: 20px;
+      height: 24px;
+      width: 24px;
       left: 3px;
       bottom: 3px;
       background-color: white;
@@ -137,27 +211,37 @@
       transition: .3s ease-in-out;
       box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
-    input:checked + .slider {
+    label.switch input:checked + .slider {
       background-color: #4CAF50;
       box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
     }
-    input:checked + .slider:before {
-      transform: translateX(20px);
+    label.switch input:checked + .slider:before {
+      transform: translateX(24px);
     }
     .delete-icon {
       background: none;
       border: none;
-      font-size: 18px;
+      font-size: 22px;
+      line-height: 1;
+      padding: 6px 8px;
+      min-width: 2.5rem;
+      min-height: 2.5rem;
       color: #e33;
       cursor: pointer;
+      border-radius: 8px;
     }
     .edit-icon {
       background: none;
       border: none;
-      font-size: 18px;
+      font-size: 22px;
+      line-height: 1;
+      padding: 6px 8px;
+      min-width: 2.5rem;
+      min-height: 2.5rem;
       color: #1e88e5;
       cursor: pointer;
-      margin-right: 6px;
+      margin-right: 4px;
+      border-radius: 8px;
     }
     .row-green { background-color: #d4edda !important; }
     .row-warning { background-color: #fff3cd !important; }
@@ -167,18 +251,26 @@
       outline-offset: -2px;
       border-radius: 6px;
     }
+    .tabs-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 16px max(12px, env(safe-area-inset-left)) 0 max(12px, env(safe-area-inset-right));
+      max-width: 100%;
+    }
     .tabs {
       display: flex;
+      flex-wrap: wrap;
       background: #fff;
       border-radius: 12px;
-      padding: 4px;
-      margin: 20px 20px 0;
+      padding: 6px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.06);
-      gap: 4px;
+      gap: 6px;
+      min-width: min-content;
     }
     .tab {
-      flex: 1;
-      padding: 12px 20px;
+      flex: 1 1 auto;
+      min-width: min(100%, 8.5rem);
+      padding: 10px 12px;
       text-align: center;
       cursor: pointer;
       border-radius: 8px;
@@ -187,11 +279,13 @@
       background: #f2f2f2;
       color: #555;
       border: none;
-      font-size: 15px;
+      font-size: clamp(13px, 2.4vw, 15px);
+      line-height: 1.3;
+      word-break: break-word;
     }
     .tab:hover { background: #e8e8e8; color: #333; }
     .tab.active { background: #757575; color: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); }
-    .tab-content { display: none; margin: 0 20px 20px; }
+    .tab-content { display: none; margin: 0 max(12px, env(safe-area-inset-left)) 16px max(12px, env(safe-area-inset-right)); }
     .tab-content.active { display: block; }
     .customers-list {
       background: #fff;
@@ -201,7 +295,7 @@
       list-style: none;
       margin: 0;
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
       gap: 12px;
     }
     .customers-list li {
@@ -273,7 +367,7 @@
       padding-bottom: 12px;
       border-bottom: 1px solid #e0e0e0;
     }
-    @media (max-width: 700px) { .pricelist-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 1100px) { .pricelist-grid { grid-template-columns: 1fr; } }
     .pricelist-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
     .pricelist-table th, .pricelist-table td { padding: 10px 12px; text-align: left; border: 1px solid #ddd; }
     .pricelist-table th { background: #f5f5f5; font-weight: 600; }
@@ -282,7 +376,7 @@
     .pricelist-table tbody tr.drag-over { border-top: 2px solid #4CAF50; }
     .pricelist-category-title { margin: 20px 0 8px 0; font-size: 17px; color: #333; }
     .pricelist-category-title:first-of-type { margin-top: 0; }
-    .btn-edit-pricelist { padding: 6px 12px; font-size: 13px; cursor: pointer; background: #4CAF50; color: #fff; border: none; border-radius: 6px; }
+    .btn-edit-pricelist { padding: 8px 14px; font-size: 14px; cursor: pointer; background: #4CAF50; color: #fff; border: none; border-radius: 6px; }
     .btn-edit-pricelist:hover { background: #45A049; }
     .pricelist-drag-handle { cursor: grab; color: #999; padding: 0 6px; user-select: none; }
     .pricelist-drag-handle:active { cursor: grabbing; }
@@ -300,7 +394,9 @@
       user-select: none;
       color: #333;
       font-weight: 500;
-      white-space: nowrap;
+      white-space: normal;
+      text-align: left;
+      max-width: 12rem;
     }
     details.files-details > summary::-webkit-details-marker { display: none; }
     details.files-details[open] > summary { color: #4CAF50; }
@@ -327,7 +423,7 @@
     {% else %}
     <h2>Панель заказов</h2>
     {% endif %}
-    <div>
+    <div class="top-bar-user">
       {{ current_user.username }} ({{ current_user.role }}) | <a href="{{ url_for('logout') }}">Выход</a>
     </div>
   </div>
@@ -352,12 +448,14 @@
 
   {% if current_user.role == "Менеджер" %}
   {% set active_tab = request.args.get('tab', 'orders') %}
+  <div class="tabs-scroll">
   <div class="tabs">
     <button type="button" class="tab {{ 'active' if active_tab == 'orders' else '' }}" data-tab="orders" onclick="showManagerTab('orders', event)">📋 Панель заказов</button>
     <button type="button" class="tab {{ 'active' if active_tab == 'counterparties' else '' }}" data-tab="counterparties" onclick="showManagerTab('counterparties', event)">👥 Контрагенты</button>
     <button type="button" class="tab {{ 'active' if active_tab == 'debts' else '' }}" data-tab="debts" onclick="showManagerTab('debts', event)">💸 Долги</button>
     <button type="button" class="tab {{ 'active' if active_tab == 'pricelist' else '' }}" data-tab="pricelist" onclick="showManagerTab('pricelist', event)">💰 Прайс лист</button>
     <button type="button" class="tab {{ 'active' if active_tab == 'mail' else '' }}" data-tab="mail" onclick="showManagerTab('mail', event)">📮 Почта<span id="mail-unread-badge" class="mail-tab-badge" {% if not mail_unread_count %}style="display:none;"{% endif %}>{{ mail_unread_count or 0 }}</span></button>
+  </div>
   </div>
   <div id="manager-orders-tab" class="tab-content {{ 'active' if active_tab == 'orders' else '' }}">
   {% endif %}
@@ -386,15 +484,17 @@
       </select>
       <div id="area-single-wrap">
         <input type="number" name="area" id="area_input" placeholder="Площадь (м²)" step="0.01">
-        <span id="thickness-wrap"><input type="number" name="thickness" id="thickness_input" placeholder="Толщина (мм)" step="1" min="1" style="margin-top:8px; width:120px;"></span>
+        <span id="thickness-wrap"><input type="number" name="thickness" id="thickness_input" class="input-thickness-compact" placeholder="Толщина (мм)" step="1" min="1"></span>
       </div>
       <div id="mixed-facade-wrap" style="display:none; margin-top:12px;">
         <p style="font-weight:500; margin-bottom:8px;">Типы фасадов, площадь и толщина:</p>
-        <table id="mixed-facade-table" style="width:100%; border-collapse:collapse; margin-bottom:8px;">
+        <div class="mixed-facade-scroll">
+        <table id="mixed-facade-table" style="width:100%; border-collapse:collapse; margin-bottom:0;">
           <thead><tr><th>Тип</th><th>Площадь (м²)</th><th>Толщина (мм)</th><th></th></tr></thead>
           <tbody id="mixed-facade-tbody"></tbody>
         </table>
-        <button type="button" id="add-mixed-row-btn" style="padding:6px 12px; font-size:13px;">➕ Добавить</button>
+        </div>
+        <button type="button" id="add-mixed-row-btn" style="padding:8px 14px; font-size:14px;">➕ Добавить</button>
         <input type="hidden" name="mixed_facade_data" id="mixed_facade_data_input">
       </div>
       <input type="file" name="files" multiple>
@@ -412,7 +512,8 @@
     </form>
   </div>
 
-  <table>
+  <div class="orders-table-wrap">
+  <table class="orders-dashboard-table">
     <tr>
       <th>№ заказа</th><th>Клиент</th><th>Срок</th>
       <th>Фрезеровка</th><th>Шлифовка</th><th>Упаковка</th><th>Отгрузка</th><th>Оплата</th><th>Файлы</th>
@@ -475,11 +576,12 @@
       </tr>
     {% endfor %}
   </table>
+  </div>
 
   {% if current_user.role == "Менеджер" %}
   </div>
 
-  <div id="edit-order-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center;">
+  <div id="edit-order-modal" class="edit-order-modal-overlay" style="display:none;">
     <div class="edit-order-dialog" onclick="event.stopPropagation();">
       <h3 style="margin:0 0 8px 0;">Редактировать заказ</h3>
       <p id="edit-order-loading" style="margin:12px 0; color:#666;">Загрузка…</p>
@@ -510,11 +612,13 @@
         </div>
         <div id="edit_mixed_facade_wrap" style="display:none; margin-top:12px;">
           <p style="font-weight:500; margin-bottom:8px;">Состав смешанного фасада</p>
-          <table id="edit-mixed-facade-table" style="width:100%; border-collapse:collapse; margin-bottom:8px;">
+          <div class="mixed-facade-scroll">
+          <table id="edit-mixed-facade-table" style="width:100%; border-collapse:collapse; margin-bottom:0;">
             <thead><tr><th>Тип</th><th>Площадь (м²)</th><th>Толщина (мм)</th><th></th></tr></thead>
             <tbody id="edit_mixed_facade_tbody"></tbody>
           </table>
-          <button type="button" id="edit_add_mixed_row_btn" style="padding:6px 12px; font-size:13px;">➕ Добавить строку</button>
+          </div>
+          <button type="button" id="edit_add_mixed_row_btn" style="padding:8px 14px; font-size:14px;">➕ Добавить строку</button>
           <input type="hidden" id="edit_mixed_facade_data_input">
         </div>
         <label style="margin-top:12px;">Вложения</label>
@@ -523,7 +627,7 @@
           <input type="file" id="edit-order-files-input" multiple style="flex:1; min-width:160px;">
           <button type="button" onclick="uploadEditOrderAttachments()">Добавить файлы</button>
         </div>
-        <div style="display:flex; gap:8px; margin-top:14px;">
+        <div class="edit-order-actions">
           <button type="button" onclick="saveOrderEdit()">Сохранить изменения</button>
           <button type="button" onclick="closeEditOrderModal()" style="background:#777;">Отмена</button>
         </div>
@@ -866,8 +970,8 @@
       function addMixedRow() {
         var tr = document.createElement('tr');
         tr.innerHTML = '<td><select class="mixed-type"><option value="плоский">Плоский</option><option value="фрезерованный">Фрезерованный</option><option value="шпон">Шпон</option><option value="покраска">Покраска</option></select></td>' +
-          '<td><input type="number" class="mixed-area" step="0.01" min="0.01" placeholder="м²" style="width:70px;"></td>' +
-          '<td class="mixed-thickness-cell"><input type="number" class="mixed-thickness" step="1" min="1" placeholder="мм" style="width:60px;"></td>' +
+          '<td><input type="number" class="mixed-area mixed-row-input" step="0.01" min="0.01" placeholder="м²"></td>' +
+          '<td class="mixed-thickness-cell"><input type="number" class="mixed-thickness mixed-row-input" step="1" min="1" placeholder="мм"></td>' +
           '<td><button type="button" class="mixed-remove">✕</button></td>';
         tr.querySelector('.mixed-remove').onclick = function() { tr.remove(); };
         tr.querySelector('.mixed-type').onchange = function() { setMixedRowThicknessVisibility(tr); };
@@ -911,7 +1015,7 @@
             var tr = document.createElement('tr');
             var thVal = (it.type === 'покраска') ? '' : (it.thickness != null ? it.thickness : '');
             var thDisplay = (it.type === 'покраска') ? 'none' : '';
-            tr.innerHTML = '<td><select class="mixed-type"><option value="плоский"' + (it.type === 'плоский' ? ' selected' : '') + '>Плоский</option><option value="фрезерованный"' + (it.type === 'фрезерованный' ? ' selected' : '') + '>Фрезерованный</option><option value="шпон"' + (it.type === 'шпон' ? ' selected' : '') + '>Шпон</option><option value="покраска"' + (it.type === 'покраска' ? ' selected' : '') + '>Покраска</option></select></td><td><input type="number" class="mixed-area" step="0.01" min="0.01" value="' + it.area + '" style="width:70px;"></td><td class="mixed-thickness-cell" style="display:' + thDisplay + '"><input type="number" class="mixed-thickness" step="1" min="1" placeholder="мм" value="' + thVal + '" style="width:60px;"></td><td><button type="button" class="mixed-remove">✕</button></td>';
+            tr.innerHTML = '<td><select class="mixed-type"><option value="плоский"' + (it.type === 'плоский' ? ' selected' : '') + '>Плоский</option><option value="фрезерованный"' + (it.type === 'фрезерованный' ? ' selected' : '') + '>Фрезерованный</option><option value="шпон"' + (it.type === 'шпон' ? ' selected' : '') + '>Шпон</option><option value="покраска"' + (it.type === 'покраска' ? ' selected' : '') + '>Покраска</option></select></td><td><input type="number" class="mixed-area mixed-row-input" step="0.01" min="0.01" value="' + it.area + '"></td><td class="mixed-thickness-cell" style="display:' + thDisplay + '"><input type="number" class="mixed-thickness mixed-row-input" step="1" min="1" placeholder="мм" value="' + thVal + '"></td><td><button type="button" class="mixed-remove">✕</button></td>';
             tr.querySelector('.mixed-remove').onclick = function() { tr.remove(); };
             tr.querySelector('.mixed-type').onchange = function() { setMixedRowThicknessVisibility(tr); };
             mixedTbody.appendChild(tr);
@@ -1012,8 +1116,8 @@
           '<option value="фрезерованный"' + (t === 'фрезерованный' ? ' selected' : '') + '>Фрезерованный</option>' +
           '<option value="шпон"' + (t === 'шпон' ? ' selected' : '') + '>Шпон</option>' +
           '<option value="покраска"' + (t === 'покраска' ? ' selected' : '') + '>Покраска</option></select></td>' +
-          '<td><input type="number" class="edit-mixed-area" step="0.01" min="0.01" value="' + a + '" style="width:70px;"></td>' +
-          '<td class="edit-mixed-thickness-cell" style="display:' + thDisplay + '"><input type="number" class="edit-mixed-thickness" step="1" min="1" value="' + thVal + '" style="width:60px;"></td>' +
+          '<td><input type="number" class="edit-mixed-area edit-mixed-row-input" step="0.01" min="0.01" value="' + a + '"></td>' +
+          '<td class="edit-mixed-thickness-cell" style="display:' + thDisplay + '"><input type="number" class="edit-mixed-thickness edit-mixed-row-input" step="1" min="1" value="' + thVal + '"></td>' +
           '<td><button type="button" class="edit-mixed-remove">✕</button></td>';
         tr.querySelector('.edit-mixed-remove').onclick = function() { tr.remove(); };
         tr.querySelector('.edit-mixed-type').onchange = function() { setEditMixedRowThicknessVisibility(tr); };

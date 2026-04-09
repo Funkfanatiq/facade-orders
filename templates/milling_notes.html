@@ -59,29 +59,30 @@
 
   <div style="background: #fff8e1; padding: 12px; margin: 20px; border-radius: 8px; border-left: 4px solid #ffc107;">
     <p style="margin: 0; color: #333; font-weight: 500;">
-      📝 Заметки по <strong>текущим заказам</strong> (не отгруженным): не хватает детали, уточнить у менеджера, напомнить себе — всё фиксируйте здесь.
+      📝 Можно привязать заметку к <strong>активному заказу</strong> (не отгруженному) или оставить <strong>общую заметку</strong> без привязки — напоминания, вопросы менеджеру, дела не по конкретному заказу.
     </p>
   </div>
 
   <div class="form-box">
     <h3>Новая заметка</h3>
-    {% if orders %}
     <form method="POST" action="{{ url_for('milling_note_add') }}">
-      <label for="note-order">Заказ</label>
-      <select id="note-order" name="order_id" required>
-        <option value="">— Выберите заказ —</option>
+      <label for="note-order">Заказ (необязательно)</label>
+      <select id="note-order" name="order_id">
+        <option value="">— Без привязки к заказу (общая заметка) —</option>
+        {% if orders %}
         {% for o in orders %}
         <option value="{{ o.id }}">№ {{ o.order_id }} · {{ o.client }} · срок {{ o.due_date.strftime('%d.%m.%Y') }}</option>
         {% endfor %}
+        {% endif %}
       </select>
+      {% if not orders %}
+      <p class="muted" style="margin:6px 0 0;">Сейчас нет активных заказов — доступны только общие заметки.</p>
+      {% endif %}
       <label for="note-body" style="margin-top:12px;">Текст заметки</label>
-      <textarea id="note-body" name="body" placeholder="Например: уточнить фрезу по эскизу, не хватает толщины в чертеже…" maxlength="4000" required></textarea>
+      <textarea id="note-body" name="body" placeholder="Например: уточнить фрезу по эскизу; купить пилы; напомнить менеджеру про образец…" maxlength="4000" required></textarea>
       <p class="muted" style="margin:8px 0 12px;">До 4000 символов.</p>
       <button type="submit" class="btn-primary">Добавить заметку</button>
     </form>
-    {% else %}
-    <p class="muted">Нет активных заказов — заметки не к чему привязать.</p>
-    {% endif %}
   </div>
 
   <div class="form-box">
@@ -92,7 +93,7 @@
       <thead>
         <tr>
           <th>Дата</th>
-          <th>Заказ</th>
+          <th>№ заказа</th>
           <th>Клиент</th>
           <th>Заметка</th>
           <th>Кто</th>
@@ -103,8 +104,8 @@
         {% for n in notes %}
         <tr>
           <td class="muted" style="white-space:nowrap;">{{ n.created_at.strftime('%d.%m.%Y %H:%M') if n.created_at else '—' }}</td>
-          <td><strong>№ {{ n.order.order_id }}</strong></td>
-          <td>{{ n.order.client }}</td>
+          <td>{% if n.order %}<strong>№ {{ n.order.order_id }}</strong>{% else %}<span class="muted">— общая —</span>{% endif %}</td>
+          <td>{% if n.order %}{{ n.order.client }}{% else %}<span class="muted">—</span>{% endif %}</td>
           <td class="note-text">{{ n.body }}</td>
           <td class="muted">{{ n.author.username if n.author else '—' }}</td>
           <td>

@@ -249,11 +249,11 @@ class IgnoredEmailUid(db.Model):
 
 
 class MillingNote(db.Model):
-    """Заметка фрезеровщика к заказу (напоминания, недостающие детали)."""
+    """Заметка фрезеровщика: к заказу или общая (без привязки)."""
     __tablename__ = 'milling_note'
 
     id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('order.id', ondelete='CASCADE'), nullable=False, index=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id', ondelete='CASCADE'), nullable=True, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     body = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=db.func.now())

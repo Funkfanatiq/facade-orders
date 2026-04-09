@@ -441,6 +441,64 @@ def _ensure_milled_parts_column():
         print(f"⚠️ Проверка milled_parts: {e}")
 
 
+def _ensure_milling_note_order_id_nullable():
+    """milling_note.order_id может быть NULL — свободные заметки без привязки к заказу."""
+    try:
+        with db.engine.connect() as conn:
+            backend = db.engine.url.get_backend_name()
+            if backend == "postgresql":
+                r = conn.execute(text("""
+                    SELECT is_nullable FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'milling_note' AND column_name = 'order_id'
+                """))
+                row = r.fetchone()
+                if row is None:
+                    conn.commit()
+                    return
+                if str(row[0]).upper() == "NO":
+                    conn.execute(text("ALTER TABLE milling_note ALTER COLUMN order_id DROP NOT NULL"))
+                    conn.commit()
+                    print("✅ milling_note.order_id: допускается NULL (PostgreSQL)")
+                else:
+                    conn.commit()
+                return
+            r = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name='milling_note'")
+            )
+            if r.fetchone() is None:
+                conn.commit()
+                return
+            r = conn.execute(text("PRAGMA table_info(milling_note)"))
+            cols = {row[1]: row for row in r.fetchall()}
+            if "order_id" not in cols:
+                conn.commit()
+                return
+            if cols["order_id"][3] == 0:
+                conn.commit()
+                return
+        with db.engine.begin() as conn:
+            conn.execute(text("PRAGMA foreign_keys=OFF"))
+            conn.execute(text("""
+                CREATE TABLE milling_note__new (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    order_id INTEGER,
+                    user_id INTEGER,
+                    body TEXT NOT NULL,
+                    created_at DATETIME,
+                    FOREIGN KEY (order_id) REFERENCES "order" (id) ON DELETE CASCADE,
+                    FOREIGN KEY (user_id) REFERENCES "user" (id)
+                )
+            """))
+            conn.execute(text("INSERT INTO milling_note__new SELECT id, order_id, user_id, body, created_at FROM milling_note"))
+            conn.execute(text("DROP TABLE milling_note"))
+            conn.execute(text("ALTER TABLE milling_note__new RENAME TO milling_note"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_milling_note_order_id ON milling_note (order_id)"))
+            conn.execute(text("PRAGMA foreign_keys=ON"))
+        print("✅ milling_note.order_id: допускается NULL (SQLite, пересоздание таблицы)")
+    except Exception as e:
+        print(f"⚠️ Миграция milling_note.order_id NULL: {e}")
+
+
 def _ensure_push_columns():
     """Добавляет last_push_work_at, last_push_urgent_at в order для отслеживания отправленных push."""
     try:
@@ -500,6 +558,7 @@ def init_database():
                 _ensure_email_extra_columns()
                 _ensure_email_attachments_column()
                 _ensure_push_columns()
+                _ensure_milling_note_order_id_nullable()
 
                 # Проверяем количество пользователей
                 user_count = User.query.count()
@@ -2629,8 +2688,8 @@ def milling_notes():
     orders_raw = Order.query.filter(Order.shipment == False).order_by(Order.due_date.asc()).all()
     orders = sorted(orders_raw, key=_get_order_sort_key)
     notes = (
-        MillingNote.query.join(Order, MillingNote.order_id == Order.id)
-        .filter(Order.shipment == False)
+        MillingNote.query.outerjoin(Order, MillingNote.order_id == Order.id)
+        .filter(or_(MillingNote.order_id.is_(None), Order.shipment == False))
         .order_by(MillingNote.created_at.desc())
         .all()
     )
@@ -2643,17 +2702,25 @@ def milling_note_add():
     if current_user.role != "Фрезеровка":
         flash("Нет доступа", "error")
         return redirect(url_for("dashboard"))
-    oid = request.form.get("order_id", type=int)
+    raw_oid = (request.form.get("order_id") or "").strip()
+    if raw_oid:
+        if not raw_oid.isdigit():
+            flash("Некорректный выбор заказа", "error")
+            return redirect(url_for("milling_notes"))
+        oid = int(raw_oid)
+    else:
+        oid = None
     body = (request.form.get("body") or "").strip()
-    if not oid or not body:
-        flash("Выберите заказ и введите текст заметки", "error")
+    if not body:
+        flash("Введите текст заметки", "error")
         return redirect(url_for("milling_notes"))
     if len(body) > 4000:
         body = body[:4000]
-    order = Order.query.get(oid)
-    if not order or order.shipment:
-        flash("Заказ не найден или уже отгружен", "error")
-        return redirect(url_for("milling_notes"))
+    if oid is not None:
+        order = Order.query.get(oid)
+        if not order or order.shipment:
+            flash("Заказ не найден или уже отгружен", "error")
+            return redirect(url_for("milling_notes"))
     db.session.add(MillingNote(order_id=oid, user_id=current_user.id, body=body))
     db.session.commit()
     flash("Заметка сохранена", "success")

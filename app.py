@@ -590,6 +590,105 @@ def secure_filename_custom(filename):
         filename = name[:95] + ext
     return filename
 
+def _normalize_facade_for_order(facade_type, area_val, thickness_val, mixed_json_str):
+    """Проверяет и нормализует поля фасада для Order (форма или JSON редактирования)."""
+    facade_type = (facade_type or "").strip() or None
+    thickness = None
+    if thickness_val is not None and str(thickness_val).strip() != "":
+        try:
+            thickness = float(thickness_val)
+        except (TypeError, ValueError):
+            raise ValueError("Неверная толщина")
+    area = None
+    if area_val is not None and str(area_val).strip() != "":
+        try:
+            area = float(area_val)
+        except (TypeError, ValueError):
+            raise ValueError("Неверная площадь")
+        if area <= 0:
+            raise ValueError("Площадь должна быть положительной")
+    mixed_facade_data = None
+    if facade_type == "смешанный":
+        raw = (mixed_json_str or "").strip()
+        if not raw:
+            raise ValueError("Добавьте хотя бы одну позицию смешанного фасада")
+        try:
+            items = json.loads(raw)
+        except json.JSONDecodeError:
+            raise ValueError("Некорректные данные смешанного фасада")
+        if not items or not isinstance(items, list):
+            raise ValueError("Некорректные данные смешанного фасада")
+        total_area = 0.0
+        normalized = []
+        for it in items:
+            if not isinstance(it, dict):
+                raise ValueError("Некорректная строка в смешанном фасаде")
+            t = (it.get("type") or "").strip()
+            try:
+                a = float(it.get("area"))
+            except (TypeError, ValueError):
+                raise ValueError("Укажите площадь для каждой позиции смешанного фасада")
+            if a <= 0:
+                raise ValueError("Площадь должна быть положительной")
+            th = None
+            if t != "покраска":
+                tv = it.get("thickness")
+                if tv is not None and str(tv).strip() != "":
+                    try:
+                        th = float(tv)
+                    except (TypeError, ValueError):
+                        raise ValueError("Неверная толщина в смешанном фасаде")
+            total_area += a
+            normalized.append({"type": t, "area": a, "thickness": th})
+        mixed_facade_data = json.dumps(normalized, ensure_ascii=False)
+        area = total_area
+        thickness = None
+    elif facade_type == "покраска":
+        thickness = None
+    return facade_type, area, thickness, mixed_facade_data
+
+
+def _save_uploaded_files_to_disk(uploaded_files):
+    """Сохраняет список FileStorage; возвращает (original_names, safe_paths, error_messages)."""
+    display_names = []
+    stored_names = []
+    errors = []
+    for f in uploaded_files:
+        if not f or not f.filename:
+            continue
+        if not allowed_file(f.filename):
+            errors.append(
+                f"Файл {f.filename} не принят: запрещённый тип (исполняемые и служебные файлы)"
+            )
+            continue
+        safe_filename = unique_upload_filename(f.filename, app.config["UPLOAD_FOLDER"])
+        path = os.path.join(app.config["UPLOAD_FOLDER"], safe_filename)
+        try:
+            f.save(path)
+            file_size = os.path.getsize(path)
+            if file_size == 0:
+                os.remove(path)
+                errors.append(f"Файл {f.filename} пустой")
+                continue
+            if file_size > MAX_FILE_SIZE:
+                os.remove(path)
+                errors.append(
+                    f"Файл {f.filename} слишком большой (максимум {MAX_FILE_SIZE // (1024*1024)} МБ)"
+                )
+                continue
+            display_names.append(f.filename)
+            stored_names.append(safe_filename)
+        except Exception as e:
+            print(f"Ошибка при сохранении файла {safe_filename}: {e}")
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+            except OSError:
+                pass
+            errors.append(f"Не удалось сохранить файл {f.filename}")
+    return display_names, stored_names, errors
+
+
 def unique_upload_filename(filename, upload_folder):
     """Гарантирует уникальное имя файла в папке загрузок."""
     base = secure_filename_custom(filename)
@@ -1198,75 +1297,23 @@ def dashboard():
             flash("Неверное количество дней", "error")
             return redirect(url_for("dashboard"))
         
-        facade_type = request.form.get("facade_type") or None
-        area = request.form.get("area")
-        thickness = request.form.get("thickness")
-        mixed_facade_data = request.form.get("mixed_facade_data") or None
-        
         try:
-            thickness = float(thickness) if thickness else None
-        except (ValueError, TypeError):
-            thickness = None
-        
-        try:
-            area = float(area) if area else None
-            if area is not None and area <= 0:
-                raise ValueError("Площадь должна быть положительной")
-        except ValueError:
-            flash("Неверная площадь", "error")
+            facade_type, area, thickness, mixed_facade_data = _normalize_facade_for_order(
+                request.form.get("facade_type"),
+                request.form.get("area"),
+                request.form.get("thickness"),
+                request.form.get("mixed_facade_data"),
+            )
+        except ValueError as e:
+            flash(str(e), "error")
             return redirect(url_for("dashboard"))
-        
-        if facade_type == "смешанный" and mixed_facade_data:
-            try:
-                import json
-                items = json.loads(mixed_facade_data)
-                if not items or not isinstance(items, list):
-                    raise ValueError("Некорректные данные смешанного фасада")
-            except (json.JSONDecodeError, ValueError):
-                flash("Ошибка в данных смешанного фасада", "error")
-                return redirect(url_for("dashboard"))
-        
+
         due_date = datetime.now(timezone.utc).date() + timedelta(days=days)
 
         uploaded_files = request.files.getlist("files")
-        filenames = []
-        filepaths = []
-
-        for f in uploaded_files:
-            if f and f.filename:
-                # Проверяем тип файла
-                if not allowed_file(f.filename):
-                    flash(
-                        f"Файл {f.filename} не принят: запрещённый тип (исполняемые и служебные файлы)",
-                        "error",
-                    )
-                    continue
-
-                safe_filename = unique_upload_filename(f.filename, app.config["UPLOAD_FOLDER"])
-                path = os.path.join(app.config["UPLOAD_FOLDER"], safe_filename)
-                try:
-                    # Сначала сохраняем поток на диск — так надёжнее для больших PDF и нескольких файлов подряд
-                    f.save(path)
-                    file_size = os.path.getsize(path)
-                    if file_size == 0:
-                        os.remove(path)
-                        flash(f"Файл {f.filename} пустой", "error")
-                        continue
-                    if file_size > MAX_FILE_SIZE:
-                        os.remove(path)
-                        flash(f"Файл {f.filename} слишком большой (максимум {MAX_FILE_SIZE // (1024*1024)} МБ)", "error")
-                        continue
-                    filenames.append(f.filename)
-                    filepaths.append(safe_filename)
-                except Exception as e:
-                    print(f"Ошибка при сохранении файла {safe_filename}: {e}")
-                    try:
-                        if os.path.isfile(path):
-                            os.remove(path)
-                    except OSError:
-                        pass
-                    flash(f"Не удалось сохранить файл {f.filename}", "error")
-                    continue
+        filenames, filepaths, upload_errs = _save_uploaded_files_to_disk(uploaded_files)
+        for msg in upload_errs:
+            flash(msg, "error")
 
         # Покраска минует фрезеровку — сразу на шлифовку
         milling_default = (facade_type == "покраска")
@@ -1285,8 +1332,8 @@ def dashboard():
             filepaths=";".join(filepaths),
             facade_type=facade_type,
             area=area,
-            thickness=thickness if facade_type not in ("смешанный", "покраска") else None,
-            mixed_facade_data=mixed_facade_data if facade_type == "смешанный" else None
+            thickness=thickness,
+            mixed_facade_data=mixed_facade_data,
         )
 
         db.session.add(order)
@@ -2171,10 +2218,46 @@ def render_admin_dashboard():
     
     return render_template("admin_dashboard.html", orders=orders, invoice_for_order=invoice_for_order, datetime=datetime, current_user=current_user, storage_info=storage_info, debtors=debtors)
 
+def _order_attachments_payload(order):
+    fps = (order.filepaths or "").split(";")
+    fns = (order.filenames or "").split(";")
+    out = []
+    for i, fp in enumerate(fps):
+        fp = (fp or "").strip()
+        if not fp:
+            continue
+        fn = (fns[i] or "").strip() if i < len(fns) else ""
+        out.append({"stored": fp, "display": fn or fp})
+    return out
+
+
+@app.route("/order/<int:order_id>/json", methods=["GET"])
+@login_required
+def order_detail_json(order_id):
+    """Данные заказа для формы редактирования (менеджер/админ)."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return jsonify({"success": False, "message": "⛔ Нет доступа"}), 403
+    order = Order.query.get_or_404(order_id)
+    return jsonify({
+        "success": True,
+        "order": {
+            "id": order.id,
+            "order_id": order.order_id,
+            "client": order.client,
+            "days": order.days,
+            "facade_type": order.facade_type,
+            "area": order.area,
+            "thickness": order.thickness,
+            "mixed_facade_data": order.mixed_facade_data,
+            "attachments": _order_attachments_payload(order),
+        },
+    })
+
+
 @app.route("/order/<int:order_id>/edit", methods=["POST"])
 @login_required
 def edit_order(order_id):
-    """Редактирование базовых полей заказа из панели заказов (менеджер/админ)."""
+    """Редактирование заказа из панели: реквизиты, фасад, срок (менеджер/админ)."""
     if current_user.role not in ["Менеджер", "Админ"]:
         return jsonify({"success": False, "message": "⛔ Нет доступа"}), 403
 
@@ -2195,8 +2278,24 @@ def edit_order(order_id):
     if days <= 0:
         return jsonify({"success": False, "message": "Срок должен быть больше 0"}), 400
 
+    mixed_in = data.get("mixed_facade_data")
+    if mixed_in is not None and not isinstance(mixed_in, str):
+        try:
+            mixed_in = json.dumps(mixed_in, ensure_ascii=False)
+        except (TypeError, ValueError):
+            mixed_in = str(mixed_in)
+
     try:
-        # Если клиент совпал с контрагентом из справочника — привяжем counterparty_id.
+        facade_type, area, thickness, mixed_facade_data = _normalize_facade_for_order(
+            data.get("facade_type"),
+            data.get("area"),
+            data.get("thickness"),
+            mixed_in,
+        )
+    except ValueError as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+
+    try:
         cp = Counterparty.query.filter(Counterparty.name == new_client).first()
         order.order_id = new_order_id
         order.invoice_number = new_order_id
@@ -2204,11 +2303,109 @@ def edit_order(order_id):
         order.counterparty_id = cp.id if cp else None
         order.days = days
         order.due_date = datetime.now(timezone.utc).date() + timedelta(days=days)
+        order.facade_type = facade_type
+        order.area = area
+        order.thickness = thickness
+        order.mixed_facade_data = mixed_facade_data
         db.session.commit()
-        return jsonify({"success": True, "message": "✅ Заказ обновлён"})
+        return jsonify({
+            "success": True,
+            "message": "✅ Заказ обновлён",
+            "attachments": _order_attachments_payload(order),
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": f"❌ Ошибка: {e}"}), 500
+
+
+@app.route("/order/<int:order_id>/attachments", methods=["POST"])
+@login_required
+def order_add_attachments(order_id):
+    """Добавить файлы к существующему заказу."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return jsonify({"success": False, "message": "⛔ Нет доступа"}), 403
+    order = Order.query.get_or_404(order_id)
+    uploaded_files = request.files.getlist("files")
+    new_fn, new_fp, errs = _save_uploaded_files_to_disk(uploaded_files)
+    if not new_fp:
+        msg = errs[0] if errs else "Нет файлов для загрузки"
+        return jsonify({"success": False, "message": msg, "warnings": errs}), 400
+    fps = (order.filepaths or "").split(";")
+    fns = (order.filenames or "").split(";")
+    if len(fps) == 1 and not (fps[0] or "").strip():
+        fps = []
+    if len(fns) == 1 and not (fns[0] or "").strip():
+        fns = []
+    n = max(len(fps), len(fns))
+    while len(fps) < n:
+        fps.append("")
+    while len(fns) < n:
+        fns.append("")
+    fps.extend(new_fp)
+    fns.extend(new_fn)
+    order.filepaths = ";".join(fps)
+    order.filenames = ";".join(fns)
+    try:
+        db.session.commit()
+        cleanup_old_orders()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"❌ Ошибка: {e}"}), 500
+    return jsonify({
+        "success": True,
+        "message": "✅ Файлы добавлены",
+        "attachments": _order_attachments_payload(order),
+        "warnings": errs,
+    })
+
+
+@app.route("/order/<int:order_id>/attachments", methods=["DELETE"])
+@login_required
+def order_remove_attachment(order_id):
+    """Удалить одно вложение заказа (файл на диске и запись в БД)."""
+    if current_user.role not in ["Менеджер", "Админ"]:
+        return jsonify({"success": False, "message": "⛔ Нет доступа"}), 403
+    order = Order.query.get_or_404(order_id)
+    data = request.get_json(silent=True) or {}
+    stored = (data.get("stored") or "").strip()
+    if not stored or "/" in stored or "\\" in stored:
+        return jsonify({"success": False, "message": "Некорректное имя файла"}), 400
+    fps = (order.filepaths or "").split(";")
+    fns = (order.filenames or "").split(";")
+    idx = None
+    for i, p in enumerate(fps):
+        if (p or "").strip() == stored:
+            idx = i
+            break
+    if idx is None:
+        return jsonify({"success": False, "message": "Файл не найден у этого заказа"}), 404
+    folder = os.path.realpath(app.config["UPLOAD_FOLDER"])
+    full = os.path.realpath(os.path.join(folder, stored))
+    try:
+        if os.path.commonpath([folder, full]) != folder:
+            return jsonify({"success": False, "message": "Некорректный путь"}), 400
+    except ValueError:
+        return jsonify({"success": False, "message": "Некорректный путь"}), 400
+    fps.pop(idx)
+    if idx < len(fns):
+        fns.pop(idx)
+    order.filepaths = ";".join(fps)
+    order.filenames = ";".join(fns)
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"❌ Ошибка: {e}"}), 500
+    try:
+        if os.path.isfile(full):
+            os.remove(full)
+    except OSError as e:
+        print(f"⚠️ Не удалось удалить файл вложения {stored}: {e}")
+    return jsonify({
+        "success": True,
+        "message": "✅ Файл удалён",
+        "attachments": _order_attachments_payload(order),
+    })
 
 
 @app.route("/delete_order/<int:order_id>", methods=["DELETE"])

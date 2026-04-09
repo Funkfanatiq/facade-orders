@@ -79,6 +79,33 @@
       display: inline-block;
       margin: 0 auto;
     }
+    #edit-mixed-facade-table th:nth-child(2),
+    #edit-mixed-facade-table th:nth-child(3),
+    #edit-mixed-facade-table td:nth-child(2),
+    #edit-mixed-facade-table td:nth-child(3) {
+      text-align: center;
+    }
+    #edit-mixed-facade-table td:nth-child(2) input,
+    #edit-mixed-facade-table td:nth-child(3) input {
+      display: inline-block;
+      margin: 0 auto;
+    }
+    .edit-order-dialog {
+      background: #fff;
+      width: min(640px, 96vw);
+      max-height: 90vh;
+      overflow-y: auto;
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.2);
+    }
+    .edit-order-dialog label { display: block; font-size: 14px; color: #555; margin-top: 8px; }
+    .edit-order-dialog input[type="text"],
+    .edit-order-dialog input[type="number"],
+    .edit-order-dialog select { width: 100%; max-width: 100%; box-sizing: border-box; margin-top: 4px; }
+    #edit-order-files-list { list-style: none; padding: 0; margin: 8px 0 0; font-size: 14px; }
+    #edit-order-files-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid #eee; }
+    #edit-order-files-list a { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .switch {
       position: relative;
       display: inline-block;
@@ -453,18 +480,53 @@
   </div>
 
   <div id="edit-order-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center;">
-    <div style="background:#fff; width:min(480px, 92vw); border-radius:12px; padding:18px; box-shadow:0 8px 24px rgba(0,0,0,.2);">
+    <div class="edit-order-dialog" onclick="event.stopPropagation();">
       <h3 style="margin:0 0 8px 0;">Редактировать заказ</h3>
-      <input type="hidden" id="edit-order-id">
-      <label style="font-size:14px; color:#555;">№ заказа</label>
-      <input type="text" id="edit-order-code" placeholder="№ заказа" required>
-      <label style="font-size:14px; color:#555; margin-top:6px;">Клиент</label>
-      <input type="text" id="edit-order-client" list="client_datalist" placeholder="Клиент" required>
-      <label style="font-size:14px; color:#555; margin-top:6px;">Срок (дней)</label>
-      <input type="number" id="edit-order-days" min="1" step="1" placeholder="Срок" required>
-      <div style="display:flex; gap:8px; margin-top:12px;">
-        <button type="button" onclick="saveOrderEdit()">Сохранить</button>
-        <button type="button" onclick="closeEditOrderModal()" style="background:#777;">Отмена</button>
+      <p id="edit-order-loading" style="margin:12px 0; color:#666;">Загрузка…</p>
+      <div id="edit-order-form-body" style="display:none;">
+        <input type="hidden" id="edit-order-id">
+        <label>№ заказа</label>
+        <input type="text" id="edit-order-code" placeholder="№ заказа" required>
+        <label>Клиент</label>
+        <input type="text" id="edit-order-client" list="client_datalist" placeholder="Клиент" required>
+        <label>Срок (дней)</label>
+        <input type="number" id="edit-order-days" min="1" step="1" placeholder="Срок" required>
+        <label>Тип фасада</label>
+        <select id="edit_facade_type_select">
+          <option value="">— не указан —</option>
+          <option value="фрезерованный">Фрезерованный</option>
+          <option value="плоский">Плоский</option>
+          <option value="шпон">Шпон</option>
+          <option value="покраска">Покраска</option>
+          <option value="смешанный">Смешанный</option>
+        </select>
+        <div id="edit_area_single_wrap">
+          <label>Площадь (м²)</label>
+          <input type="number" id="edit_area_input" placeholder="Площадь (м²)" step="0.01" min="0.01">
+          <div id="edit_thickness_wrap">
+            <label>Толщина (мм)</label>
+            <input type="number" id="edit_thickness_input" placeholder="Толщина (мм)" step="1" min="1">
+          </div>
+        </div>
+        <div id="edit_mixed_facade_wrap" style="display:none; margin-top:12px;">
+          <p style="font-weight:500; margin-bottom:8px;">Состав смешанного фасада</p>
+          <table id="edit-mixed-facade-table" style="width:100%; border-collapse:collapse; margin-bottom:8px;">
+            <thead><tr><th>Тип</th><th>Площадь (м²)</th><th>Толщина (мм)</th><th></th></tr></thead>
+            <tbody id="edit_mixed_facade_tbody"></tbody>
+          </table>
+          <button type="button" id="edit_add_mixed_row_btn" style="padding:6px 12px; font-size:13px;">➕ Добавить строку</button>
+          <input type="hidden" id="edit_mixed_facade_data_input">
+        </div>
+        <label style="margin-top:12px;">Вложения</label>
+        <ul id="edit-order-files-list"></ul>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:8px;">
+          <input type="file" id="edit-order-files-input" multiple style="flex:1; min-width:160px;">
+          <button type="button" onclick="uploadEditOrderAttachments()">Добавить файлы</button>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:14px;">
+          <button type="button" onclick="saveOrderEdit()">Сохранить изменения</button>
+          <button type="button" onclick="closeEditOrderModal()" style="background:#777;">Отмена</button>
+        </div>
       </div>
     </div>
   </div>
@@ -912,6 +974,116 @@
         });
       }
     })();
+    (function() {
+      var facadeSelect = document.getElementById('edit_facade_type_select');
+      var areaSingleWrap = document.getElementById('edit_area_single_wrap');
+      var areaInput = document.getElementById('edit_area_input');
+      var mixedWrap = document.getElementById('edit_mixed_facade_wrap');
+      var mixedTbody = document.getElementById('edit_mixed_facade_tbody');
+      var addRowBtn = document.getElementById('edit_add_mixed_row_btn');
+      var mixedDataInput = document.getElementById('edit_mixed_facade_data_input');
+      if (!facadeSelect || !areaSingleWrap || !mixedWrap || !mixedTbody || !areaInput || !mixedDataInput) return;
+
+      function updateEditThicknessVisibility() {
+        var wrap = document.getElementById('edit_thickness_wrap');
+        if (wrap) wrap.style.display = (facadeSelect.value === 'покраска') ? 'none' : '';
+      }
+      function setEditMixedRowThicknessVisibility(tr) {
+        var typeSel = tr.querySelector('.edit-mixed-type');
+        var thCell = tr.querySelector('.edit-mixed-thickness-cell');
+        var thInp = tr.querySelector('.edit-mixed-thickness');
+        if (!typeSel || !thCell) return;
+        if (typeSel.value === 'покраска') {
+          thCell.style.display = 'none';
+          if (thInp) thInp.value = '';
+        } else {
+          thCell.style.display = '';
+        }
+      }
+      function addEditMixedRow(prefill) {
+        prefill = prefill || {};
+        var t = prefill.type || 'плоский';
+        var a = prefill.area != null ? String(prefill.area) : '';
+        var thVal = (prefill.thickness != null && t !== 'покраска') ? String(prefill.thickness) : '';
+        var thDisplay = (t === 'покраска') ? 'none' : '';
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td><select class="edit-mixed-type">' +
+          '<option value="плоский"' + (t === 'плоский' ? ' selected' : '') + '>Плоский</option>' +
+          '<option value="фрезерованный"' + (t === 'фрезерованный' ? ' selected' : '') + '>Фрезерованный</option>' +
+          '<option value="шпон"' + (t === 'шпон' ? ' selected' : '') + '>Шпон</option>' +
+          '<option value="покраска"' + (t === 'покраска' ? ' selected' : '') + '>Покраска</option></select></td>' +
+          '<td><input type="number" class="edit-mixed-area" step="0.01" min="0.01" value="' + a + '" style="width:70px;"></td>' +
+          '<td class="edit-mixed-thickness-cell" style="display:' + thDisplay + '"><input type="number" class="edit-mixed-thickness" step="1" min="1" value="' + thVal + '" style="width:60px;"></td>' +
+          '<td><button type="button" class="edit-mixed-remove">✕</button></td>';
+        tr.querySelector('.edit-mixed-remove').onclick = function() { tr.remove(); };
+        tr.querySelector('.edit-mixed-type').onchange = function() { setEditMixedRowThicknessVisibility(tr); };
+        mixedTbody.appendChild(tr);
+      }
+      function toggleEditMixed() {
+        var isMixed = facadeSelect.value === 'смешанный';
+        areaSingleWrap.style.display = isMixed ? 'none' : 'block';
+        mixedWrap.style.display = isMixed ? 'block' : 'none';
+        if (isMixed && mixedTbody.querySelectorAll('tr').length === 0) addEditMixedRow();
+        updateEditThicknessVisibility();
+      }
+      facadeSelect.addEventListener('change', toggleEditMixed);
+      if (addRowBtn) addRowBtn.addEventListener('click', function() { addEditMixedRow(); });
+
+      window.applyEditOrderFacadeData = function(o) {
+        mixedTbody.innerHTML = '';
+        mixedDataInput.value = '';
+        var ft = o.facade_type || '';
+        facadeSelect.value = ft;
+        if (ft === 'смешанный' && o.mixed_facade_data) {
+          try {
+            var items = JSON.parse(o.mixed_facade_data);
+            if (items && items.length) {
+              items.forEach(function(it) {
+                addEditMixedRow({ type: it.type, area: it.area, thickness: it.thickness });
+              });
+            } else {
+              addEditMixedRow();
+            }
+          } catch (e) {
+            addEditMixedRow();
+          }
+        } else {
+          areaInput.value = o.area != null ? String(o.area) : '';
+          var thInp = document.getElementById('edit_thickness_input');
+          if (thInp) thInp.value = (o.thickness != null && ft !== 'покраска') ? String(o.thickness) : '';
+        }
+        toggleEditMixed();
+      };
+
+      window.syncEditMixedBeforeSave = function() {
+        if (facadeSelect.value !== 'смешанный') {
+          mixedDataInput.value = '';
+          return true;
+        }
+        var items = [];
+        var totalArea = 0;
+        mixedTbody.querySelectorAll('tr').forEach(function(tr) {
+          var typeSel = tr.querySelector('.edit-mixed-type');
+          var areaInp = tr.querySelector('.edit-mixed-area');
+          var thInp = tr.querySelector('.edit-mixed-thickness');
+          if (!typeSel || !areaInp) return;
+          var a = parseFloat(areaInp.value) || 0;
+          if (a <= 0) return;
+          var th = (typeSel.value === 'покраска') ? null : (parseFloat(thInp && thInp.value ? thInp.value : 0) || null);
+          items.push({ type: typeSel.value, area: a, thickness: th });
+          totalArea += a;
+        });
+        if (items.length === 0) {
+          alert('Добавьте хотя бы одну позицию для смешанного заказа');
+          return false;
+        }
+        mixedDataInput.value = JSON.stringify(items);
+        areaInput.value = totalArea.toFixed(2);
+        return true;
+      };
+
+      updateEditThicknessVisibility();
+    })();
     {% endif %}
     var statusDebounce = {};
     document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
@@ -977,20 +1149,127 @@
       });
     });
     
+    function renderEditOrderFilesList(attachments) {
+      var ul = document.getElementById('edit-order-files-list');
+      if (!ul) return;
+      ul.innerHTML = '';
+      if (!attachments || attachments.length === 0) {
+        var empty = document.createElement('li');
+        empty.textContent = 'Нет файлов';
+        empty.style.color = '#888';
+        ul.appendChild(empty);
+        return;
+      }
+      attachments.forEach(function(a) {
+        var li = document.createElement('li');
+        var link = document.createElement('a');
+        link.href = '/uploads/' + encodeURIComponent(a.stored);
+        link.target = '_blank';
+        link.textContent = '📎 ' + (a.display || a.stored);
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.textContent = '✕';
+        rm.setAttribute('aria-label', 'Удалить файл');
+        rm.style.cssText = 'background:none;border:none;color:#c33;cursor:pointer;font-size:16px;flex-shrink:0;';
+        rm.onclick = function() { removeEditOrderAttachment(a.stored); };
+        li.appendChild(link);
+        li.appendChild(rm);
+        ul.appendChild(li);
+      });
+    }
+
+    function removeEditOrderAttachment(stored) {
+      if (!confirm('Удалить файл из заказа?')) return;
+      var orderId = parseInt(document.getElementById('edit-order-id').value, 10);
+      if (!orderId) return;
+      fetch('/order/' + orderId + '/attachments', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stored: stored })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success) {
+          renderEditOrderFilesList(data.attachments);
+        } else {
+          alert(data.message || 'Ошибка');
+        }
+      })
+      .catch(function() { alert('Ошибка сети'); });
+    }
+
+    function uploadEditOrderAttachments() {
+      var orderId = parseInt(document.getElementById('edit-order-id').value, 10);
+      var inp = document.getElementById('edit-order-files-input');
+      if (!orderId || !inp || !inp.files || inp.files.length === 0) {
+        alert('Выберите файлы');
+        return;
+      }
+      var fd = new FormData();
+      for (var i = 0; i < inp.files.length; i++) {
+        fd.append('files', inp.files[i]);
+      }
+      fetch('/order/' + orderId + '/attachments', { method: 'POST', body: fd })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success) {
+          inp.value = '';
+          renderEditOrderFilesList(data.attachments);
+          if (data.warnings && data.warnings.length) {
+            alert(data.warnings.join('\n'));
+          }
+        } else {
+          alert(data.message || 'Ошибка загрузки');
+        }
+      })
+      .catch(function() { alert('Ошибка сети'); });
+    }
+
     function openEditOrderModal(btn) {
       var row = btn && btn.closest ? btn.closest('tr[data-order-id]') : null;
       if (!row) return;
-      document.getElementById('edit-order-id').value = row.getAttribute('data-order-id') || '';
-      document.getElementById('edit-order-code').value = row.getAttribute('data-order-code') || '';
-      document.getElementById('edit-order-client').value = row.getAttribute('data-client-name') || '';
-      document.getElementById('edit-order-days').value = row.getAttribute('data-days') || '';
+      var oid = parseInt(row.getAttribute('data-order-id'), 10);
+      if (!oid) return;
       var modal = document.getElementById('edit-order-modal');
-      if (modal) modal.style.display = 'flex';
+      var loading = document.getElementById('edit-order-loading');
+      var formBody = document.getElementById('edit-order-form-body');
+      if (!modal) return;
+      modal.style.display = 'flex';
+      if (loading) loading.style.display = 'block';
+      if (formBody) formBody.style.display = 'none';
+      fetch('/order/' + oid + '/json')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data.success || !data.order) {
+            alert(data.message || 'Не удалось загрузить заказ');
+            modal.style.display = 'none';
+            return;
+          }
+          var o = data.order;
+          document.getElementById('edit-order-id').value = String(o.id);
+          document.getElementById('edit-order-code').value = o.order_id || '';
+          document.getElementById('edit-order-client').value = o.client || '';
+          document.getElementById('edit-order-days').value = o.days != null ? String(o.days) : '';
+          if (typeof window.applyEditOrderFacadeData === 'function') {
+            window.applyEditOrderFacadeData(o);
+          }
+          renderEditOrderFilesList(o.attachments || []);
+          var fi = document.getElementById('edit-order-files-input');
+          if (fi) fi.value = '';
+          if (loading) loading.style.display = 'none';
+          if (formBody) formBody.style.display = 'block';
+        })
+        .catch(function() {
+          alert('Ошибка загрузки заказа');
+          modal.style.display = 'none';
+        });
     }
 
     function closeEditOrderModal() {
       var modal = document.getElementById('edit-order-modal');
       if (modal) modal.style.display = 'none';
+      var fi = document.getElementById('edit-order-files-input');
+      if (fi) fi.value = '';
     }
 
     function saveOrderEdit() {
@@ -1002,10 +1281,27 @@
         alert('Проверьте данные: № заказа, клиент и срок должны быть заполнены.');
         return;
       }
+      if (typeof window.syncEditMixedBeforeSave === 'function' && !window.syncEditMixedBeforeSave()) {
+        return;
+      }
+      var facadeEl = document.getElementById('edit_facade_type_select');
+      var areaEl = document.getElementById('edit_area_input');
+      var thEl = document.getElementById('edit_thickness_input');
+      var mixedEl = document.getElementById('edit_mixed_facade_data_input');
+      var facadeType = facadeEl && facadeEl.value ? facadeEl.value : null;
+      var payload = {
+        order_id: orderCode,
+        client: client,
+        days: days,
+        facade_type: facadeType,
+        area: areaEl && areaEl.value !== '' ? areaEl.value : null,
+        thickness: thEl && thEl.value !== '' ? thEl.value : null,
+        mixed_facade_data: (mixedEl && mixedEl.value && mixedEl.value.trim()) ? mixedEl.value.trim() : null
+      };
       fetch('/order/' + orderId + '/edit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_id: orderCode, client: client, days: days })
+        body: JSON.stringify(payload)
       })
       .then(function(r) { return r.json(); })
       .then(function(data) {

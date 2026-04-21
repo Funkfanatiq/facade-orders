@@ -1481,13 +1481,7 @@ def dashboard():
                         unpaid_nums.append(inv.invoice_number)
                 debtors.append({"counterparty": cp, "unpaid_invoices": unpaid_nums, "balance": balance})
 
-    mail_unread = 0
-    if current_user.role == "Менеджер":
-        try:
-            _, mail_unread = _mail_counts()
-        except Exception:
-            pass
-    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers, counterparties=counterparties, counterparties_json=counterparties_json, price_list=price_list, price_categories=PRICE_CATEGORIES, cp_id_for_client=cp_id_for_client, debtors=debtors, mail_unread_count=mail_unread)
+    return render_template("dashboard.html", orders=orders, datetime=datetime, storage_info=storage_info, customers=customers, counterparties=counterparties, counterparties_json=counterparties_json, price_list=price_list, price_categories=PRICE_CATEGORIES, cp_id_for_client=cp_id_for_client, debtors=debtors)
 
 
 @app.route("/counterparty/add", methods=["POST"])

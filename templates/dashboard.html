@@ -326,13 +326,6 @@
     .btn-delete-pricelist:hover { background: #ffebee; border-color: #c62828; }
     .pricelist-drag-handle { cursor: grab; color: #999; padding: 0 6px; user-select: none; }
     .pricelist-drag-handle:active { cursor: grabbing; }
-    .mail-tab-badge {
-      display: inline-block; min-width: 20px; height: 20px; padding: 0 6px;
-      background: #e53935; color: #fff; font-size: 12px; font-weight: 600;
-      border-radius: 10px; line-height: 20px; text-align: center;
-      margin-left: 6px; vertical-align: middle;
-    }
-
     details.files-details { text-align: left; display: inline-block; max-width: 100%; }
     details.files-details > summary {
       cursor: pointer;
@@ -391,13 +384,13 @@
   {% endif %}
 
   {% if current_user.role == "Менеджер" %}
-  {% set active_tab = request.args.get('tab', 'orders') %}
+  {% set _tab = request.args.get('tab', 'orders') %}
+  {% set active_tab = 'orders' if _tab == 'mail' else _tab %}
   <div class="tabs">
     <button type="button" class="tab {{ 'active' if active_tab == 'orders' else '' }}" data-tab="orders" onclick="showManagerTab('orders', event)">📋 Панель заказов</button>
     <button type="button" class="tab {{ 'active' if active_tab == 'counterparties' else '' }}" data-tab="counterparties" onclick="showManagerTab('counterparties', event)">👥 Контрагенты</button>
     <button type="button" class="tab {{ 'active' if active_tab == 'debts' else '' }}" data-tab="debts" onclick="showManagerTab('debts', event)">💸 Долги</button>
     <button type="button" class="tab {{ 'active' if active_tab == 'pricelist' else '' }}" data-tab="pricelist" onclick="showManagerTab('pricelist', event)">💰 Прайс лист</button>
-    <button type="button" class="tab {{ 'active' if active_tab == 'mail' else '' }}" data-tab="mail" onclick="showManagerTab('mail', event)">📮 Почта<span id="mail-unread-badge" class="mail-tab-badge" {% if not mail_unread_count %}style="display:none;"{% endif %}>{{ mail_unread_count or 0 }}</span></button>
   </div>
   <div id="manager-orders-tab" class="tab-content {{ 'active' if active_tab == 'orders' else '' }}">
   {% endif %}
@@ -653,9 +646,6 @@
       {% endif %}
     </div>
   </div>
-  <div id="manager-mail-tab" class="tab-content {{ 'active' if active_tab == 'mail' else '' }}" style="padding:0;">
-    <iframe src="{{ url_for('mail_agent') }}" style="width:100%; height:calc(100vh - 220px); min-height:500px; border:none; border-radius:8px;"></iframe>
-  </div>
   <div id="manager-pricelist-tab" class="tab-content {{ 'active' if active_tab == 'pricelist' else '' }}">
     <div class="form-box">
       <h3>💰 Прайс лист</h3>
@@ -741,6 +731,7 @@
   <script>
     {% if current_user.role == "Менеджер" %}
     function showManagerTab(tabName, ev) {
+      if (tabName === 'mail') tabName = 'orders';
       document.querySelectorAll('.tab-content').forEach(function(el) {
         el.classList.remove('active');
       });
@@ -1436,38 +1427,6 @@
       }
     }
 
-    {% if current_user.role == "Менеджер" %}
-    (function mailNewPoll() {
-      var lastInbox = 0;
-      try { lastInbox = parseInt(localStorage.getItem('mail_inbox_count') || '0', 10); } catch(e) {}
-      function updateBadge(count) {
-        var badge = document.getElementById('mail-unread-badge');
-        if (!badge) return;
-        badge.textContent = count;
-        badge.style.display = count > 0 ? 'inline-block' : 'none';
-      }
-      function run() {
-        fetch('/mail/fetch?sync=1').then(function() {
-          setTimeout(function() {
-            fetch('/mail/fetch').then(function(r) { return r.json(); }).then(function(d) {
-              if (!d.success) return;
-              var c = d.inbox_count || 0;
-              var unread = d.count || 0;
-              try { localStorage.setItem('mail_inbox_count', String(c)); } catch(e) {}
-              updateBadge(unread);
-              if (c > lastInbox && lastInbox > 0 && 'Notification' in window && Notification.permission === 'granted') {
-                var n = c - lastInbox;
-                new Notification('📧 ' + (n === 1 ? 'Получено новое письмо' : 'Получено ' + n + ' новых писем'), { tag: 'mail-new' });
-              }
-              lastInbox = c;
-            }).catch(function(){});
-          }, 8000);
-        }).catch(function(){});
-      }
-      run();
-      setInterval(run, 20000);
-    })();
-    {% endif %}
   </script>
 </body>
 </html>

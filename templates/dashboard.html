@@ -753,6 +753,10 @@
       var wrap = document.getElementById('pricelist-form-wrap');
       if (wrap) wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
     }
+    function showPricelistFormWrap() {
+      var wrap = document.getElementById('pricelist-form-wrap');
+      if (wrap) wrap.style.display = 'block';
+    }
     function openPricelistFormForAdd() {
       var form = document.getElementById('pricelist-form');
       var titleEl = document.getElementById('pricelist-form-title');
@@ -768,7 +772,7 @@
         if (unitInp) unitInp.value = '';
       }
       if (titleEl) titleEl.textContent = 'Позиция прайс-листа';
-      togglePricelistForm();
+      showPricelistFormWrap();
     }
     function editPricelistRow(btn) {
       var tr = btn.closest('tr');
@@ -781,7 +785,7 @@
       var form = document.getElementById('pricelist-form');
       var titleEl = document.getElementById('pricelist-form-title');
       if (form && id) {
-        form.action = "{{ url_for('pricelist_edit', item_id=0) }}".replace('0', id);
+        form.action = '/pricelist/' + encodeURIComponent(id) + '/edit';
         var catInp = document.getElementById('pricelist_category');
         var nameInp = document.getElementById('pricelist_name');
         var priceInp = document.getElementById('pricelist_price');
@@ -792,7 +796,7 @@
         if (unitInp) unitInp.value = unit;
       }
       if (titleEl) titleEl.textContent = 'Редактировать позицию';
-      togglePricelistForm();
+      showPricelistFormWrap();
     }
     var pricelistDraggedRow = null;
     function pricelistDragStart(ev) {

@@ -320,9 +320,9 @@
       return isNaN(v) ? 999 : v;
     }
     function packagingDaysStopped(row) {
-      const ship = row.querySelector('input[name="shipment"]');
       const pack = row.querySelector('input[name="packaging"]');
-      return (ship && ship.checked) || (pack && pack.checked);
+      const ship = row.querySelector('input[name="shipment"]');
+      return (pack && pack.checked) || (ship && ship.checked);
     }
     function renderPackagingDaysCell(row) {
       const td = row.querySelector('td:nth-child(3)');

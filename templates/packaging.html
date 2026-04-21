@@ -114,7 +114,8 @@
           const daysTd = row.querySelector('[data-packaging-days-cell]');
           if (daysTd) {
             const packOn = row.querySelector('input[name="packaging"]').checked;
-            if (packOn) {
+            const shipOn = row.querySelector('input[name="shipment"]').checked;
+            if (packOn || shipOn) {
               daysTd.textContent = '—';
             } else {
               const dl = parseInt(row.getAttribute('data-days-left'), 10) || 0;

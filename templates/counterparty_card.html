@@ -337,8 +337,6 @@
         <option value="{{ inv.id }}">Счёт № {{ inv.invoice_number }} — {{ "%.2f"|format(inv.total)|replace(".", ",") }} ₽</option>
         {% endfor %}
       </select>
-      <label>Примечание</label>
-      <input type="text" id="payment-note" placeholder="Примечание">
       <div style="display:flex; gap:10px; margin-top:16px;">
         <button type="button" class="btn-create-invoice" onclick="createPayment()">Сохранить</button>
         <button type="button" class="btn-cancel-invoice" onclick="closePaymentModal()">Отмена</button>
@@ -488,14 +486,13 @@
       {% if payments %}
       <h3 style="margin-top:20px;">История оплат</h3>
       <table class="invoices-table">
-        <thead><tr><th>Дата</th><th>Сумма</th><th>К счёту</th><th>Примечание</th><th></th></tr></thead>
+        <thead><tr><th>Дата</th><th>Сумма</th><th>К счёту</th><th></th></tr></thead>
         <tbody>
         {% for p in payments %}
         <tr>
           <td>{{ p.payment_date.strftime('%d.%m.%Y') }}</td>
           <td class="amount">{{ "%.2f"|format(p.amount)|replace(".", ",") }} ₽</td>
           <td>{% if p.invoice %}№ {{ p.invoice.invoice_number }}{% else %}—{% endif %}</td>
-          <td>{{ p.note or '—' }}</td>
           <td>{% if current_user.role in ["Менеджер", "Админ"] %}<button type="button" class="btn-remove-item" onclick="deletePayment({{ p.id }})" title="Удалить">🗑️</button>{% endif %}</td>
         </tr>
         {% endfor %}
@@ -828,8 +825,7 @@
       }
       var paymentDate = document.getElementById('payment-date').value;
       var invoiceId = document.getElementById('payment-invoice').value;
-      var note = document.getElementById('payment-note').value;
-      var body = { amount: amount, payment_date: paymentDate, note: note };
+      var body = { amount: amount, payment_date: paymentDate };
       if (invoiceId) body.invoice_id = parseInt(invoiceId, 10);
       fetch('/counterparty/' + counterpartyId + '/payment/create', {
         method: 'POST',

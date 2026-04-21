@@ -196,18 +196,19 @@
             {% set row_class = "" %}
             {% if o.polishing_1 %}
               {% set row_class = "completed" %}
+            {% elif o.packaging %}
+              {% set row_class = "" %}
             {% elif is_urgent %}
               {% set row_class = "urgent-order" %}
             {% elif days_left <= 6 %}
               {% set row_class = "warning-order" %}
             {% endif %}
             
-            <tr data-order-id="{{ o.id }}" class="{{ row_class }}">
+            <tr data-order-id="{{ o.id }}" data-days-left="{{ days_left }}" class="{{ row_class }}">
               <td>{{ o.order_id }}</td>
               <td>{{ o.client }}</td>
               <td>
-                <div style="font-size:13px;color:#333;margin-bottom:4px;">{{ o.due_date.strftime('%d.%m.%Y') }}</div>
-                <span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">{{ days_left }}</span><span style="font-size:12px;"> дн.</span>
+                {% if o.packaging %}—{% else %}<span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">{{ days_left }}</span><span style="font-size:12px;"> дн.</span>{% endif %}
               </td>
               <td>
                 {% if o.polishing_1 %}
@@ -253,18 +254,19 @@
           {% set row_class = "" %}
           {% if o.shipment %}
             {% set row_class = "completed" %}
+          {% elif o.packaging %}
+            {% set row_class = "" %}
           {% elif is_urgent %}
             {% set row_class = "urgent-order" %}
           {% elif days_left <= 6 %}
             {% set row_class = "warning-order" %}
           {% endif %}
           
-          <tr data-order-id="{{ o.id }}" data-paid="{% if o.paid %}true{% else %}false{% endif %}" class="{{ row_class }}">
+          <tr data-order-id="{{ o.id }}" data-paid="{% if o.paid %}true{% else %}false{% endif %}" data-days-left="{{ days_left }}" class="{{ row_class }}">
             <td>{{ o.order_id }}</td>
             <td>{{ o.client }}</td>
             <td>
-              <div style="font-size:13px;color:#333;margin-bottom:4px;">{{ o.due_date.strftime('%d.%m.%Y') }}</div>
-              <span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">{{ days_left }}</span><span style="font-size:12px;"> дн.</span>
+              {% if o.packaging %}—{% else %}<span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">{{ days_left }}</span><span style="font-size:12px;"> дн.</span>{% endif %}
             </td>
             <td>
               {% if o.shipment %}
@@ -313,6 +315,29 @@
       event.target.classList.add('active');
     }
 
+    function packagingDaysLeftFromRow(row) {
+      const v = parseInt(row.getAttribute('data-days-left'), 10);
+      return isNaN(v) ? 999 : v;
+    }
+    function packagingDaysStopped(row) {
+      const ship = row.querySelector('input[name="shipment"]');
+      const pack = row.querySelector('input[name="packaging"]');
+      return (ship && ship.checked) || (pack && pack.checked);
+    }
+    function renderPackagingDaysCell(row) {
+      const td = row.querySelector('td:nth-child(3)');
+      if (!td) return;
+      if (packagingDaysStopped(row)) {
+        td.textContent = '—';
+        return;
+      }
+      const dl = packagingDaysLeftFromRow(row);
+      let daysClass = 'days-normal';
+      if (dl <= 3) daysClass = 'days-urgent';
+      else if (dl <= 6) daysClass = 'days-warning';
+      td.innerHTML = '<span class="days-left ' + daysClass + '">' + dl + '</span><span style="font-size:12px;"> дн.</span>';
+    }
+
     // Функция для сортировки таблицы по приоритету (шлифовка)
     function sortPolishingTable() {
       const tbody = document.querySelector('#polishing-table tbody');
@@ -328,14 +353,8 @@
         if (aCompleted && !bCompleted) return 1;
         if (!aCompleted && bCompleted) return -1;
         
-        // Если оба завершены или оба незавершены, сортируем по срочности
-        const aDaysEl = a.querySelector('.days-left');
-        const bDaysEl = b.querySelector('.days-left');
-        if (!aDaysEl || !bDaysEl) return 0;
-        
-        const aDays = parseInt(aDaysEl.textContent);
-        const bDays = parseInt(bDaysEl.textContent);
-        
+        const aDays = packagingDaysLeftFromRow(a);
+        const bDays = packagingDaysLeftFromRow(b);
         return aDays - bDays;
       });
       
@@ -358,14 +377,8 @@
         if (aCompleted && !bCompleted) return 1;
         if (!aCompleted && bCompleted) return -1;
         
-        // Если оба завершены или оба незавершены, сортируем по срочности
-        const aDaysEl = a.querySelector('.days-left');
-        const bDaysEl = b.querySelector('.days-left');
-        if (!aDaysEl || !bDaysEl) return 0;
-        
-        const aDays = parseInt(aDaysEl.textContent);
-        const bDays = parseInt(bDaysEl.textContent);
-        
+        const aDays = packagingDaysLeftFromRow(a);
+        const bDays = packagingDaysLeftFromRow(b);
         return aDays - bDays;
       });
       
@@ -383,7 +396,8 @@
           statusCell.innerHTML = '<span class="status-indicator status-completed"></span>Завершен';
         } else {
           // Пересчитываем класс строки
-          const daysLeft = parseInt(row.querySelector('.days-left').textContent);
+          const daysEl = row.querySelector('.days-left');
+          const daysLeft = daysEl ? parseInt(daysEl.textContent, 10) : packagingDaysLeftFromRow(row);
           const isUrgent = daysLeft <= 3;
           const isWarning = daysLeft <= 6;
           
@@ -428,20 +442,15 @@
       if (isUrgent) statusHtml = '<span class="status-indicator status-urgent"></span>Срочный';
       else if (isWarning) statusHtml = '<span class="status-indicator status-warning"></span>Скоро срок';
 
-      let dueLabel = '';
-      if (order.due_date) {
-        const p = order.due_date.split('-');
-        if (p.length === 3) dueLabel = `${p[2]}.${p[1]}.${p[0]}`;
-      }
-
       const tr = document.createElement('tr');
       tr.dataset.orderId = order.id;
       tr.dataset.paid = order.paid ? 'true' : 'false';
+      tr.dataset.daysLeft = String(daysLeft);
       tr.className = rowClass;
       tr.innerHTML = `
         <td>${escapeHtml(order.order_id)}</td>
         <td>${escapeHtml(order.client)}</td>
-        <td><div style="font-size:13px;color:#333;margin-bottom:4px;">${dueLabel || '—'}</div><span class="days-left ${daysClass}">${daysLeft}</span><span style="font-size:12px;"> дн.</span></td>
+        <td><span class="days-left ${daysClass}">${daysLeft}</span><span style="font-size:12px;"> дн.</span></td>
         <td>${statusHtml}</td>
         <td><label class="switch"><input type="checkbox" name="packaging"><span class="slider"></span></label></td>
         <td><label class="switch"><input type="checkbox" name="shipment"><span class="slider"></span></label></td>
@@ -462,34 +471,35 @@
       if (!row) return;
       
       const statusCell = row.querySelector('td:nth-child(4)');
-      const daysLeft = parseInt(row.querySelector('.days-left').textContent);
-      const isUrgent = daysLeft <= 3;
-      const isWarning = daysLeft <= 6;
+      const dl = packagingDaysLeftFromRow(row);
+      const isUrgent = dl <= 3;
+      const isWarning = dl <= 6;
       
       if (fieldName === 'shipment' && status) {
         row.className = 'completed';
         statusCell.innerHTML = '<span class="status-indicator status-completed"></span>Отгружен';
-      } else if (fieldName === 'packaging' && status) {
-        row.className = '';
-        if (isUrgent) {
-          row.className = 'urgent-order';
-        } else if (isWarning) {
-          row.className = 'warning-order';
-        }
-        statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Упакован';
-      } else {
-        // Сбрасываем статус
-        row.className = '';
-        if (isUrgent) {
-          row.className = 'urgent-order';
-          statusCell.innerHTML = '<span class="status-indicator status-urgent"></span>Срочный';
-        } else if (isWarning) {
-          row.className = 'warning-order';
-          statusCell.innerHTML = '<span class="status-indicator status-warning"></span>Скоро срок';
-        } else {
-          statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Ожидает';
-        }
+        renderPackagingDaysCell(row);
+        return;
       }
+      const packCb = row.querySelector('input[name="packaging"]');
+      const packaged = packCb && packCb.checked;
+      if (packaged) {
+        row.className = '';
+        statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Упакован';
+        renderPackagingDaysCell(row);
+        return;
+      }
+      row.className = '';
+      if (isUrgent) {
+        row.className = 'urgent-order';
+        statusCell.innerHTML = '<span class="status-indicator status-urgent"></span>Срочный';
+      } else if (isWarning) {
+        row.className = 'warning-order';
+        statusCell.innerHTML = '<span class="status-indicator status-warning"></span>Скоро срок';
+      } else {
+        statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Ожидает';
+      }
+      renderPackagingDaysCell(row);
     }
 
     // Обработчик изменения слайдеров шлифовки

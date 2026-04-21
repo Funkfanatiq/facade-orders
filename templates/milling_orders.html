@@ -148,6 +148,8 @@
           {% set row_class = "" %}
           {% if o.milling %}
             {% set row_class = "completed" %}
+          {% elif o.packaging %}
+            {% set row_class = "" %}
           {% elif in_pool %}
             {% set row_class = "row-green" %}
           {% elif is_urgent %}
@@ -176,7 +178,7 @@
               {% endif %}
             </td>
             <td>{{ "%.2f"|format(o.area) }}</td>
-            <td>{{ o.due_date.strftime('%d.%m.%Y') }}<br><small style="color:#555;">{% set dl = (o.due_date - app_today).days %}{% if dl > 0 %}ост. {{ dl }} дн.{% elif dl == 0 %}сегодня{% else %}просрочено {{ -dl }} дн.{% endif %}</small></td>
+            <td>{% if o.packaging %}—{% else %}{{ days_left }} дн.{% endif %}</td>
             <td>
               {% if o.filepaths %}
                 {% set fps = (o.filepaths or '').split(';') %}
@@ -197,6 +199,8 @@
             <td>
               {% if o.milling %}
                 <span class="status-indicator status-normal"></span>Завершен
+              {% elif o.packaging %}
+                <span class="status-indicator status-normal"></span>Упакован
               {% elif in_pool %}
                 <span class="status-indicator status-pool"></span>В пуле
               {% elif is_urgent %}

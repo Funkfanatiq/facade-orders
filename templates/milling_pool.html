@@ -118,9 +118,7 @@
       <p style="margin: 5px 0;"><strong>Срок сдачи:</strong>
         <span style="color: {% if pool_info.is_urgent %}#cc0000{% else %}inherit{% endif %};">
           {% if earliest_due %}
-            {{ earliest_due.strftime('%d.%m.%Y') }}
-            {% set pdl = (earliest_due - app_today).days %}
-            <small style="display:block;margin-top:4px;">{% if pdl > 0 %}ост. {{ pdl }} дн.{% elif pdl == 0 %}сегодня{% else %}просрочено {{ -pdl }} дн.{% endif %}</small>
+            {% set pdl = (earliest_due - app_today).days %}{{ pdl }} дн.
           {% else %}-{% endif %}
         </span>
       </p>
@@ -143,13 +141,13 @@
         {% for o in orders %}
           {% set days_left = order_urgency[o.id].days_left %}
           {% set is_urgent = order_urgency[o.id].is_urgent %}
-          <tr class="{{ 'row-danger' if is_urgent else ('row-warning' if days_left <= 6 else '') }}">
+          <tr class="{% if o.packaging %}{% elif is_urgent %}row-danger{% elif days_left <= 6 %}row-warning{% endif %}">
             <td>{{ o.order_id }}</td>
             <td>{{ o.client }}</td>
             <td>{{ o.facade_type }}</td>
             <td>{{ o.thickness|int if o.thickness else '-' }}{% if o.thickness %} мм{% endif %}</td>
             <td>{{ "%.2f"|format(o.area) }}</td>
-            <td>{{ o.due_date.strftime('%d.%m.%Y') }}<br><small style="color:#555;">{% if days_left > 0 %}ост. {{ days_left }} дн.{% elif days_left == 0 %}сегодня{% else %}просрочено {{ -days_left }} дн.{% endif %}</small></td>
+            <td>{% if o.packaging %}—{% else %}{{ days_left }} дн.{% endif %}</td>
             <td>
               {% if o.filepaths %}
                 {% set fps = (o.filepaths or '').split(';') %}

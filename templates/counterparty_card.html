@@ -410,7 +410,7 @@
             <tr class="{{ row_class }}">
               <td>{{ o.order_id }}</td>
               <td>{{ o.client }}</td>
-              <td>{{ o.due_date.strftime('%d.%m.%Y') }}<br><small style="color:#666;">{% if days_left > 0 %}ост. {{ days_left }} дн.{% elif days_left == 0 %}сегодня{% else %}просрочено {{ -days_left }} дн.{% endif %}</small></td>
+              <td>{% if o.packaging %}—{% else %}{{ days_left }} дн.{% endif %}</td>
               <td>{{ "✔" if o.milling else "—" }}</td>
               <td>{{ "✔" if o.polishing_1 else "—" }}</td>
               <td>{{ "✔" if o.packaging else "—" }}</td>

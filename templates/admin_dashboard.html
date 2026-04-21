@@ -294,8 +294,8 @@
         }
         .row-muted a.file-link { color: #6c757d !important; }
 
-        .due-days-hint { font-size: 12px; color: #6e6e73; display: block; margin-top: 2px; }
-        .due-days-hint.due-overdue { color: #b00020; font-weight: 600; }
+        .due-cell { font-weight: 500; }
+        .due-cell.due-overdue { color: #b00020; }
         
         .highlight-row {
             outline: 2px solid #007aff;
@@ -511,7 +511,7 @@
                                   {% endif %}
                                 </td>
                                 <td>{{ "%.2f"|format(o.area) if o.area else '-' }} м²</td>
-                                <td>{{ o.due_date.strftime('%d.%m.%Y') }}<span class="due-days-hint {% if days_left < 0 %}due-overdue{% endif %}">{% if days_left > 0 %}ост. {{ days_left }} дн.{% elif days_left == 0 %}сегодня{% else %}просрочено на {{ -days_left }} дн.{% endif %}</span></td>
+                                <td class="due-cell{% if not o.packaging and days_left < 0 %} due-overdue{% endif %}">{% if o.packaging %}—{% else %}{{ days_left }} дн.{% endif %}</td>
                                 <td>
                                     <label class="switch">
                                         <input type="checkbox" name="milling" {% if o.milling %}checked{% endif %}>
@@ -663,20 +663,36 @@
             var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             return Math.round((d - today) / 86400000);
         }
+        function adminFormatDueCell(row) {
+            var dueCell = row.querySelector('.due-cell');
+            if (!dueCell) return;
+            var packagingOn = row.querySelector('input[name="packaging"]');
+            if (packagingOn && packagingOn.checked) {
+                dueCell.textContent = '—';
+                dueCell.className = 'due-cell';
+                return;
+            }
+            var dl = adminDaysLeft(row);
+            dueCell.className = 'due-cell' + (dl < 0 ? ' due-overdue' : '');
+            dueCell.textContent = dl + ' дн.';
+        }
         function adminApplyRowStyles(row) {
             var packagingOn = row.querySelector('input[name="packaging"]');
             row.classList.remove('row-green', 'row-warning', 'row-danger', 'row-muted');
             if (row.dataset.doneSp === '1') {
                 row.classList.add('row-muted');
+                adminFormatDueCell(row);
                 return;
             }
             if (packagingOn && packagingOn.checked) {
                 row.classList.add('row-green');
+                adminFormatDueCell(row);
                 return;
             }
             var dl = adminDaysLeft(row);
             if (dl <= 3) row.classList.add('row-danger');
             else if (dl <= 6) row.classList.add('row-warning');
+            adminFormatDueCell(row);
         }
         function adminReorderDoneLast(tbl) {
             if (!tbl) return;

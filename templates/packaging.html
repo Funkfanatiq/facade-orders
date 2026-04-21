@@ -51,12 +51,11 @@
     <tbody>
       {% for o in orders %}
         {% set days_left = order_urgency[o.id].days_left %}
-        <tr data-order-id="{{ o.id }}">
+        <tr data-order-id="{{ o.id }}" data-days-left="{{ days_left }}">
           <td>{{ o.order_id }}</td>
           <td>{{ o.client }}</td>
-          <td>
-            <div style="font-size:13px;margin-bottom:4px;">{{ o.due_date.strftime('%d.%m.%Y') }}</div>
-            <span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">{{ days_left }}</span><span style="font-size:12px;"> дн.</span>
+          <td data-packaging-days-cell>
+            {% if o.packaging %}—{% else %}<span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">{{ days_left }}</span><span style="font-size:12px;"> дн.</span>{% endif %}
           </td>
           <td>
             <label class="switch">
@@ -112,6 +111,19 @@
         try {
           const res = await updateRow(orderId, { packaging, polishing_1: 1, shipment, paid });
           if (!res.ok) throw new Error('Ошибка сохранения');
+          const daysTd = row.querySelector('[data-packaging-days-cell]');
+          if (daysTd) {
+            const packOn = row.querySelector('input[name="packaging"]').checked;
+            if (packOn) {
+              daysTd.textContent = '—';
+            } else {
+              const dl = parseInt(row.getAttribute('data-days-left'), 10) || 0;
+              let cls = 'days-normal';
+              if (dl <= 3) cls = 'days-urgent';
+              else if (dl <= 6) cls = 'days-warning';
+              daysTd.innerHTML = '<span class="days-left ' + cls + '">' + dl + '</span><span style="font-size:12px;"> дн.</span>';
+            }
+          }
         } catch (err) {
           alert('❌ ' + err.message);
           // Откатываем переключатель

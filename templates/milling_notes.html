@@ -71,7 +71,8 @@
         <option value="">— Без привязки к заказу (общая заметка) —</option>
         {% if orders %}
         {% for o in orders %}
-        <option value="{{ o.id }}">№ {{ o.order_id }} · {{ o.client }} · срок {{ o.due_date.strftime('%d.%m.%Y') }}</option>
+        {% set _dl = (o.due_date - app_today).days %}
+        <option value="{{ o.id }}">№ {{ o.order_id }} · {{ o.client }} · {% if o.packaging %}—{% else %}{{ _dl }} дн.{% endif %}</option>
         {% endfor %}
         {% endif %}
       </select>

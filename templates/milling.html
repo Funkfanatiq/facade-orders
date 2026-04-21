@@ -198,9 +198,7 @@
       {% endif %}
       <p style="margin: 5px 0;"><strong>Срок сдачи:</strong>
         <span style="color: {% if pool_info.is_urgent %}#cc0000{% else %}inherit{% endif %};">
-          {{ earliest_order.due_date.strftime('%d.%m.%Y') }}
-          {% set edl = (earliest_order.due_date - app_today).days %}
-          <small style="display:block;margin-top:4px;">{% if edl > 0 %}ост. {{ edl }} дн.{% elif edl == 0 %}сегодня{% else %}просрочено {{ -edl }} дн.{% endif %}</small>
+          {% set edl = (earliest_order.due_date - app_today).days %}{{ edl }} дн.
         </span>
       </p>
     </div>
@@ -226,9 +224,7 @@
             <td>{{ order.facade_type }}</td>
             <td>{{ "%.2f"|format(order.area) }} м²</td>
             <td style="color: {% if urgency_info.is_urgent %}#cc0000{% else %}inherit{% endif %};">
-              {{ order.due_date.strftime('%d.%m.%Y') }}
-              {% set udl = (order.due_date - app_today).days %}
-              <br><small>{% if udl > 0 %}ост. {{ udl }} дн.{% elif udl == 0 %}сегодня{% else %}просрочено {{ -udl }} дн.{% endif %}{% if urgency_info.is_urgent %} · срочно{% endif %}</small>
+              {% set udl = (order.due_date - app_today).days %}{{ udl }} дн.{% if urgency_info.is_urgent %} <small>· срочно</small>{% endif %}
             </td>
             <td>
               {% if order.filepaths %}

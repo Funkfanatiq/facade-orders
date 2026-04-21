@@ -1558,6 +1558,53 @@ def counterparty_edit(counterparty_id):
     return redirect(url_for("counterparty_card", counterparty_id=counterparty_id))
 
 
+def _invoice_tokens_for_orders(inv):
+    """Номера из поля счёта «заказы» и номер счёта (часто совпадает с № заказа в производстве)."""
+    tokens = set()
+    if inv.order_ids:
+        for part in str(inv.order_ids).replace(";", ",").replace("\n", ",").split(","):
+            t = part.strip()
+            if t:
+                tokens.add(t)
+    if inv.invoice_number:
+        t = str(inv.invoice_number).strip()
+        if t:
+            tokens.add(t)
+    return tokens
+
+
+def _orders_linked_to_invoice(inv):
+    """Заказы контрагента, отнесённые к этому счёту по номеру заказа или invoice_number."""
+    tokens = _invoice_tokens_for_orders(inv)
+    if not tokens:
+        return []
+    token_list = list(tokens)
+    cp_id = inv.counterparty_id
+    cp = Counterparty.query.get(cp_id) if cp_id else None
+    cp_filters = [Order.counterparty_id == cp_id]
+    if cp and (cp.name or "").strip():
+        cp_filters.append(Order.client == cp.name.strip())
+    if cp and (getattr(cp, "full_name", None) or "").strip():
+        fn = cp.full_name.strip()
+        if fn != (cp.name or "").strip():
+            cp_filters.append(Order.client == fn)
+    return (
+        Order.query.filter(
+            or_(Order.order_id.in_(token_list), Order.invoice_number.in_(token_list)),
+            or_(*cp_filters),
+        ).all()
+    )
+
+
+def _sync_orders_paid_for_invoice(inv):
+    """Если сумма оплат по счёту ≥ суммы счёта — отмечаем оплату у связанных заказов, иначе снимаем."""
+    paid_sum = money_sum_rub(p.amount for p in Payment.query.filter(Payment.invoice_id == inv.id).all())
+    total = money_rub(inv.total)
+    fully = money_sub_rub(total, paid_sum) <= 0
+    for o in _orders_linked_to_invoice(inv):
+        o.paid = fully
+
+
 @app.route("/payment/<int:payment_id>/delete", methods=["POST"])
 @login_required
 def payment_delete(payment_id):
@@ -1566,7 +1613,13 @@ def payment_delete(payment_id):
         return jsonify({"ok": False, "error": "Доступ запрещен"}), 403
     p = Payment.query.get_or_404(payment_id)
     cp_id = p.counterparty_id
+    inv_id = p.invoice_id
     db.session.delete(p)
+    db.session.flush()
+    if inv_id:
+        inv = Invoice.query.get(inv_id)
+        if inv:
+            _sync_orders_paid_for_invoice(inv)
     db.session.commit()
     return jsonify({"ok": True, "redirect": url_for("counterparty_card", counterparty_id=cp_id)})
 
@@ -1579,6 +1632,8 @@ def invoice_delete(invoice_id):
         return jsonify({"ok": False, "error": "Доступ запрещен"}), 403
     inv = Invoice.query.get_or_404(invoice_id)
     cp_id = inv.counterparty_id
+    for o in _orders_linked_to_invoice(inv):
+        o.paid = False
     for p in inv.payments:
         p.invoice_id = None
     db.session.delete(inv)
@@ -1891,6 +1946,8 @@ def invoice_update(invoice_id):
         return jsonify({"ok": False, "error": "Нужна хотя бы одна позиция с наименованием"}), 400
     for row in new_items:
         db.session.add(row)
+    db.session.flush()
+    _sync_orders_paid_for_invoice(inv)
     db.session.commit()
     return jsonify({"ok": True, "invoice_id": inv.id, "invoice_number": inv.invoice_number})
 
@@ -2170,8 +2227,17 @@ def payment_create(counterparty_id):
             invoice_id = int(invoice_id)
         except (TypeError, ValueError):
             invoice_id = None
+    if invoice_id is not None:
+        inv_chk = Invoice.query.get(invoice_id)
+        if not inv_chk or inv_chk.counterparty_id != counterparty_id:
+            return jsonify({"ok": False, "error": "Счёт не найден или не относится к этому контрагенту"}), 400
     p = Payment(counterparty_id=counterparty_id, amount=amount, payment_date=payment_date, invoice_id=invoice_id, note=(data.get("note") or "").strip() or None)
     db.session.add(p)
+    db.session.flush()
+    if invoice_id is not None:
+        inv = Invoice.query.get(invoice_id)
+        if inv:
+            _sync_orders_paid_for_invoice(inv)
     db.session.commit()
     return jsonify({"ok": True, "payment_id": p.id})
 

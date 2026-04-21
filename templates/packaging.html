@@ -42,7 +42,7 @@
       <tr>
         <th>№ Заказа</th>
         <th>Клиент</th>
-        <th>Дней до сдачи</th>
+        <th>Срок</th>
         <th>Упаковка</th>
         <th>Оплата</th>
         <th>Отгрузка</th>
@@ -55,9 +55,8 @@
           <td>{{ o.order_id }}</td>
           <td>{{ o.client }}</td>
           <td>
-            <span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">
-              {{ days_left }}
-            </span>
+            <div style="font-size:13px;margin-bottom:4px;">{{ o.due_date.strftime('%d.%m.%Y') }}</div>
+            <span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">{{ days_left }}</span><span style="font-size:12px;"> дн.</span>
           </td>
           <td>
             <label class="switch">

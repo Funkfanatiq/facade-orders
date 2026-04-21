@@ -162,6 +162,13 @@
     .row-green { background-color: #d4edda !important; }
     .row-warning { background-color: #fff3cd !important; }
     .row-danger { background-color: #f8d7da !important; }
+    .row-muted {
+      background-color: #e9ecef !important;
+      color: #6c757d !important;
+    }
+    .row-muted a { color: #6c757d !important; }
+    .due-days-hint { font-size: 12px; color: #555; display: block; margin-top: 2px; }
+    .due-days-hint.due-overdue { color: #b00020; font-weight: 600; }
     .highlight-row {
       outline: 2px solid black;
       outline-offset: -2px;
@@ -443,16 +450,18 @@
     </form>
   </div>
 
-  <table>
+  <table id="orders-main-table">
     <tr>
       <th>№ заказа</th><th>Клиент</th><th>Срок</th>
       <th>Фрезеровка</th><th>Шлифовка</th><th>Упаковка</th><th>Отгрузка</th><th>Оплата</th><th>Файлы</th>
       {% if current_user.role == "Менеджер" %}<th>Действия</th>{% endif %}
     </tr>
     {% for o in orders %}
-      {% set days_left = (o.due_date - datetime.utcnow().date()).days %}
+      {% set days_left = (o.due_date - app_today).days %}
+      {% set done_sp = o.shipment and o.paid %}
       {% set base_class = "" %}
-      {% if o.packaging %} {% set base_class = "row-green" %}
+      {% if done_sp %} {% set base_class = "row-muted" %}
+      {% elif o.packaging %} {% set base_class = "row-green" %}
       {% elif days_left <= 3 %} {% set base_class = "row-danger" %}
       {% elif days_left <= 6 %} {% set base_class = "row-warning" %}
       {% endif %}
@@ -460,10 +469,10 @@
       {% if request.args.get('order_id_query') == o.order_id or request.args.get('client_query') == o.client %}
         {% set highlight_class = "highlight-row" %}
       {% endif %}
-      <tr data-order-id="{{ o.id }}" data-order-code="{{ o.order_id|e }}" data-client-name="{{ o.client|e }}" data-days="{{ o.days }}" class="{{ base_class }} {% if highlight_class %}{{ highlight_class }}{% endif %}">
+      <tr data-order-id="{{ o.id }}" data-order-code="{{ o.order_id|e }}" data-client-name="{{ o.client|e }}" data-days="{{ o.days }}" data-due="{{ o.due_date.isoformat() }}" data-done-sp="{% if done_sp %}1{% else %}0{% endif %}" class="{{ base_class }} {% if highlight_class %}{{ highlight_class }}{% endif %}">
         <td>{{ o.order_id }}</td>
         <td>{% set cp_id = o.counterparty_id or cp_id_for_client.get(o.client) %}{% if cp_id %}<a href="{{ url_for('counterparty_card', counterparty_id=cp_id) }}" style="color:inherit;text-decoration:none;">{{ o.client }}</a>{% else %}{{ o.client }}{% endif %}</td>
-        <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
+        <td class="due-cell">{{ o.due_date.strftime('%d.%m.%Y') }}<span class="due-days-hint {% if days_left < 0 %}due-overdue{% endif %}">{% if days_left > 0 %}ост. {{ days_left }} дн.{% elif days_left == 0 %}сегодня{% else %}просрочено на {{ -days_left }} дн.{% endif %}</span></td>
         {% if current_user.role in ["Менеджер", "Производство"] %}
         <td><label class="switch"><input type="checkbox" name="milling" {% if o.milling %}checked{% endif %}><span class="slider"></span></label></td>
         <td><label class="switch"><input type="checkbox" name="polishing_1" {% if o.polishing_1 %}checked{% endif %}><span class="slider"></span></label></td>
@@ -1117,6 +1126,50 @@
     })();
     {% endif %}
     var statusDebounce = {};
+    function syncDoneSpDataset(row) {
+      var sh = row.querySelector('input[name="shipment"]');
+      var pd = row.querySelector('input[name="paid"]');
+      row.dataset.doneSp = (sh && sh.checked && pd && pd.checked) ? '1' : '0';
+    }
+    function parseYmdLocal(ymd) {
+      if (!ymd) return null;
+      var p = ymd.split('-').map(Number);
+      return new Date(p[0], p[1] - 1, p[2]);
+    }
+    function daysLeftFromDueDataset(row) {
+      var d = parseYmdLocal(row.dataset.due);
+      if (!d) return 999;
+      var now = new Date();
+      var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return Math.round((d - today) / 86400000);
+    }
+    function applyOrderRowStyles(row) {
+      var packagingOn = row.querySelector('input[name="packaging"]');
+      row.classList.remove('row-green', 'row-warning', 'row-danger', 'row-muted');
+      if (row.dataset.doneSp === '1') {
+        row.classList.add('row-muted');
+        return;
+      }
+      if (packagingOn && packagingOn.checked) {
+        row.classList.add('row-green');
+        return;
+      }
+      var dl = daysLeftFromDueDataset(row);
+      if (dl <= 3) row.classList.add('row-danger');
+      else if (dl <= 6) row.classList.add('row-warning');
+    }
+    function reorderShipmentPaidLast(tbl) {
+      if (!tbl) return;
+      var tbody = tbl.tBodies[0] || tbl;
+      var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr[data-order-id]'));
+      rows.sort(function(a, b) {
+        var da = a.dataset.doneSp === '1' ? 1 : 0;
+        var db = b.dataset.doneSp === '1' ? 1 : 0;
+        if (da !== db) return da - db;
+        return (a.dataset.due || '').localeCompare(b.dataset.due || '');
+      });
+      rows.forEach(function(r) { tbody.appendChild(r); });
+    }
     document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
       cb.addEventListener('change', () => {
         const row = cb.closest('tr');
@@ -1137,36 +1190,21 @@
         }).then(res => {
           if (res.ok) {
             console.log("✔️ Сохранено");
-            if (cb.name === "packaging") {
-              row.classList.remove("row-green", "row-warning", "row-danger");
-              const dueText = row.children[3]?.textContent;
-              const dueDate = dueText ? new Date(dueText) : null;
-              const today = new Date();
-              if (!cb.checked && dueDate) {
-                const daysLeft = Math.floor((dueDate - today) / (1000 * 60 * 60 * 24));
-                if (daysLeft <= 3) {
-                  row.classList.add("row-danger");
-                } else if (daysLeft <= 6) {
-                  row.classList.add("row-warning");
-                }
-              } else if (cb.checked) {
-                row.classList.add("row-green");
-              }
-            }
-            
+            syncDoneSpDataset(row);
+            applyOrderRowStyles(row);
+            {% if current_user.role == "Менеджер" %}
+            reorderShipmentPaidLast(document.getElementById('orders-main-table'));
+            {% endif %}
             // Для роли "Производство" перемещаем заказ в конец после отметки упаковки или отгрузки
             {% if current_user.role == "Производство" %}
             if (cb.name === "packaging" || cb.name === "shipment") {
               if (cb.checked) {
-                // Перемещаем строку в конец таблицы
-                const table = row.closest('table');
-                const tbody = table.querySelector('tbody') || table;
+                var table = row.closest('table');
+                var tbody = table.querySelector('tbody') || table;
                 tbody.appendChild(row);
-                
-                // Добавляем анимацию перемещения
                 row.style.transition = 'all 0.5s ease';
                 row.style.transform = 'translateX(100%)';
-                setTimeout(() => {
+                setTimeout(function() {
                   row.style.transform = 'translateX(0)';
                 }, 100);
               }

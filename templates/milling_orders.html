@@ -91,6 +91,13 @@
     details.files-details[open] > summary { color: #4CAF50; }
     .files-list { margin: 8px 0 0; padding: 0; list-style: none; text-align: left; }
     .files-list li { margin: 4px 0; }
+    .files-list a {
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      max-width: min(100%, 22rem);
+      display: inline-block;
+      vertical-align: top;
+    }
   </style>
 </head>
 <body>
@@ -169,7 +176,7 @@
               {% endif %}
             </td>
             <td>{{ "%.2f"|format(o.area) }}</td>
-            <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
+            <td>{{ o.due_date.strftime('%d.%m.%Y') }}<br><small style="color:#555;">{% set dl = (o.due_date - app_today).days %}{% if dl > 0 %}ост. {{ dl }} дн.{% elif dl == 0 %}сегодня{% else %}просрочено {{ -dl }} дн.{% endif %}</small></td>
             <td>
               {% if o.filepaths %}
                 {% set fps = (o.filepaths or '').split(';') %}

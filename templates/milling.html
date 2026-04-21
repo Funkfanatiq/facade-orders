@@ -111,6 +111,13 @@
     details.files-details[open] > summary { color: #4CAF50; }
     .files-list { margin: 8px 0 0; padding: 0; list-style: none; text-align: left; }
     .files-list li { margin: 4px 0; }
+    .files-list a {
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      max-width: min(100%, 22rem);
+      display: inline-block;
+      vertical-align: top;
+    }
     .pool-info {
       padding: 16px;
       border-radius: 12px;
@@ -191,7 +198,9 @@
       {% endif %}
       <p style="margin: 5px 0;"><strong>Срок сдачи:</strong>
         <span style="color: {% if pool_info.is_urgent %}#cc0000{% else %}inherit{% endif %};">
-          {{ earliest_order.due_date.strftime('%Y-%m-%d') }}
+          {{ earliest_order.due_date.strftime('%d.%m.%Y') }}
+          {% set edl = (earliest_order.due_date - app_today).days %}
+          <small style="display:block;margin-top:4px;">{% if edl > 0 %}ост. {{ edl }} дн.{% elif edl == 0 %}сегодня{% else %}просрочено {{ -edl }} дн.{% endif %}</small>
         </span>
       </p>
     </div>
@@ -217,8 +226,9 @@
             <td>{{ order.facade_type }}</td>
             <td>{{ "%.2f"|format(order.area) }} м²</td>
             <td style="color: {% if urgency_info.is_urgent %}#cc0000{% else %}inherit{% endif %};">
-              {{ order.due_date.strftime('%Y-%m-%d') }}
-              {% if urgency_info.is_urgent %}<br><small>({{ urgency_info.days_left }} дн.)</small>{% endif %}
+              {{ order.due_date.strftime('%d.%m.%Y') }}
+              {% set udl = (order.due_date - app_today).days %}
+              <br><small>{% if udl > 0 %}ост. {{ udl }} дн.{% elif udl == 0 %}сегодня{% else %}просрочено {{ -udl }} дн.{% endif %}{% if urgency_info.is_urgent %} · срочно{% endif %}</small>
             </td>
             <td>
               {% if order.filepaths %}

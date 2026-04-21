@@ -61,9 +61,12 @@
   <h1>Фрезеровка — Приоритет заказов</h1>
 
   {% for o in orders %}
-    {% set days_left = (o.due_date - datetime.utcnow().date()).days %}
+    {% set days_left = (o.due_date - app_today).days %}
     {% set cls = "urgent" if days_left <= 3 else ("warning" if days_left <= 5 else "normal") %}
-    <div class="order {{ cls }}">{{ o.order_id }}</div>
+    <div class="order {{ cls }}">
+      <div>{{ o.order_id }}</div>
+      <div style="font-size: 28px; margin-top: 12px; opacity: 0.95;">сдача {{ o.due_date.strftime('%d.%m.%Y') }} · {% if days_left > 0 %}ост. {{ days_left }} дн.{% elif days_left == 0 %}сегодня{% else %}просрочен на {{ -days_left }} дн.{% endif %}</div>
+    </div>
   {% endfor %}
 
   <form method="GET" action="{{ url_for('logout') }}">

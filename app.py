@@ -6,6 +6,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_migrate import Migrate
 from sqlalchemy import or_, text
 from datetime import datetime, timedelta, timezone, date
+from zoneinfo import ZoneInfo
 from calendar import monthrange
 import json
 import mimetypes
@@ -39,6 +40,14 @@ BLOCKED_UPLOAD_EXTENSIONS = frozenset({
 # Загружаем переменные окружения из .env (в папке приложения)
 _base = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(_base, ".env"))
+
+APP_TZ = ZoneInfo("Europe/Moscow")
+
+
+def app_today():
+    """Календарная дата (МСК): срок сдачи и «дней осталось» считаются в одном поясе."""
+    return datetime.now(APP_TZ).date()
+
 
 app = Flask(__name__)
 app.config.from_object('config.Config')
@@ -75,6 +84,11 @@ migrate = Migrate(app, db)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
+
+
+@app.context_processor
+def inject_app_today():
+    return {"app_today": app_today()}
 
 
 @login_manager.unauthorized_handler
@@ -920,14 +934,19 @@ def is_urgent_order(order):
     Определяет является ли заказ срочным.
     Срочные заказы: осталось URGENT_DAYS_THRESHOLD дней или меньше до срока сдачи.
     """
-    days_left = (order.due_date - datetime.now(timezone.utc).date()).days
+    days_left = (order.due_date - app_today()).days
     return days_left <= URGENT_DAYS_THRESHOLD
 
 
 def is_work_due_order(order):
     """Пора брать в работу: осталось от URGENT+1 до WORK_DAYS_THRESHOLD дней."""
-    days_left = (order.due_date - datetime.now(timezone.utc).date()).days
+    days_left = (order.due_date - app_today()).days
     return URGENT_DAYS_THRESHOLD < days_left <= WORK_DAYS_THRESHOLD
+
+
+def sort_orders_shipment_paid_last(orders):
+    """Заказы с отмеченными отгрузкой и оплатой — в конец (внутри группы по сроку)."""
+    return sorted(orders, key=lambda o: (1 if (o.shipment and o.paid) else 0, o.due_date, o.id))
 
 
 def _send_push_to_non_managers(title, body, url="/"):
@@ -967,7 +986,7 @@ def _check_orders_push_by_due_date():
     - «Заказ №X срочный» — когда days_left <= URGENT
     Уведомления только для неотгруженных заказов, по одному разу на зону.
     """
-    today = datetime.now(timezone.utc).date()
+    today = app_today()
     orders = Order.query.filter(Order.shipment == False).all()
     for order in orders:
         days_left = (order.due_date - today).days
@@ -1308,7 +1327,7 @@ def dashboard():
     if current_user.role == "Админ":
         return render_admin_dashboard()
 
-    cutoff = datetime.now(timezone.utc).date() - timedelta(days=EXPIRED_DAYS)
+    cutoff = app_today() - timedelta(days=EXPIRED_DAYS)
     expired = Order.query.filter(Order.shipment == True, Order.due_date < cutoff).all()
 
     for o in expired:
@@ -1367,7 +1386,7 @@ def dashboard():
             flash(str(e), "error")
             return redirect(url_for("dashboard"))
 
-        due_date = datetime.now(timezone.utc).date() + timedelta(days=days)
+        due_date = app_today() + timedelta(days=days)
 
         uploaded_files = request.files.getlist("files")
         filenames, filepaths, upload_errs = _save_uploaded_files_to_disk(uploaded_files)
@@ -1419,6 +1438,8 @@ def dashboard():
     else:
         # Для остальных ролей показываем все заказы
         orders = Order.query.order_by(Order.due_date).all()
+        if current_user.role == "Менеджер":
+            orders = sort_orders_shipment_paid_last(orders)
     
     # Получаем информацию о хранилище
     storage_usage = get_storage_usage_mb()
@@ -2215,7 +2236,7 @@ def render_admin_dashboard():
         except (ValueError, TypeError):
             thickness = None
         
-        due_date = datetime.now(timezone.utc).date() + timedelta(days=days)
+        due_date = app_today() + timedelta(days=days)
 
         # Покраска минует фрезеровку — сразу на шлифовку
         milling_default = (facade_type == "покраска")
@@ -2240,7 +2261,7 @@ def render_admin_dashboard():
         flash("✅ Заказ добавлен!")
         return redirect(url_for("dashboard"))
 
-    orders = Order.query.order_by(Order.due_date).all()
+    orders = sort_orders_shipment_paid_last(Order.query.order_by(Order.due_date).all())
     
     # Заказы: № заказа = № счёта. Поиск счёта для ТОРГ-12 по order_id
     invoice_for_order = {}
@@ -2361,7 +2382,7 @@ def edit_order(order_id):
         order.client = new_client
         order.counterparty_id = cp.id if cp else None
         order.days = days
-        order.due_date = datetime.now(timezone.utc).date() + timedelta(days=days)
+        order.due_date = app_today() + timedelta(days=days)
         order.facade_type = facade_type
         order.area = area
         order.thickness = thickness
@@ -2627,7 +2648,7 @@ def milling_pool():
         earliest_due = min(v.order.due_date for v in pool)
 
         for v in pool:
-            days_left = (v.order.due_date - datetime.now(timezone.utc).date()).days
+            days_left = (v.order.due_date - app_today()).days
             order_urgency[v.order.id] = {
                 'is_urgent': is_urgent_order(v.order),
                 'days_left': days_left
@@ -2666,7 +2687,7 @@ def milling_orders():
     # Добавляем информацию о срочности для каждого заказа
     order_urgency = {}
     for order in orders:
-        days_left = (order.due_date - datetime.now(timezone.utc).date()).days
+        days_left = (order.due_date - app_today()).days
         order_urgency[order.id] = {
             'is_urgent': is_urgent_order(order),
             'days_left': days_left
@@ -2839,11 +2860,12 @@ def update_polishing():
         }
         # При отметке как шлифованный — возвращаем данные заказа для добавления в таблицу упаковки
         if status:
-            days_left = (order.due_date - datetime.now(timezone.utc).date()).days
+            days_left = (order.due_date - app_today()).days
             resp['order'] = {
                 'id': order.id,
                 'order_id': order.order_id,
                 'client': order.client,
+                'due_date': order.due_date.isoformat(),
                 'days_left': days_left,
                 'is_urgent': is_urgent_order(order),
                 'paid': bool(order.paid),
@@ -2875,7 +2897,7 @@ def polishing_station():
     # Информация о срочности для заказов шлифовки
     polishing_urgency = {}
     for order in polishing_orders:
-        days_left = (order.due_date - datetime.now(timezone.utc).date()).days
+        days_left = (order.due_date - app_today()).days
         polishing_urgency[order.id] = {
             'is_urgent': is_urgent_order(order),
             'days_left': days_left
@@ -2884,7 +2906,7 @@ def polishing_station():
     # Информация о срочности для заказов упаковки
     packaging_urgency = {}
     for order in packaging_orders:
-        days_left = (order.due_date - datetime.now(timezone.utc).date()).days
+        days_left = (order.due_date - app_today()).days
         packaging_urgency[order.id] = {
             'is_urgent': is_urgent_order(order),
             'days_left': days_left

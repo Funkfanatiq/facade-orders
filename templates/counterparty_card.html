@@ -403,7 +403,7 @@
         </thead>
         <tbody>
           {% for o in orders %}
-            {% set days_left = (o.due_date - datetime.utcnow().date()).days %}
+            {% set days_left = (o.due_date - app_today).days %}
             {% set row_class = "" %}
             {% if o.packaging %} {% set row_class = "row-green" %}
             {% elif days_left <= 3 %} {% set row_class = "row-danger" %}
@@ -412,7 +412,7 @@
             <tr class="{{ row_class }}">
               <td>{{ o.order_id }}</td>
               <td>{{ o.client }}</td>
-              <td>{{ o.due_date.strftime('%Y-%m-%d') }}</td>
+              <td>{{ o.due_date.strftime('%d.%m.%Y') }}<br><small style="color:#666;">{% if days_left > 0 %}ост. {{ days_left }} дн.{% elif days_left == 0 %}сегодня{% else %}просрочено {{ -days_left }} дн.{% endif %}</small></td>
               <td>{{ "✔" if o.milling else "—" }}</td>
               <td>{{ "✔" if o.polishing_1 else "—" }}</td>
               <td>{{ "✔" if o.packaging else "—" }}</td>

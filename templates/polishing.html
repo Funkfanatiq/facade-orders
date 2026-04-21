@@ -183,7 +183,7 @@
         <tr>
           <th>№ Заказа</th>
           <th>Клиент</th>
-          <th>Дней до сдачи</th>
+          <th>Срок</th>
           <th>Статус</th>
           <th>Шлифовка</th>
         </tr>
@@ -206,9 +206,8 @@
               <td>{{ o.order_id }}</td>
               <td>{{ o.client }}</td>
               <td>
-                <span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">
-                  {{ days_left }}
-                </span>
+                <div style="font-size:13px;color:#333;margin-bottom:4px;">{{ o.due_date.strftime('%d.%m.%Y') }}</div>
+                <span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">{{ days_left }}</span><span style="font-size:12px;"> дн.</span>
               </td>
               <td>
                 {% if o.polishing_1 %}
@@ -241,7 +240,7 @@
         <tr>
           <th>№ Заказа</th>
           <th>Клиент</th>
-          <th>Дней до сдачи</th>
+          <th>Срок</th>
           <th>Статус</th>
           <th>Упаковка</th>
           <th>Отгрузка</th>
@@ -264,9 +263,8 @@
             <td>{{ o.order_id }}</td>
             <td>{{ o.client }}</td>
             <td>
-              <span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">
-                {{ days_left }}
-              </span>
+              <div style="font-size:13px;color:#333;margin-bottom:4px;">{{ o.due_date.strftime('%d.%m.%Y') }}</div>
+              <span class="days-left {% if days_left <= 3 %}days-urgent{% elif days_left <= 6 %}days-warning{% else %}days-normal{% endif %}">{{ days_left }}</span><span style="font-size:12px;"> дн.</span>
             </td>
             <td>
               {% if o.shipment %}
@@ -430,6 +428,12 @@
       if (isUrgent) statusHtml = '<span class="status-indicator status-urgent"></span>Срочный';
       else if (isWarning) statusHtml = '<span class="status-indicator status-warning"></span>Скоро срок';
 
+      let dueLabel = '';
+      if (order.due_date) {
+        const p = order.due_date.split('-');
+        if (p.length === 3) dueLabel = `${p[2]}.${p[1]}.${p[0]}`;
+      }
+
       const tr = document.createElement('tr');
       tr.dataset.orderId = order.id;
       tr.dataset.paid = order.paid ? 'true' : 'false';
@@ -437,7 +441,7 @@
       tr.innerHTML = `
         <td>${escapeHtml(order.order_id)}</td>
         <td>${escapeHtml(order.client)}</td>
-        <td><span class="days-left ${daysClass}">${daysLeft}</span></td>
+        <td><div style="font-size:13px;color:#333;margin-bottom:4px;">${dueLabel || '—'}</div><span class="days-left ${daysClass}">${daysLeft}</span><span style="font-size:12px;"> дн.</span></td>
         <td>${statusHtml}</td>
         <td><label class="switch"><input type="checkbox" name="packaging"><span class="slider"></span></label></td>
         <td><label class="switch"><input type="checkbox" name="shipment"><span class="slider"></span></label></td>

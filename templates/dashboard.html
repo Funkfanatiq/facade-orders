@@ -322,6 +322,8 @@
     .pricelist-category-title:first-of-type { margin-top: 0; }
     .btn-edit-pricelist { padding: 6px 12px; font-size: 13px; cursor: pointer; background: #4CAF50; color: #fff; border: none; border-radius: 6px; }
     .btn-edit-pricelist:hover { background: #45A049; }
+    .btn-delete-pricelist { padding: 6px 10px; font-size: 13px; cursor: pointer; background: #fff; color: #c62828; border: 1px solid #e0e0e0; border-radius: 6px; margin-left: 6px; }
+    .btn-delete-pricelist:hover { background: #ffebee; border-color: #c62828; }
     .pricelist-drag-handle { cursor: grab; color: #999; padding: 0 6px; user-select: none; }
     .pricelist-drag-handle:active { cursor: grabbing; }
     .mail-tab-badge {
@@ -704,7 +706,7 @@
       {% if cat_items %}
       <table class="pricelist-table pricelist-list" data-category="{{ cat }}">
         <thead>
-          <tr><th style="width:28px;"></th><th>Наименование</th><th>Цена, ₽</th><th>Ед. изм.</th><th>Действия</th></tr>
+          <tr><th style="width:28px;"></th><th>Наименование</th><th>Цена, ₽</th><th>Ед. изм.</th><th style="min-width:140px;">Действия</th></tr>
         </thead>
         <tbody>
         {% for p in cat_items %}
@@ -713,7 +715,12 @@
           <td>{{ p.name }}</td>
           <td>{{ (p.price|round(2))|string|replace(".", ",") }}</td>
           <td>{{ p.unit or '—' }}</td>
-          <td><button type="button" class="btn-edit-pricelist" onclick="editPricelistRow(this)">Изменить</button></td>
+          <td>
+            <button type="button" class="btn-edit-pricelist" onclick="editPricelistRow(this)">Изменить</button>
+            <form method="POST" action="{{ url_for('pricelist_delete', item_id=p.id) }}" style="display:inline;" onsubmit="return confirm('Удалить эту позицию из прайс-листа? Строки счетов с этой позицией останутся, связь с прайсом будет снята.');">
+              <button type="submit" class="btn-delete-pricelist">Удалить</button>
+            </form>
+          </td>
         </tr>
         {% endfor %}
         </tbody>

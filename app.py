@@ -1706,6 +1706,24 @@ def pricelist_edit(item_id):
     return redirect(url_for("dashboard", tab="pricelist"))
 
 
+@app.route("/pricelist/<int:item_id>/delete", methods=["POST"])
+@login_required
+def pricelist_delete(item_id):
+    """Удаление позиции прайс-листа (только менеджер). Ссылки в строках счетов обнуляются."""
+    if current_user.role != "Менеджер":
+        flash("Доступ запрещен", "error")
+        return redirect(url_for("dashboard"))
+    item = PriceListItem.query.get_or_404(item_id)
+    InvoiceItem.query.filter(InvoiceItem.price_list_item_id == item_id).update(
+        {InvoiceItem.price_list_item_id: None},
+        synchronize_session=False,
+    )
+    db.session.delete(item)
+    db.session.commit()
+    flash("Позиция удалена из прайс-листа", "success")
+    return redirect(url_for("dashboard", tab="pricelist"))
+
+
 @app.route("/pricelist/reorder", methods=["POST"])
 @login_required
 def pricelist_reorder():

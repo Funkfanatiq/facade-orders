@@ -87,6 +87,19 @@ class Order(db.Model):
     last_push_urgent_at = db.Column(db.DateTime, nullable=True)
 
 
+class OrderAttachment(db.Model):
+    """Вложение заказа, храним бинарные данные в БД (PostgreSQL BYTEA)."""
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id', ondelete='CASCADE'), nullable=False, index=True)
+    original_name = db.Column(db.String(512), nullable=False)
+    content_type = db.Column(db.String(128), nullable=True)
+    size = db.Column(db.Integer, nullable=False, default=0)
+    data = db.Column(db.LargeBinary, nullable=False)
+    created_at = db.Column(db.DateTime, default=db.func.now())
+
+    order = db.relationship('Order', backref=db.backref('attachments_db', lazy=True, cascade='all, delete-orphan'))
+
+
 class PushSubscription(db.Model):
     """Подписка пользователя на Web Push (уведомления о заказах)."""
     id = db.Column(db.Integer, primary_key=True)

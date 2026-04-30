@@ -70,6 +70,7 @@ from models import (
     Invoice,
     InvoiceItem,
     Payment,
+    OrderAttachment,
     PRICE_CATEGORIES,
     PushSubscription,
     MillingNote,
@@ -138,6 +139,54 @@ def _migrate_legacy_uploads_to_current():
 
 
 _migrate_legacy_uploads_to_current()
+
+
+def _migrate_order_attachments_from_disk_to_db():
+    """Единоразово переносит вложения заказов с диска в таблицу order_attachment."""
+    try:
+        candidates = Order.query.filter(Order.filepaths.isnot(None)).all()
+        migrated_orders = 0
+        for order in candidates:
+            fps = [(x or "").strip() for x in (order.filepaths or "").split(";")]
+            fns = [(x or "").strip() for x in (order.filenames or "").split(";")]
+            if not fps:
+                continue
+            changed = False
+            for idx, token in enumerate(fps):
+                if not token or _is_db_attachment_token(token):
+                    continue
+                full_path = _resolve_upload_full_path(token)
+                if not full_path or not os.path.isfile(full_path):
+                    continue
+                try:
+                    with open(full_path, "rb") as fh:
+                        payload = fh.read()
+                    if not payload:
+                        continue
+                    display_name = fns[idx] if idx < len(fns) and fns[idx] else os.path.basename(token)
+                    att = OrderAttachment(
+                        order_id=order.id,
+                        original_name=display_name,
+                        content_type=mimetypes.guess_type(display_name or "")[0],
+                        size=len(payload),
+                        data=payload,
+                    )
+                    db.session.add(att)
+                    db.session.flush()
+                    fps[idx] = f"db_{att.id}"
+                    changed = True
+                except Exception:
+                    continue
+            if changed:
+                order.filepaths = ";".join(fps)
+                order.filenames = ";".join(fns)
+                migrated_orders += 1
+        if migrated_orders:
+            db.session.commit()
+            print(f"✅ Вложения заказов перенесены в БД: {migrated_orders} заказ(ов)")
+    except Exception as e:
+        db.session.rollback()
+        print(f"⚠️ Миграция вложений заказов в БД пропущена: {e}")
 
 
 def _ensure_counterparty_column():
@@ -601,6 +650,7 @@ def init_database():
                 _ensure_email_attachments_column()
                 _ensure_push_columns()
                 _ensure_milling_note_order_id_nullable()
+                _migrate_order_attachments_from_disk_to_db()
 
                 # Проверяем количество пользователей
                 user_count = User.query.count()
@@ -701,6 +751,17 @@ def _normalize_stored_upload_name(stored_name):
     return os.path.basename(raw)
 
 
+def _is_db_attachment_token(value):
+    value = (value or "").strip()
+    return value.startswith("db_") and value[3:].isdigit()
+
+
+def _db_attachment_id_from_token(value):
+    if not _is_db_attachment_token(value):
+        return None
+    return int(value[3:])
+
+
 def _resolve_upload_full_path(stored_name):
     """Возвращает полный путь к вложению в текущем/старом каталоге загрузок."""
     safe_name = _normalize_stored_upload_name(stored_name)
@@ -721,6 +782,45 @@ def _resolve_upload_full_path(stored_name):
             return real_p
     # Если файла ещё нет, по умолчанию работаем с текущей папкой.
     return os.path.join(current_folder, safe_name)
+
+
+def _save_uploaded_files_to_db(order, uploaded_files):
+    """Сохраняет вложения заказа в БД; возвращает (display_names, stored_tokens, error_messages)."""
+    display_names = []
+    stored_tokens = []
+    errors = []
+    for f in uploaded_files:
+        if not f or not f.filename:
+            continue
+        if not allowed_file(f.filename):
+            errors.append(
+                f"Файл {f.filename} не принят: запрещённый тип (исполняемые и служебные файлы)"
+            )
+            continue
+        try:
+            payload = f.read() or b""
+        except Exception:
+            payload = b""
+        if not payload:
+            errors.append(f"Файл {f.filename} пустой")
+            continue
+        if len(payload) > MAX_FILE_SIZE:
+            errors.append(
+                f"Файл {f.filename} слишком большой (максимум {MAX_FILE_SIZE // (1024*1024)} МБ)"
+            )
+            continue
+        att = OrderAttachment(
+            order_id=order.id,
+            original_name=f.filename,
+            content_type=getattr(f, "content_type", None) or None,
+            size=len(payload),
+            data=payload,
+        )
+        db.session.add(att)
+        db.session.flush()
+        display_names.append(f.filename)
+        stored_tokens.append(f"db_{att.id}")
+    return display_names, stored_tokens, errors
 
 def _normalize_facade_for_order(facade_type, area_val, thickness_val, mixed_json_str):
     """Проверяет и нормализует поля фасада для Order (форма или JSON редактирования)."""
@@ -876,13 +976,20 @@ def cleanup_old_orders():
                         file_paths = order.filepaths.split(';')
                         for file_path in file_paths:
                             if file_path.strip():
-                                full_path = _resolve_upload_full_path(file_path.strip())
-                                if os.path.exists(full_path):
-                                    try:
-                                        os.remove(full_path)
-                                        print(f"🗑️ Удален файл: {file_path}")
-                                    except Exception as e:
-                                        print(f"Ошибка при удалении файла {file_path}: {e}")
+                                token = file_path.strip()
+                                att_id = _db_attachment_id_from_token(token)
+                                if att_id is not None:
+                                    att = OrderAttachment.query.filter_by(id=att_id, order_id=order.id).first()
+                                    if att:
+                                        db.session.delete(att)
+                                else:
+                                    full_path = _resolve_upload_full_path(token)
+                                    if os.path.exists(full_path):
+                                        try:
+                                            os.remove(full_path)
+                                            print(f"🗑️ Удален файл: {file_path}")
+                                        except Exception as e:
+                                            print(f"Ошибка при удалении файла {file_path}: {e}")
                     
                     # Удаляем запись заказа из базы данных
                     db.session.delete(order)
@@ -1396,7 +1503,15 @@ def dashboard():
                 if not path:
                     continue
                 try:
-                    os.remove(os.path.join(app.config["UPLOAD_FOLDER"], path))
+                    att_id = _db_attachment_id_from_token(path)
+                    if att_id is not None:
+                        att = OrderAttachment.query.filter_by(id=att_id, order_id=o.id).first()
+                        if att:
+                            db.session.delete(att)
+                    else:
+                        full_path = _resolve_upload_full_path(path)
+                        if full_path and os.path.isfile(full_path):
+                            os.remove(full_path)
                 except (FileNotFoundError, OSError) as e:
                     print(f"⚠️ Не удалось удалить файл {path}: {e}")
         db.session.delete(o)
@@ -1447,11 +1562,6 @@ def dashboard():
 
         due_date = app_today() + timedelta(days=days)
 
-        uploaded_files = request.files.getlist("files")
-        filenames, filepaths, upload_errs = _save_uploaded_files_to_disk(uploaded_files)
-        for msg in upload_errs:
-            flash(msg, "error")
-
         # Покраска минует фрезеровку — сразу на шлифовку
         milling_default = (facade_type == "покраска")
         order = Order(
@@ -1465,8 +1575,8 @@ def dashboard():
             packaging=False,
             shipment=False,
             paid=False,
-            filenames=";".join(filenames),
-            filepaths=";".join(filepaths),
+            filenames="",
+            filepaths="",
             facade_type=facade_type,
             area=area,
             thickness=thickness,
@@ -1474,7 +1584,14 @@ def dashboard():
         )
 
         db.session.add(order)
+        db.session.flush()
+        uploaded_files = request.files.getlist("files")
+        filenames, filepaths, upload_errs = _save_uploaded_files_to_db(order, uploaded_files)
+        order.filenames = ";".join(filenames)
+        order.filepaths = ";".join(filepaths)
         db.session.commit()
+        for msg in upload_errs:
+            flash(msg, "error")
         
         # Проверяем и очищаем хранилище при необходимости
         cleanup_old_orders()
@@ -2436,15 +2553,20 @@ def render_admin_dashboard():
     return render_template("admin_dashboard.html", orders=orders, invoice_for_order=invoice_for_order, datetime=datetime, current_user=current_user, storage_info=storage_info, debtors=debtors)
 
 def _order_attachments_payload(order):
+    out = []
     fps = (order.filepaths or "").split(";")
     fns = (order.filenames or "").split(";")
-    out = []
     for i, fp in enumerate(fps):
-        fp = _normalize_stored_upload_name(fp)
-        if not fp:
+        raw = (fp or "").strip()
+        if not raw:
             continue
         fn = (fns[i] or "").strip() if i < len(fns) else ""
-        out.append({"stored": fp, "display": fn or fp})
+        if _is_db_attachment_token(raw):
+            out.append({"stored": raw, "display": fn or raw})
+        else:
+            safe_fp = _normalize_stored_upload_name(raw)
+            if safe_fp:
+                out.append({"stored": safe_fp, "display": fn or safe_fp})
     return out
 
 
@@ -2543,7 +2665,7 @@ def order_add_attachments(order_id):
         return jsonify({"success": False, "message": "⛔ Нет доступа"}), 403
     order = Order.query.get_or_404(order_id)
     uploaded_files = request.files.getlist("files")
-    new_fn, new_fp, errs = _save_uploaded_files_to_disk(uploaded_files)
+    new_fn, new_fp, errs = _save_uploaded_files_to_db(order, uploaded_files)
     if not new_fp:
         msg = errs[0] if errs else "Нет файлов для загрузки"
         return jsonify({"success": False, "message": msg, "warnings": errs}), 400
@@ -2584,7 +2706,7 @@ def order_remove_attachment(order_id):
         return jsonify({"success": False, "message": "⛔ Нет доступа"}), 403
     order = Order.query.get_or_404(order_id)
     data = request.get_json(silent=True) or {}
-    stored = _normalize_stored_upload_name(data.get("stored"))
+    stored = (data.get("stored") or "").strip()
     if not stored:
         return jsonify({"success": False, "message": "Некорректное имя файла"}), 400
     fps = (order.filepaths or "").split(";")
@@ -2596,22 +2718,28 @@ def order_remove_attachment(order_id):
             break
     if idx is None:
         return jsonify({"success": False, "message": "Файл не найден у этого заказа"}), 404
-    full = _resolve_upload_full_path(stored)
+    att_id = _db_attachment_id_from_token(stored)
     fps.pop(idx)
     if idx < len(fns):
         fns.pop(idx)
     order.filepaths = ";".join(fps)
     order.filenames = ";".join(fns)
     try:
+        if att_id is not None:
+            att = OrderAttachment.query.filter_by(id=att_id, order_id=order.id).first()
+            if att:
+                db.session.delete(att)
         db.session.commit()
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": f"❌ Ошибка: {e}"}), 500
-    try:
-        if os.path.isfile(full):
-            os.remove(full)
-    except OSError as e:
-        print(f"⚠️ Не удалось удалить файл вложения {stored}: {e}")
+    if att_id is None:
+        full = _resolve_upload_full_path(stored)
+        try:
+            if full and os.path.isfile(full):
+                os.remove(full)
+        except OSError as e:
+            print(f"⚠️ Не удалось удалить файл вложения {stored}: {e}")
     return jsonify({
         "success": True,
         "message": "✅ Файл удалён",
@@ -2633,9 +2761,15 @@ def delete_order(order_id):
         if order.filepaths:
             for path in order.filepaths.split(";"):
                 try:
-                    full_path = _resolve_upload_full_path(path)
-                    if full_path:
-                        os.remove(full_path)
+                    att_id = _db_attachment_id_from_token(path)
+                    if att_id is not None:
+                        att = OrderAttachment.query.filter_by(id=att_id, order_id=order.id).first()
+                        if att:
+                            db.session.delete(att)
+                    else:
+                        full_path = _resolve_upload_full_path(path)
+                        if full_path:
+                            os.remove(full_path)
                 except (FileNotFoundError, OSError) as e:
                     print(f"⚠️ Не удалось удалить файл {path}: {e}")
         
@@ -3612,7 +3746,31 @@ def uploaded_file(filename):
     from flask import abort
     from werkzeug.utils import secure_filename as _secure_dl_name
 
-    safe_name = _normalize_stored_upload_name(filename)
+    raw_name = (filename or "").strip()
+    if not raw_name:
+        abort(404)
+    att_id = _db_attachment_id_from_token(raw_name)
+    if att_id is not None:
+        att = OrderAttachment.query.get(att_id)
+        if not att or not att.data:
+            abort(404)
+        safe_name = _secure_dl_name(att.original_name or f"attachment_{att.id}") or f"attachment_{att.id}"
+        ext = os.path.splitext(safe_name)[1].lower()
+        mimetype = att.content_type or mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
+        if ext == ".svg" and mimetype == "application/octet-stream":
+            mimetype = "image/svg+xml"
+        as_attachment = ext not in _UPLOAD_VIEW_IN_BROWSER_EXT
+        return send_file(
+            io.BytesIO(att.data),
+            mimetype=mimetype,
+            conditional=False,
+            as_attachment=as_attachment,
+            download_name=safe_name,
+            max_age=0,
+            etag=False,
+            last_modified=None,
+        )
+    safe_name = _normalize_stored_upload_name(raw_name)
     if not safe_name:
         abort(404)
     full = _resolve_upload_full_path(safe_name)

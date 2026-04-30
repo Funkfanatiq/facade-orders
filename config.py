@@ -45,7 +45,9 @@ class Config:
     # Важно: папка вложений должна жить вне каталога кода,
     # чтобы файлы не терялись при обновлении репозитория/релизе.
     _default_upload_dir = (
-        '/var/data/facade_orders_uploads'
+        # На Render без подключенного Disk путь /var/data может быть недоступен.
+        # Поэтому дефолт для облака — /tmp (доступен на запись всегда).
+        '/tmp/facade_orders_uploads'
         if os.environ.get('DATABASE_URL')
         else os.path.join(BASE_DIR, 'uploads')
     )

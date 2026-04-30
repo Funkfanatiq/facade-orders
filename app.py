@@ -110,7 +110,14 @@ def _handle_unauthorized():
     return redirect(login_url)
 
 
-os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+try:
+    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+except PermissionError:
+    # Безопасный fallback для окружений без прав на системные каталоги (например, Render без Disk).
+    fallback_upload = "/tmp/facade_orders_uploads"
+    app.config["UPLOAD_FOLDER"] = fallback_upload
+    os.makedirs(fallback_upload, exist_ok=True)
+    print(f"⚠️ Нет прав на исходный UPLOAD_FOLDER, используем fallback: {fallback_upload}")
 
 
 def _migrate_legacy_uploads_to_current():

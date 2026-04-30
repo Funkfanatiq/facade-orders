@@ -42,7 +42,14 @@ class Config:
     COMPANY_CORR_ACCOUNT = os.environ.get('COMPANY_CORR_ACCOUNT') or '30101810600000000786'
     COMPANY_OKPO = os.environ.get('COMPANY_OKPO') or '0115043810'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+    # Важно: папка вложений должна жить вне каталога кода,
+    # чтобы файлы не терялись при обновлении репозитория/релизе.
+    _default_upload_dir = (
+        '/var/data/facade_orders_uploads'
+        if os.environ.get('DATABASE_URL')
+        else os.path.join(BASE_DIR, 'uploads')
+    )
+    UPLOAD_FOLDER = os.path.abspath(os.environ.get('UPLOAD_FOLDER') or _default_upload_dir)
 
     # Лимит всего multipart-запроса (несколько файлов сразу). Render/Gunicorn: см. таймаут в Dockerfile.
     MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH_MB", "300")) * 1024 * 1024

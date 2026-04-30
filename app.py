@@ -112,6 +112,34 @@ def _handle_unauthorized():
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 
+def _migrate_legacy_uploads_to_current():
+    """Переносит файлы из старой папки uploads рядом с кодом в новую UPLOAD_FOLDER."""
+    current_folder = os.path.realpath(app.config["UPLOAD_FOLDER"])
+    legacy_folder = os.path.realpath(os.path.join(_base, "uploads"))
+    if legacy_folder == current_folder or not os.path.isdir(legacy_folder):
+        return
+    try:
+        moved = 0
+        for name in os.listdir(legacy_folder):
+            src = os.path.join(legacy_folder, name)
+            dst = os.path.join(current_folder, name)
+            if not os.path.isfile(src) or os.path.exists(dst):
+                continue
+            try:
+                os.replace(src, dst)
+                moved += 1
+            except OSError:
+                # Если перенос не удался, оставляем fallback-чтение из legacy.
+                pass
+        if moved:
+            print(f"✅ Перенесено вложений в стабильное хранилище: {moved}")
+    except Exception as e:
+        print(f"⚠️ Миграция legacy uploads пропущена: {e}")
+
+
+_migrate_legacy_uploads_to_current()
+
+
 def _ensure_counterparty_column():
     """Добавляет колонку counterparty_id в таблицу order, если её ещё нет (миграция без Alembic)."""
     try:
@@ -663,6 +691,37 @@ def secure_filename_custom(filename):
         filename = name[:95] + ext
     return filename
 
+
+def _normalize_stored_upload_name(stored_name):
+    """Нормализует сохранённое имя вложения (поддержка старых форматов пути)."""
+    raw = (stored_name or "").strip().replace("\\", "/")
+    if not raw:
+        return ""
+    # Старые записи могли храниться как "uploads/file.pdf" или абсолютный путь.
+    return os.path.basename(raw)
+
+
+def _resolve_upload_full_path(stored_name):
+    """Возвращает полный путь к вложению в текущем/старом каталоге загрузок."""
+    safe_name = _normalize_stored_upload_name(stored_name)
+    if not safe_name:
+        return None
+
+    current_folder = os.path.realpath(app.config["UPLOAD_FOLDER"])
+    candidates = [os.path.join(current_folder, safe_name)]
+
+    # Фолбэк для старого размещения рядом с кодом (после смены UPLOAD_FOLDER).
+    legacy_folder = os.path.realpath(os.path.join(_base, "uploads"))
+    if legacy_folder != current_folder:
+        candidates.append(os.path.join(legacy_folder, safe_name))
+
+    for p in candidates:
+        real_p = os.path.realpath(p)
+        if os.path.isfile(real_p):
+            return real_p
+    # Если файла ещё нет, по умолчанию работаем с текущей папкой.
+    return os.path.join(current_folder, safe_name)
+
 def _normalize_facade_for_order(facade_type, area_val, thickness_val, mixed_json_str):
     """Проверяет и нормализует поля фасада для Order (форма или JSON редактирования)."""
     facade_type = (facade_type or "").strip() or None
@@ -817,7 +876,7 @@ def cleanup_old_orders():
                         file_paths = order.filepaths.split(';')
                         for file_path in file_paths:
                             if file_path.strip():
-                                full_path = os.path.join(app.config["UPLOAD_FOLDER"], file_path.strip())
+                                full_path = _resolve_upload_full_path(file_path.strip())
                                 if os.path.exists(full_path):
                                     try:
                                         os.remove(full_path)
@@ -2381,7 +2440,7 @@ def _order_attachments_payload(order):
     fns = (order.filenames or "").split(";")
     out = []
     for i, fp in enumerate(fps):
-        fp = (fp or "").strip()
+        fp = _normalize_stored_upload_name(fp)
         if not fp:
             continue
         fn = (fns[i] or "").strip() if i < len(fns) else ""
@@ -2525,8 +2584,8 @@ def order_remove_attachment(order_id):
         return jsonify({"success": False, "message": "⛔ Нет доступа"}), 403
     order = Order.query.get_or_404(order_id)
     data = request.get_json(silent=True) or {}
-    stored = (data.get("stored") or "").strip()
-    if not stored or "/" in stored or "\\" in stored:
+    stored = _normalize_stored_upload_name(data.get("stored"))
+    if not stored:
         return jsonify({"success": False, "message": "Некорректное имя файла"}), 400
     fps = (order.filepaths or "").split(";")
     fns = (order.filenames or "").split(";")
@@ -2537,13 +2596,7 @@ def order_remove_attachment(order_id):
             break
     if idx is None:
         return jsonify({"success": False, "message": "Файл не найден у этого заказа"}), 404
-    folder = os.path.realpath(app.config["UPLOAD_FOLDER"])
-    full = os.path.realpath(os.path.join(folder, stored))
-    try:
-        if os.path.commonpath([folder, full]) != folder:
-            return jsonify({"success": False, "message": "Некорректный путь"}), 400
-    except ValueError:
-        return jsonify({"success": False, "message": "Некорректный путь"}), 400
+    full = _resolve_upload_full_path(stored)
     fps.pop(idx)
     if idx < len(fns):
         fns.pop(idx)
@@ -2580,7 +2633,9 @@ def delete_order(order_id):
         if order.filepaths:
             for path in order.filepaths.split(";"):
                 try:
-                    os.remove(os.path.join(app.config["UPLOAD_FOLDER"], path))
+                    full_path = _resolve_upload_full_path(path)
+                    if full_path:
+                        os.remove(full_path)
                 except (FileNotFoundError, OSError) as e:
                     print(f"⚠️ Не удалось удалить файл {path}: {e}")
         
@@ -3557,14 +3612,11 @@ def uploaded_file(filename):
     from flask import abort
     from werkzeug.utils import secure_filename as _secure_dl_name
 
-    if not filename or "/" in filename or "\\" in filename:
+    safe_name = _normalize_stored_upload_name(filename)
+    if not safe_name:
         abort(404)
-    folder = os.path.realpath(app.config["UPLOAD_FOLDER"])
-    full = os.path.realpath(os.path.join(folder, filename))
-    try:
-        if os.path.commonpath([folder, full]) != folder:
-            abort(404)
-    except ValueError:
+    full = _resolve_upload_full_path(safe_name)
+    if not full:
         abort(404)
     if not os.path.isfile(full):
         abort(404)
@@ -3602,7 +3654,7 @@ def uploaded_file(filename):
             mimetype = "audio/opus"
     elif mimetype == "application/octet-stream":
         as_attachment = True
-    download_name = _secure_dl_name(os.path.basename(filename)) or "attachment"
+    download_name = _secure_dl_name(safe_name) or "attachment"
     return send_file(
         full,
         mimetype=mimetype,

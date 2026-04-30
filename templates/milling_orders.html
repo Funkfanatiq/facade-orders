@@ -158,7 +158,7 @@
             {% set row_class = "row-warning" %}
           {% endif %}
 
-          <tr data-order-id="{{ o.id }}" class="{{ row_class }}">
+          <tr data-order-id="{{ o.id }}" data-days-left="{{ days_left }}" class="{{ row_class }}">
             <td>{{ o.order_id }}</td>
             <td>{{ o.client }}</td>
             <td>
@@ -253,19 +253,31 @@
       });
     });
 
+    function reorderMillingRows() {
+      const tbody = document.querySelector('#all-table tbody');
+      if (!tbody) return;
+      const rows = Array.from(tbody.querySelectorAll('tr[data-order-id]'));
+      rows.sort((a, b) => {
+        const aDone = !!a.querySelector('input[name="milling"]')?.checked;
+        const bDone = !!b.querySelector('input[name="milling"]')?.checked;
+        if (aDone !== bDone) return aDone ? 1 : -1;
+        const aDays = parseInt(a.getAttribute('data-days-left') || '9999', 10);
+        const bDays = parseInt(b.getAttribute('data-days-left') || '9999', 10);
+        return aDays - bDays;
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    }
+
     function updateTableStatus(row, orderId, status) {
       const statusCell = row.querySelector('td:nth-child(8)');
+      const dueCell = row.querySelector('td:nth-child(6)');
       if (status) {
         row.className = 'completed';
         statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Завершен';
+        if (dueCell) dueCell.textContent = '—';
       } else {
-        const dueText = row.querySelector('td:nth-child(6)').textContent;
-        const [y, m, d] = dueText.split('-').map(Number);
-        const due = new Date(y, m - 1, d);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        due.setHours(0, 0, 0, 0);
-        const daysLeft = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
+        const daysLeft = parseInt(row.getAttribute('data-days-left') || '9999', 10);
+        if (dueCell) dueCell.textContent = daysLeft + ' дн.';
         if (daysLeft <= 3) {
           row.className = 'row-danger';
           statusCell.innerHTML = '<span class="status-indicator status-urgent"></span>Срочный';
@@ -277,7 +289,10 @@
           statusCell.innerHTML = '<span class="status-indicator status-normal"></span>Ожидает';
         }
       }
+      reorderMillingRows();
     }
+
+    reorderMillingRows();
   </script>
 </body>
 </html>

@@ -2950,9 +2950,12 @@ def milling_orders():
     if current_user.role != "Фрезеровка":
         return redirect(url_for("dashboard"))
 
-    # Получаем все заказы для отображения (сортировка: толщина, затем срок)
+    # Сортировка для фрезеровки:
+    # 1) невыполненные (milling=False) сверху,
+    # 2) выполненные (milling=True) внизу,
+    # 3) внутри групп — по приоритету срока.
     orders_raw = Order.query.filter(Order.shipment == False).order_by(Order.due_date.asc()).all()
-    orders = sorted(orders_raw, key=_get_order_sort_key)
+    orders = sorted(orders_raw, key=lambda o: (1 if o.milling else 0, o.due_date))
     
     # Получаем текущий пул (VirtualItems — берём order.id)
     current_pool = generate_daily_pool()

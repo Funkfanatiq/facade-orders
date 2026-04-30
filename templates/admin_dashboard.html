@@ -700,8 +700,12 @@
             if (!tbody) return;
             var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr[data-order-id]'));
             rows.sort(function(a, b) {
-                var da = a.dataset.doneSp === '1' ? 1 : 0;
-                var db = b.dataset.doneSp === '1' ? 1 : 0;
+                var aShipment = !!a.querySelector('input[name="shipment"]')?.checked;
+                var bShipment = !!b.querySelector('input[name="shipment"]')?.checked;
+                var aPackaging = !!a.querySelector('input[name="packaging"]')?.checked;
+                var bPackaging = !!b.querySelector('input[name="packaging"]')?.checked;
+                var da = aShipment ? 2 : (aPackaging ? 1 : 0);
+                var db = bShipment ? 2 : (bPackaging ? 1 : 0);
                 if (da !== db) return da - db;
                 return (a.dataset.due || '').localeCompare(b.dataset.due || '');
             });

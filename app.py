@@ -1118,8 +1118,14 @@ def is_work_due_order(order):
 
 
 def sort_orders_shipment_paid_last(orders):
-    """Заказы с отмеченными отгрузкой и оплатой — в конец (внутри группы по сроку)."""
-    return sorted(orders, key=lambda o: (1 if (o.shipment and o.paid) else 0, o.due_date, o.id))
+    """Сортировка по этапам: активные -> упакованные -> отгруженные, внутри по сроку."""
+    def _stage_rank(o):
+        if o.shipment:
+            return 2
+        if o.packaging:
+            return 1
+        return 0
+    return sorted(orders, key=lambda o: (_stage_rank(o), o.due_date, o.id))
 
 
 def _send_push_to_non_managers(title, body, url="/"):
@@ -2643,12 +2649,23 @@ def edit_order(order_id):
 
     try:
         cp = Counterparty.query.filter(Counterparty.name == new_client).first()
+        prev_days = order.days or 0
+        prev_due_date = order.due_date
         order.order_id = new_order_id
         order.invoice_number = new_order_id
         order.client = new_client
         order.counterparty_id = cp.id if cp else None
+        # Важно: при редактировании не "перезапускать" срок от сегодняшней даты.
+        # Если days не изменился — due_date остаётся прежним.
+        # Если days изменился — сдвигаем due_date на разницу дней.
         order.days = days
-        order.due_date = app_today() + timedelta(days=days)
+        if prev_due_date:
+            delta_days = days - prev_days
+            if delta_days:
+                order.due_date = prev_due_date + timedelta(days=delta_days)
+        else:
+            # Страховка для старых/битых записей без due_date.
+            order.due_date = app_today() + timedelta(days=days)
         order.facade_type = facade_type
         order.area = area
         order.thickness = thickness
